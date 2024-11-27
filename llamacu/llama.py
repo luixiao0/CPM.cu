@@ -8,8 +8,10 @@ def dtype_to_int(dtype):
         return 0
     elif dtype == torch.bfloat16:
         return 1
-    else:
+    elif dtype == torch.float32:
         return 2
+    else:
+        raise ValueError(f"Unsupported dtype: {dtype}")
 
 class LLM(torch.nn.Module):
     def __init__(self,
@@ -17,12 +19,14 @@ class LLM(torch.nn.Module):
                  memory_limit: float = 0.8,
                  chunk_length: int = 1024,
                  output_length: int = 32,
+                 dtype: torch.dtype = None,
     ):
         super().__init__()
 
         self.path = path
         self.tokenizer = AutoTokenizer.from_pretrained(path)
         self.config = AutoConfig.from_pretrained(path)
+        self.dtype = dtype if dtype is not None else self.config.torch_dtype
 
         self.memory_limit = int(torch.cuda.get_device_properties(0).total_memory * memory_limit)
         self.memory_pool = torch.nn.Parameter(torch.empty(self.memory_limit, dtype=torch.uint8, device="cuda"), requires_grad=False)
@@ -41,7 +45,7 @@ class LLM(torch.nn.Module):
             self.config.num_key_value_heads,
             self.config.rms_norm_eps,
             self.config.rope_theta,
-            dtype_to_int(self.config.torch_dtype),
+            dtype_to_int(self.dtype),
             self.chunk_length,
         )
 

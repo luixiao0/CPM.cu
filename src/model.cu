@@ -52,7 +52,6 @@ void init_model(
         throw std::invalid_argument("Unsupported dtype");
     }
 
-
     model->init_storage();
 }
 

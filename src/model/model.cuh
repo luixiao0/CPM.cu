@@ -1,6 +1,7 @@
 #pragma once
 #include "memory.cuh"
 #include "embedding.cuh"
+#include "norm.cuh"
 #include "linear.cuh"
 #include <cuda_runtime.h>
 
@@ -17,6 +18,7 @@ struct ModelImpl : Model {
 
     Embedding<T>* embedding;
     Linear<T>* lm_head;
+    RMSNorm<T>* norm;
 
     ModelImpl(
         int64_t memory_limit,
@@ -34,11 +36,14 @@ struct ModelImpl : Model {
         this->chunk_length = chunk_length;
         memory = new Memory(memory_limit, memory_pool);
         embedding = new EmbeddingImpl<T>(vocab_size, hidden_size);
+
+        norm = new RMSNormImpl<T>(hidden_size, rms_norm_eps);
         lm_head = new LinearImpl<T, true>(hidden_size, vocab_size);
     }
 
     void init_storage() {
         this->embedding->init_storage(this->memory);
+        this->norm->init_storage(this->memory);
         this->lm_head->init_storage(this->memory);
 
         // this->memory->allocate_for_hidden_states(hidden_size);
@@ -48,6 +53,7 @@ struct ModelImpl : Model {
         if (name.substr(0, 18) == "model.embed_tokens") {
             this->embedding->load_to_storage(name, ptr);
         } else if (name.substr(0, 10) == "model.norm") {
+            this->norm->load_to_storage(name, ptr);
         } else if (name.substr(0, 7) == "lm_head") {
             this->lm_head->load_to_storage(name, ptr);
         } else if (name.substr(0, 12) == "model.layers") {
@@ -59,6 +65,7 @@ struct ModelImpl : Model {
     void prefill(int32_t num_tokens, int32_t* input, int32_t* output) {
         printf("offset: %lld\n", this->memory->model_offset);
         this->embedding->prefill(num_tokens, input, (T*)(this->memory->memory_pool + this->memory->model_offset));
-        this->lm_head->prefill(num_tokens, (T*)(this->memory->memory_pool + this->memory->model_offset), (T*)(this->memory->memory_pool + this->memory->model_offset)+7680);
+        this->norm->prefill(num_tokens, (T*)(this->memory->memory_pool + this->memory->model_offset), (T*)(this->memory->memory_pool + this->memory->model_offset)+7680);
+        this->lm_head->prefill(num_tokens, (T*)(this->memory->memory_pool + this->memory->model_offset)+7680, (T*)(this->memory->memory_pool + this->memory->model_offset)+7680*2);
     }
 };
