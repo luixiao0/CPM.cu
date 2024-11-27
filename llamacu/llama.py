@@ -3,15 +3,17 @@ from . import C
 
 from transformers import AutoTokenizer, AutoConfig
 
+dtype_map = {
+    torch.float16: 0,
+    torch.bfloat16: 1,
+    torch.float32: 2,
+}
+
 def dtype_to_int(dtype):
-    if dtype == torch.float16:
-        return 0
-    elif dtype == torch.bfloat16:
-        return 1
-    elif dtype == torch.float32:
-        return 2
-    else:
+    ret = dtype_map.get(dtype, -1)
+    if ret == -1:
         raise ValueError(f"Unsupported dtype: {dtype}")
+    return ret
 
 class LLM(torch.nn.Module):
     def __init__(self,
@@ -55,7 +57,9 @@ class LLM(torch.nn.Module):
             for name, param in ckpt.items():
                 if 'gate_proj' in name or 'up_proj' in name:
                     param = param.transpose(0, 1)
-                C.load_model(name, param.contiguous().to(self.config.torch_dtype).data_ptr())
+
+                param = param.contiguous().to(self.dtype)
+                C.load_model(name, param.data_ptr())
 
     def generate(self, prompt):
         input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(torch.int32).cuda()

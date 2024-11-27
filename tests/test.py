@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 path = "../../models/MiniCPM-1B-sft-llama-format"
 prompt = "Hello, world!"
-dtype = torch.bfloat16
+dtype = torch.float32
 
 tokenizer = AutoTokenizer.from_pretrained(path)
 model = AutoModelForCausalLM.from_pretrained(path, torch_dtype=dtype)

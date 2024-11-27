@@ -23,8 +23,9 @@ void init_model(
 ) {
     init_cublas();
 
-    auto create_model = [&](auto typ) {
-        model = new ModelImpl<decltype(typ)>(
+    if (torch_dtype == 0) {
+        std::cout << "Using float16 precision" << std::endl;
+        model = new ModelImpl<__half>(
             memory_limit,
             reinterpret_cast<void*>(memory_pool),
             vocab_size,
@@ -37,17 +38,36 @@ void init_model(
             rope_theta,
             chunk_length
         );
-    };
-
-    if (torch_dtype == 0) {
-        create_model(__half{});
-        std::cout << "Using float16 precision" << std::endl;
     } else if (torch_dtype == 1) {
-        create_model(__nv_bfloat16{});
         std::cout << "Using bfloat16 precision" << std::endl;
+        model = new ModelImpl<__nv_bfloat16>(
+            memory_limit,
+            reinterpret_cast<void*>(memory_pool),
+            vocab_size,
+            num_hidden_layers,
+            hidden_size,
+            intermediate_size,
+            num_attention_heads,
+            num_key_value_heads,
+            rms_norm_eps,
+            rope_theta,
+            chunk_length
+        );
     } else if (torch_dtype == 2) {
-        create_model(float{});
         std::cout << "Using float32 precision" << std::endl;
+        model = new ModelImpl<float>(
+            memory_limit,
+            reinterpret_cast<void*>(memory_pool),
+            vocab_size,
+            num_hidden_layers,
+            hidden_size,
+            intermediate_size,
+            num_attention_heads,
+            num_key_value_heads,
+            rms_norm_eps,
+            rope_theta,
+            chunk_length
+        );
     } else {
         throw std::invalid_argument("Unsupported dtype");
     }

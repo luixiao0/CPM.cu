@@ -46,6 +46,7 @@ struct ModelImpl : Model {
         this->norm->init_storage(this->memory);
         this->lm_head->init_storage(this->memory);
 
+        printf("offset: %lld\n", this->memory->model_offset);
         // this->memory->allocate_for_hidden_states(hidden_size);
     }
 
@@ -63,7 +64,6 @@ struct ModelImpl : Model {
     }
 
     void prefill(int32_t num_tokens, int32_t* input, int32_t* output) {
-        printf("offset: %lld\n", this->memory->model_offset);
         this->embedding->prefill(num_tokens, input, (T*)(this->memory->memory_pool + this->memory->model_offset));
         this->norm->prefill(num_tokens, (T*)(this->memory->memory_pool + this->memory->model_offset), (T*)(this->memory->memory_pool + this->memory->model_offset)+7680);
         this->lm_head->prefill(num_tokens, (T*)(this->memory->memory_pool + this->memory->model_offset)+7680, (T*)(this->memory->memory_pool + this->memory->model_offset)+7680*2);
