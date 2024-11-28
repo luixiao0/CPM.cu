@@ -29,9 +29,11 @@ __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* out
 
 template <typename T>
 struct RMSNorm {
-    virtual void init_storage(Memory* memory) = 0;
+    T* output;
+    virtual void init_weight_ptr(Memory* memory) = 0;
+    virtual int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, T* input, T* output) = 0;
+    virtual void prefill(int32_t num_tokens, T* input) = 0;
 };
 
 template <typename T>
@@ -45,15 +47,20 @@ struct RMSNormImpl : RMSNorm<T> {
         this->eps = eps;
     }
 
-    void init_storage(Memory* memory) {
+    void init_weight_ptr(Memory* memory) {
         weight = (T*)memory->allocate_for_model(dim * sizeof(T));
+    }
+
+    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        this->output = (T*)(memory->memory_pool + offset);
+        return offset + num_tokens * dim * sizeof(T);
     }
 
     void load_to_storage(std::string name, void* ptr) {
         cudaMemcpy((void*)weight, ptr, dim * sizeof(T), cudaMemcpyHostToDevice);
     }
 
-    void prefill(int32_t num_tokens, T* input, T* output) {
-        rms_norm_kernel<<<num_tokens, 32>>>(dim, input, weight, output, eps); // TODO 32, TODO float4, TODO shared memory for input
+    void prefill(int32_t num_tokens, T* input) {
+        rms_norm_kernel<<<num_tokens, 32>>>(dim, input, weight, this->output, eps); // TODO 32, TODO float4, TODO shared memory for input
     }
 };

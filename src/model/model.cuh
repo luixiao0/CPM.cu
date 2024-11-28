@@ -3,7 +3,12 @@
 #include "embedding.cuh"
 #include "norm.cuh"
 #include "linear.cuh"
+#include "layer.cuh"
+
+#include <algorithm>
 #include <cuda_runtime.h>
+#include <vector>
+#include <regex>
 
 struct Model {
     virtual void init_storage() = 0;
@@ -14,11 +19,17 @@ struct Model {
 template <typename T>
 struct ModelImpl : Model {
     Memory* memory;
+
+    int num_hidden_layers;
     int chunk_length;
+    int max_output_length;
+
+    // KVCache* kv_cache;
 
     Embedding<T>* embedding;
-    Linear<T>* lm_head;
+    std::vector<Layer<T>*> layers;
     RMSNorm<T>* norm;
+    Linear<T>* lm_head;
 
     ModelImpl(
         int64_t memory_limit,
@@ -29,43 +40,86 @@ struct ModelImpl : Model {
         int intermediate_size,
         int num_attention_heads,
         int num_key_value_heads,
+        int head_dim,
         float rms_norm_eps,
         float rope_theta,
         int chunk_length
     ) {
+        this->num_hidden_layers = num_hidden_layers;
         this->chunk_length = chunk_length;
+        
         memory = new Memory(memory_limit, memory_pool);
-        embedding = new EmbeddingImpl<T>(vocab_size, hidden_size);
 
+        // kv_cache = new KVCache(num_hidden_layers);
+
+        embedding = new EmbeddingImpl<T>(vocab_size, hidden_size);
+        for (int i = 0; i < num_hidden_layers; i++) {
+            layers.push_back(new LayerImpl<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, rope_theta));
+        }
         norm = new RMSNormImpl<T>(hidden_size, rms_norm_eps);
         lm_head = new LinearImpl<T, true>(hidden_size, vocab_size);
     }
 
-    void init_storage() {
-        this->embedding->init_storage(this->memory);
-        this->norm->init_storage(this->memory);
-        this->lm_head->init_storage(this->memory);
+    void init_weight_ptr() {
+        embedding->init_weight_ptr(memory);
+        for (int i = 0; i < num_hidden_layers; i++) {
+            layers[i]->init_weight_ptr(memory);
+        }
+        norm->init_weight_ptr(memory);
+        lm_head->init_weight_ptr(memory);
 
-        printf("offset: %lld\n", this->memory->model_offset);
-        // this->memory->allocate_for_hidden_states(hidden_size);
+        printf("offset: %lld\n", memory->model_offset);
+    }
+
+    void init_output_ptr() {
+        int64_t embedding_end = embedding->init_output_ptr(memory, chunk_length, memory->model_offset);
+        int64_t layer_end = 0;
+        for (int i = 0; i < num_hidden_layers; i++) {
+            layer_end = layers[i]->init_output_ptr(memory, chunk_length, embedding_end);
+        }
+        // norm and lm_head are not used in prefill
+        int64_t norm_end = norm->init_output_ptr(memory, 1, embedding_end);
+        int64_t lm_head_end = lm_head->init_output_ptr(memory, 1, norm_end);
+
+        memory->kv_cache_offset = std::max(layer_end, lm_head_end);
+        // this->max_output_length = kv_cache->init_output_ptr(memory, memory->kv_cache_offset);
+
+        printf("maximum possible output length: %d\n", max_output_length);
+    }
+
+    void init_storage() {
+        init_weight_ptr();
+        init_output_ptr();
     }
 
     void load_to_storage(std::string name, void* ptr) {
         if (name.substr(0, 18) == "model.embed_tokens") {
-            this->embedding->load_to_storage(name, ptr);
+            embedding->load_to_storage(name, ptr);
         } else if (name.substr(0, 10) == "model.norm") {
-            this->norm->load_to_storage(name, ptr);
+            norm->load_to_storage(name, ptr);
         } else if (name.substr(0, 7) == "lm_head") {
-            this->lm_head->load_to_storage(name, ptr);
-        } else if (name.substr(0, 12) == "model.layers") {
+            lm_head->load_to_storage(name, ptr);
+        } else if (name.substr(0, 12) == "model.layers") { // e.g. model.layers.20.attn.q_proj.weight
+            std::regex layer_regex("model\\.layers\\.(\\d+)\\.(.*)");
+            std::smatch matches;
+            if (std::regex_search(name, matches, layer_regex)) {
+                int layer_idx = std::stoi(matches[1]);
+                layers[layer_idx]->load_to_storage(matches[2], ptr);
+            } else {
+                throw std::invalid_argument("Unsupported name (layer_idx not found): " + name);
+            }
         } else {
-            throw std::invalid_argument("Unsupported name");
+            throw std::invalid_argument("Unsupported name " + name);
         }
     }
 
     void prefill(int32_t num_tokens, int32_t* input, int32_t* output) {
-        this->embedding->prefill(num_tokens, input, (T*)(this->memory->memory_pool + this->memory->model_offset));
-        this->norm->prefill(num_tokens, (T*)(this->memory->memory_pool + this->memory->model_offset), (T*)(this->memory->memory_pool + this->memory->model_offset)+7680);
-        this->lm_head->prefill(num_tokens, (T*)(this->memory->memory_pool + this->memory->model_offset)+7680, (T*)(this->memory->memory_pool + this->memory->model_offset)+7680*2);
+        printf("%d\n%d\n%d\n%d\n", embedding->output - (T*)(memory->memory_pool + memory->model_offset), layers[0]->ffn_norm->output - embedding->output, layers[0]->gate_proj->output - embedding->output, layers[0]->up_proj->output - embedding->output);
+        // printf("%d\n%d\n%d\n%d\n%d\n", embedding->output - (T*)(memory->memory_pool + memory->model_offset), layers[0]->attn_norm->output - embedding->output, layers[0]->q_proj->output - embedding->output, layers[0]->k_proj->output - embedding->output, layers[0]->v_proj->output - embedding->output);
+        embedding->prefill(num_tokens, input);
+        for (int i = 0; i < num_hidden_layers; i++) {
+            layers[i]->prefill(num_tokens, embedding->output);
+            break;
+        }
     }
 };

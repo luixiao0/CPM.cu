@@ -16,6 +16,7 @@ void init_model(
     int intermediate_size,
     int num_attention_heads,
     int num_key_value_heads,
+    int head_dim,
     float rms_norm_eps,
     float rope_theta,
     int torch_dtype,
@@ -34,6 +35,7 @@ void init_model(
             intermediate_size,
             num_attention_heads,
             num_key_value_heads,
+            head_dim,
             rms_norm_eps,
             rope_theta,
             chunk_length
@@ -49,6 +51,7 @@ void init_model(
             intermediate_size,
             num_attention_heads,
             num_key_value_heads,
+            head_dim,
             rms_norm_eps,
             rope_theta,
             chunk_length
@@ -64,6 +67,7 @@ void init_model(
             intermediate_size,
             num_attention_heads,
             num_key_value_heads,
+            head_dim,
             rms_norm_eps,
             rope_theta,
             chunk_length

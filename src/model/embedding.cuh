@@ -1,6 +1,5 @@
 #pragma once
 #include <cuda_runtime.h>
-#include <stdio.h>
 
 template <typename T>
 __global__ void embedding_kernel(int32_t num_cols, int32_t* input, T* weight, T* output) {
@@ -15,9 +14,11 @@ __global__ void embedding_kernel(int32_t num_cols, int32_t* input, T* weight, T*
 
 template <typename T>
 struct Embedding {
-    virtual void init_storage(Memory* memory) = 0;
+    T* output;
+    virtual void init_weight_ptr(Memory* memory) = 0;
+    virtual int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, int32_t* input, T* output) = 0;
+    virtual void prefill(int32_t num_tokens, int32_t* input) = 0;
 };
 
 template <typename T>
@@ -31,15 +32,20 @@ struct EmbeddingImpl : Embedding<T> {
         this->hidden_size = hidden_size;
     }
 
-    void init_storage(Memory* memory) {
+    void init_weight_ptr(Memory* memory) {
         weight = (T*)memory->allocate_for_model(vocab_size * hidden_size * sizeof(T));
+    }
+
+    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        this->output = (T*)(memory->memory_pool + offset);
+        return offset + num_tokens * hidden_size * sizeof(T);
     }
 
     void load_to_storage(std::string name, void* ptr) {
         cudaMemcpy((void*)weight, ptr, vocab_size * hidden_size * sizeof(T), cudaMemcpyHostToDevice);
     }
 
-    void prefill(int32_t num_tokens, int32_t* input, T* output) {
-        embedding_kernel<T><<<num_tokens, 256>>>(hidden_size, input, weight, output); // TODO float4, TODO adjust 256
+    void prefill(int32_t num_tokens, int32_t* input) {
+        embedding_kernel<T><<<num_tokens, 256>>>(hidden_size, input, weight, this->output); // TODO float4, TODO adjust 256
     }
 };

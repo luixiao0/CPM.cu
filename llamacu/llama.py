@@ -45,6 +45,7 @@ class LLM(torch.nn.Module):
             self.config.intermediate_size,
             self.config.num_attention_heads,
             self.config.num_key_value_heads,
+            self.config.head_dim,
             self.config.rms_norm_eps,
             self.config.rope_theta,
             dtype_to_int(self.dtype),
@@ -55,7 +56,7 @@ class LLM(torch.nn.Module):
         with torch.no_grad():
             ckpt = torch.load(self.path+"/pytorch_model.bin", map_location="cpu")
             for name, param in ckpt.items():
-                if 'gate_proj' in name or 'up_proj' in name:
+                if 'o_proj' in name or 'down_proj' in name:
                     param = param.transpose(0, 1)
 
                 param = param.contiguous().to(self.dtype)
