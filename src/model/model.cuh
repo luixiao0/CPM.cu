@@ -13,7 +13,7 @@
 struct Model {
     virtual void init_storage() = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, int32_t* input, int32_t* output) = 0;
+    virtual void prefill(int32_t num_tokens, int32_t* input, int32_t* position_ids, int32_t* output) = 0;
 };
 
 template <typename T>
@@ -113,10 +113,10 @@ struct ModelImpl : Model {
         }
     }
 
-    void prefill(int32_t num_tokens, int32_t* input, int32_t* output) {
+    void prefill(int32_t num_tokens, int32_t* input, int32_t* position_ids, int32_t* output) {
         embedding->prefill(num_tokens, input);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers[i]->prefill(num_tokens, embedding->output);
+            layers[i]->prefill(num_tokens, embedding->output, position_ids);
             break;
         }
     }

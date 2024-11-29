@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 
 template <typename T>
-__global__ void embedding_kernel(int32_t num_cols, const int32_t* input, const T* weight, T* output) {
+__global__ void embedding_kernel(int32_t num_cols, const int32_t* input, const T* weight, T* output) { // TODO add __restrict__
     int row = blockIdx.x;
     int col = threadIdx.x;
     int offset_output = row * num_cols;

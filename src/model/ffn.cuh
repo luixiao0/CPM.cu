@@ -1,9 +1,10 @@
 #pragma once
 #include "../trait.cuh"
-#include "linear.cuh"
 #include "norm.cuh"
+#include "linear.cuh"
 #include <cuda_runtime.h>
 
+namespace {
 template <typename T>
 __global__ void inplace_add_kernel(int numel, T* tgt, const T* src) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -47,6 +48,7 @@ __global__ void inplace_gated_silu_interleaved_kernel(int intermediate_size, T* 
 template <typename T>
 void inplace_gated_silu_interleaved(int num_tokens, int intermediate_size, T* tgt) {
     inplace_gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256>>>(intermediate_size, tgt); // TODO adjust 256, TODO float4
+}
 }
 
 template <typename T>
@@ -109,24 +111,13 @@ struct GatedFFN : FFN<T> {
 
     void prefill(int32_t num_tokens, T* input) {
         this->ffn_norm->prefill(num_tokens, input);
-        this->gate_proj->prefill(num_tokens, this->ffn_norm->output);
-        this->up_proj->prefill(num_tokens, this->ffn_norm->output);
-        inplace_gated_silu<T>(num_tokens * this->intermediate_size, this->gate_proj->output, this->up_proj->output);
-        this->down_proj->prefill(num_tokens, this->gate_proj->output);
-        inplace_add<T>(num_tokens * this->hidden_size, input, this->down_proj->output);
-    }
-};
-
-template <typename T>
-struct FusedGatedFFN : GatedFFN<T> {
-    FusedGatedFFN(int hidden_size, int intermediate_size, float rms_norm_eps) : GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps) {}
-
-    void prefill(int32_t num_tokens, T* input) {
-        this->ffn_norm->prefill(num_tokens, input);
         // this->gate_proj->prefill(num_tokens, this->ffn_norm->output);
         // this->up_proj->prefill(num_tokens, this->ffn_norm->output);
+        // inplace_gated_silu<T>(num_tokens * this->intermediate_size, this->gate_proj->output, this->up_proj->output);
         linear<T, true>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
         inplace_gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output);
+        // this->down_proj->prefill(num_tokens, this->gate_proj->output);
+        // inplace_add<T>(num_tokens * this->hidden_size, input, this->down_proj->output);
         linear<T, false, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->gate_proj->output, this->down_proj->weight, input);
     }
 };

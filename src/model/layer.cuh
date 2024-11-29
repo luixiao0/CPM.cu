@@ -11,7 +11,7 @@ struct Layer {
 
     Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float rope_theta) {
         this->attn = new Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, rope_theta);
-        this->ffn = new FusedGatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps);
+        this->ffn = new GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -35,8 +35,8 @@ struct Layer {
         }
     }
 
-    void prefill(int32_t num_tokens, T* input) {
-        // this->attn->prefill(num_tokens, input);
-        this->ffn->prefill(num_tokens, input);
+    void prefill(int32_t num_tokens, T* input, int32_t* position_ids) {
+        this->attn->prefill(num_tokens, input, position_ids);
+        // this->ffn->prefill(num_tokens, input);
     }
 };
