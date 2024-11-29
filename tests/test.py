@@ -22,8 +22,8 @@ with torch.no_grad():
         gate = layer.mlp.gate_proj(ffn_norm)
         up = layer.mlp.up_proj(ffn_norm)
         gate = torch.nn.functional.silu(gate) * up
-        # down = layer.mlp.down_proj(gate)
-        # input_embeds = down + input_embeds
+        down = layer.mlp.down_proj(gate)
+        input_embeds = down + input_embeds
         break
     # print(q)
     # print(k)
@@ -31,6 +31,8 @@ with torch.no_grad():
     print(ffn_norm)
     print(gate)
     print(up)
+    print(down)
+    print(input_embeds)
 
 llm = LLM(path, dtype=dtype)
 llm.load_from_hf()
@@ -53,5 +55,5 @@ print(our_input_embeds.view(chunk_size,-1)[:5])
 # print(our_k.view(chunk_size,-1)[:5])
 # print(our_v.view(chunk_size,-1)[:5])
 print(our_ffn_norm.view(chunk_size,-1)[:5])
-print(our_gate.view(chunk_size,-1)[:6])
-print(our_up.view(chunk_size,-1)[:6])
+print(our_gate.view(chunk_size,-1)[:5])
+print(our_up.view(chunk_size,-1)[:5])

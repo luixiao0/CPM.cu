@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 
 template <typename T>
-__global__ void embedding_kernel(int32_t num_cols, int32_t* input, T* weight, T* output) {
+__global__ void embedding_kernel(int32_t num_cols, const int32_t* input, const T* weight, T* output) {
     int row = blockIdx.x;
     int col = threadIdx.x;
     int offset_output = row * num_cols;
@@ -14,20 +14,12 @@ __global__ void embedding_kernel(int32_t num_cols, int32_t* input, T* weight, T*
 
 template <typename T>
 struct Embedding {
-    T* output;
-    virtual void init_weight_ptr(Memory* memory) = 0;
-    virtual int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) = 0;
-    virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, int32_t* input) = 0;
-};
-
-template <typename T>
-struct EmbeddingImpl : Embedding<T> {
     int vocab_size;
     int hidden_size;
     T* weight;
+    T* output;
 
-    EmbeddingImpl(int vocab_size, int hidden_size) {
+    Embedding(int vocab_size, int hidden_size) {
         this->vocab_size = vocab_size;
         this->hidden_size = hidden_size;
     }

@@ -2,6 +2,7 @@ import torch
 from . import C
 
 from transformers import AutoTokenizer, AutoConfig
+from triton.testing import do_bench
 
 dtype_map = {
     torch.float16: 0,
@@ -66,4 +67,6 @@ class LLM(torch.nn.Module):
         input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(torch.int32).cuda()
         output_ids = torch.empty_like(input_ids)
         C.generate(input_ids.numel(), self.chunk_length, self.output_length, input_ids.data_ptr(), output_ids.data_ptr())
+        if True:
+            print(do_bench(lambda: C.generate(input_ids.numel(), self.chunk_length, self.output_length, input_ids.data_ptr(), output_ids.data_ptr()), warmup=100, rep=100000))
         return output_ids

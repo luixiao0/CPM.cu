@@ -29,7 +29,7 @@ struct ModelImpl : Model {
     Embedding<T>* embedding;
     std::vector<Layer<T>*> layers;
     RMSNorm<T>* norm;
-    Linear<T>* lm_head;
+    Linear<T, true>* lm_head;
 
     ModelImpl(
         int64_t memory_limit,
@@ -52,12 +52,12 @@ struct ModelImpl : Model {
 
         // kv_cache = new KVCache(num_hidden_layers);
 
-        embedding = new EmbeddingImpl<T>(vocab_size, hidden_size);
+        embedding = new Embedding<T>(vocab_size, hidden_size);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new LayerImpl<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, rope_theta));
+            layers.push_back(new Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, rope_theta));
         }
-        norm = new RMSNormImpl<T>(hidden_size, rms_norm_eps);
-        lm_head = new LinearImpl<T, true>(hidden_size, vocab_size);
+        norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
+        lm_head = new Linear<T, true>(hidden_size, vocab_size);
     }
 
     void init_weight_ptr() {
@@ -114,8 +114,6 @@ struct ModelImpl : Model {
     }
 
     void prefill(int32_t num_tokens, int32_t* input, int32_t* output) {
-        printf("%d\n%d\n%d\n%d\n", embedding->output - (T*)(memory->memory_pool + memory->model_offset), layers[0]->ffn_norm->output - embedding->output, layers[0]->gate_proj->output - embedding->output, layers[0]->up_proj->output - embedding->output);
-        // printf("%d\n%d\n%d\n%d\n%d\n", embedding->output - (T*)(memory->memory_pool + memory->model_offset), layers[0]->attn_norm->output - embedding->output, layers[0]->q_proj->output - embedding->output, layers[0]->k_proj->output - embedding->output, layers[0]->v_proj->output - embedding->output);
         embedding->prefill(num_tokens, input);
         for (int i = 0; i < num_hidden_layers; i++) {
             layers[i]->prefill(num_tokens, embedding->output);

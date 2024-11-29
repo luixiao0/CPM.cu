@@ -29,20 +29,12 @@ __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* out
 
 template <typename T>
 struct RMSNorm {
-    T* output;
-    virtual void init_weight_ptr(Memory* memory) = 0;
-    virtual int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) = 0;
-    virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, T* input) = 0;
-};
-
-template <typename T>
-struct RMSNormImpl : RMSNorm<T> {
     int dim;
     float eps;
     T* weight;
+    T* output;
 
-    RMSNormImpl(int dim, float eps) {
+    RMSNorm(int dim, float eps) {
         this->dim = dim;
         this->eps = eps;
     }

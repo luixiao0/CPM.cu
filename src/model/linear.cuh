@@ -4,10 +4,15 @@
 #include "../trait.cuh"
 #include "../utils.cuh"
 
-template <typename T, bool transposed>
-void linear(int num_tokens, int dim_in, int dim_out, T* input, T* weight, T* output) {
+template <typename T, bool transposed, bool inplace=false>
+void linear(int num_tokens, int dim_in, int dim_out, const T* input, const T* weight, T* output) {
     float alpha = 1.0f;
-    float beta = 0.0f;
+    float beta;
+    if constexpr (inplace) {
+        beta = 1.0f;
+    } else {
+        beta = 0.0f;
+    }
     if constexpr (transposed) {
         cublasCheck(cublasGemmEx(cublas_handle,
             CUBLAS_OP_T, CUBLAS_OP_N,
@@ -35,22 +40,14 @@ void linear(int num_tokens, int dim_in, int dim_out, T* input, T* weight, T* out
     }
 }
 
-template <typename T>
-struct Linear {
-    T* output;
-    virtual void init_weight_ptr(Memory* memory) = 0;
-    virtual int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) = 0;
-    virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, T* input) = 0;
-};
-
 template <typename T, bool transposed>
-struct LinearImpl : Linear<T> {
+struct Linear {
     int dim_in;
     int dim_out;
+    T* output;
     T* weight;
 
-    LinearImpl(int dim_in, int dim_out) {
+    Linear(int dim_in, int dim_out) {
         this->dim_in = dim_in;
         this->dim_out = dim_out;
     }
