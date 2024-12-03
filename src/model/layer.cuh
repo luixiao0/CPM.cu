@@ -37,7 +37,7 @@ struct Layer {
     }
 
     void prefill(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
-        // this->attn->prefill(num_tokens, input, position_ids, cache_length, kv_cache);
+        this->attn->prefill(num_tokens, input, position_ids, cache_length, kv_cache);
         this->ffn->prefill(num_tokens, input);
     }
 };

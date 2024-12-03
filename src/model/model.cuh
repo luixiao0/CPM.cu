@@ -77,7 +77,7 @@ struct ModelImpl : Model {
             layer_end = layers[i]->init_output_ptr(memory, chunk_length, embedding_end);
         }
         // norm and lm_head are not used in prefill
-        int64_t norm_end = norm->init_output_ptr(memory, 1, embedding_end); // TODO speculative needs 64/128/256 for this but not 1
+        int64_t norm_end = norm->init_output_ptr(memory, chunk_length, memory->model_offset);
         int64_t lm_head_end = lm_head->init_output_ptr(memory, 1, norm_end); // TODO speculative needs 64/128/256 for this but not 1
 
         memory->kv_cache_offset = std::max(layer_end, lm_head_end);
@@ -114,10 +114,10 @@ struct ModelImpl : Model {
     }
 
     void prefill(int32_t num_tokens, int32_t* input, int32_t* position_ids, int32_t* cache_length, int32_t* output) {
-        embedding->prefill(num_tokens, input);
+        this->embedding->prefill(num_tokens, input);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers[i]->prefill(num_tokens, embedding->output, position_ids, cache_length, kv_cache->caches[i]);
-            break;
+            this->layers[i]->prefill(num_tokens, this->embedding->output, position_ids, cache_length, this->kv_cache->caches[i]);
         }
+        this->norm->prefill(num_tokens, this->embedding->output);
     }
 };
