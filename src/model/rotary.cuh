@@ -27,18 +27,9 @@ struct RotaryEmbedding {
         this->theta = theta;
     }
 
-    void init_weight_ptr(Memory* memory) {
-        // Nothing
-    }
-
-    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        // Nothing (inplace operation)
-        return -1;
-    }
-
-    void load_to_storage(std::string name, void* ptr) {
-        // Nothing
-    }
+    void init_weight_ptr(Memory* memory) {}
+    void init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {}
+    void load_to_storage(std::string name, void* ptr) {}
 
     void prefill(int32_t num_tokens, int num_heads, T* input, int32_t* position_ids) {
         rotary_embedding<<<num_tokens * num_heads, half_dim>>>(num_heads, half_dim, theta, position_ids, input); // TODO float4

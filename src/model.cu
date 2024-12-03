@@ -83,12 +83,13 @@ void load_model(std::string name, std::uintptr_t param) {
     model->load_to_storage(name, reinterpret_cast<void*>(param));
 }
 
-void generate(int input_length, int chunk_length, int output_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t output) {
-    model->prefill(input_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(output));
+void prefill(int input_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t output) {
+    // TODO handle input_length > chunk_length
+    model->prefill(input_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<int32_t*>(output));
 }
 
 PYBIND11_MODULE(C, m) {
     m.def("init_model", &init_model, "Init model");
     m.def("load_model", &load_model, "Load model");
-    m.def("generate", &generate, "Generate");
+    m.def("prefill", &prefill, "Prefill");
 } 

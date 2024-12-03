@@ -23,6 +23,10 @@ struct TypeTraits<__half> {
     static __inline__ cudaDataType_t cublas_type() {
         return CUDA_R_16F;
     }
+
+    static __inline__ int type_code() {
+        return 0;
+    }
 };
 
 template <>
@@ -42,8 +46,13 @@ struct TypeTraits<__nv_bfloat16> {
     static __inline__ cudaDataType_t cublas_type() {
         return CUDA_R_16BF;
     }
+
+    static __inline__ int type_code() {
+        return 1;
+    }
 };
 
+// TODO fp32 not supported for now since flash attention only supports fp16 and bf16
 template <>
 struct TypeTraits<float> {
     static __inline__ __device__ float to_float(float f) {
@@ -60,5 +69,9 @@ struct TypeTraits<float> {
 
     static __inline__ cudaDataType_t cublas_type() {
         return CUDA_R_32F;
+    }
+
+    static __inline__ int type_code() {
+        return 2;
     }
 };

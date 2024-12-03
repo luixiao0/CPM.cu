@@ -4,6 +4,7 @@
 #include "norm.cuh"
 #include "linear.cuh"
 #include "layer.cuh"
+#include "kvcache.cuh"
 
 #include <algorithm>
 #include <cuda_runtime.h>
@@ -13,7 +14,7 @@
 struct Model {
     virtual void init_storage() = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, int32_t* input, int32_t* position_ids, int32_t* output) = 0;
+    virtual void prefill(int32_t num_tokens, int32_t* input, int32_t* position_ids, int32_t* cache_length, int32_t* output) = 0;
 };
 
 template <typename T>
@@ -24,7 +25,7 @@ struct ModelImpl : Model {
     int chunk_length;
     int max_output_length;
 
-    // KVCache* kv_cache;
+    KVCacheManager<T>* kv_cache;
 
     Embedding<T>* embedding;
     std::vector<Layer<T>*> layers;
@@ -50,7 +51,7 @@ struct ModelImpl : Model {
         
         memory = new Memory(memory_limit, memory_pool);
 
-        // kv_cache = new KVCache(num_hidden_layers);
+        kv_cache = new KVCacheManager<T>(num_hidden_layers, num_key_value_heads * head_dim);
 
         embedding = new Embedding<T>(vocab_size, hidden_size);
         for (int i = 0; i < num_hidden_layers; i++) {
@@ -67,8 +68,6 @@ struct ModelImpl : Model {
         }
         norm->init_weight_ptr(memory);
         lm_head->init_weight_ptr(memory);
-
-        printf("offset: %lld\n", memory->model_offset);
     }
 
     void init_output_ptr() {
@@ -78,12 +77,13 @@ struct ModelImpl : Model {
             layer_end = layers[i]->init_output_ptr(memory, chunk_length, embedding_end);
         }
         // norm and lm_head are not used in prefill
-        int64_t norm_end = norm->init_output_ptr(memory, 1, embedding_end);
-        int64_t lm_head_end = lm_head->init_output_ptr(memory, 1, norm_end);
+        int64_t norm_end = norm->init_output_ptr(memory, 1, embedding_end); // TODO speculative needs 64/128/256 for this but not 1
+        int64_t lm_head_end = lm_head->init_output_ptr(memory, 1, norm_end); // TODO speculative needs 64/128/256 for this but not 1
 
         memory->kv_cache_offset = std::max(layer_end, lm_head_end);
-        // this->max_output_length = kv_cache->init_output_ptr(memory, memory->kv_cache_offset);
+        this->max_output_length = kv_cache->init_output_ptr(memory, memory->kv_cache_offset);
 
+        printf("model offset: %lld, kv_cache offset: %lld\n", memory->model_offset, memory->kv_cache_offset);
         printf("maximum possible output length: %d\n", max_output_length);
     }
 
@@ -113,10 +113,10 @@ struct ModelImpl : Model {
         }
     }
 
-    void prefill(int32_t num_tokens, int32_t* input, int32_t* position_ids, int32_t* output) {
+    void prefill(int32_t num_tokens, int32_t* input, int32_t* position_ids, int32_t* cache_length, int32_t* output) {
         embedding->prefill(num_tokens, input);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers[i]->prefill(num_tokens, embedding->output, position_ids);
+            layers[i]->prefill(num_tokens, embedding->output, position_ids, cache_length, kv_cache->caches[i]);
             break;
         }
     }

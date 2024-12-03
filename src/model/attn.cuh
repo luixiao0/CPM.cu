@@ -3,6 +3,8 @@
 #include "norm.cuh"
 #include "linear.cuh"
 #include "rotary.cuh"
+#include "kvcache.cuh"
+#include "../flash_attn/flash_api.hpp"
 #include <cuda_runtime.h>
 
 template <typename T>
@@ -18,6 +20,9 @@ struct Attention {
     Linear<T, true> *q_proj, *k_proj, *v_proj;
     Linear<T, false> *o_proj;
     RotaryEmbedding<T> *rotary_emb;
+
+    T* attn_output;
+    float *softmax_lse, *softmax_lse_accum, *oaccum;
 
     Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float rope_theta) {
         this->hidden_size = hidden_size;
@@ -49,9 +54,17 @@ struct Attention {
         int64_t q_proj_end = this->q_proj->init_output_ptr(memory, num_tokens, attn_norm_end);
         int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
         int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
-        int64_t rotary_emb_end = this->rotary_emb->init_output_ptr(memory, num_tokens, attn_norm_end);
-        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, offset);
-        return v_proj_end;
+        
+        // TODO suppose num_splits = 1 for encode and 4 for decode for now
+        this->attn_output = (T*)(memory->memory_pool + offset);
+        this->softmax_lse = (float*)(memory->memory_pool + v_proj_end);
+        int64_t softmax_lse_end = v_proj_end + num_tokens * this->num_attention_heads * sizeof(float);
+        this->softmax_lse_accum = (float*)(memory->memory_pool + softmax_lse_end);
+        int64_t softmax_lse_accum_end = softmax_lse_end + num_tokens * this->num_attention_heads * sizeof(float);
+        this->oaccum = (float*)(memory->memory_pool + softmax_lse_accum_end);
+        int64_t oaccum_end = softmax_lse_accum_end + num_tokens * this->num_attention_heads * this->head_dim * sizeof(float);
+
+        return oaccum_end;
     }
 
     void load_to_storage(std::string name, void* ptr) {
@@ -72,14 +85,43 @@ struct Attention {
         }
     }
 
-    void prefill(int32_t num_tokens, T* input, int32_t* position_ids) {
+    void prefill(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(num_tokens, input);
         this->q_proj->prefill(num_tokens, this->attn_norm->output);
         this->k_proj->prefill(num_tokens, this->attn_norm->output);
         this->v_proj->prefill(num_tokens, this->attn_norm->output);
         this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->q_proj->output, position_ids);
         this->rotary_emb->prefill(num_tokens, this->num_key_value_heads, this->k_proj->output, position_ids);
+
+        mha_fwd_kvcache(
+            TypeTraits<T>::type_code()==1,
+            1,
+            num_tokens,
+            num_tokens, // TODO max kvcache length here
+            num_tokens,
+            this->num_attention_heads,
+            this->num_key_value_heads,
+            this->head_dim,
+            this->q_proj->output,
+            kv_cache->k_cache,
+            kv_cache->v_cache,
+            this->k_proj->output,
+            this->v_proj->output,
+            cache_length,
+            this->attn_output,
+            this->softmax_lse,
+            this->softmax_lse_accum,
+            this->oaccum,
+            rsqrt(float(this->head_dim)),
+            true,
+            -1,
+            -1,
+            0,
+            1,
+            0 // TODO 0 for default stream
+        );
+
         // flash attention and put output to attn_norm->output
-        // linear<T, false, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_norm->output, this->o_proj->weight, input);
+        linear<T, false, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
     }
 };

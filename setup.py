@@ -1,72 +1,32 @@
-import os, sys, shutil
-import subprocess
-from setuptools import setup, find_packages, Extension
-from setuptools.command.build_ext import build_ext
+import os, glob
+from setuptools import setup, find_packages
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-class CMakeExtension(Extension):
-    def __init__(self, name, sourcedir=""):
-        Extension.__init__(self, name, sources=[])
-        self.sourcedir = os.path.abspath(sourcedir)
+this_dir = os.path.dirname(os.path.abspath(__file__))
 
-class CMakeBuild(build_ext):
-    def build_extension(self, ext):
-        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+def append_nvcc_threads(nvcc_extra_args):
+    nvcc_threads = os.getenv("NVCC_THREADS") or "4"
+    return nvcc_extra_args + ["--threads", nvcc_threads]
 
-        # required for auto-detection & inclusion of auxiliary "native" libs
-        if not extdir.endswith(os.path.sep):
-            extdir += os.path.sep
+class NinjaBuildExtension(BuildExtension):
+    def __init__(self, *args, **kwargs) -> None:
+        # do not override env MAX_JOBS if already exists
+        if not os.environ.get("MAX_JOBS"):
+            import psutil
 
-        debug = int(os.environ.get("DEBUG", 0)) if self.debug is None else self.debug
-        cfg = "Debug" if debug else "Release"
+            # calculate the maximum allowed NUM_JOBS based on cores
+            max_num_jobs_cores = max(1, os.cpu_count() // 2)
 
-        # CMake lets you override the generator - we need to check this.
-        # Can be set with Conda-Build, for example.
-        cmake_generator = os.environ.get("CMAKE_GENERATOR", "")
+            # calculate the maximum allowed NUM_JOBS based on free memory
+            free_memory_gb = psutil.virtual_memory().available / (1024 ** 3)  # free memory in GB
+            max_num_jobs_memory = int(free_memory_gb / 9)  # each JOB peak memory cost is ~8-9GB when threads = 4
 
-        # Set Python_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
-        # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
-        # from Python.
-        cmake_args = [
-	        f"-DCMAKE_CXX_STANDARD=17",
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
-            f"-DPYTHON_EXECUTABLE={sys.executable}",
-            f"-DPYTHON_VERSION={sys.version_info.major}.{sys.version_info.minor}",
-            f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
-        ]
+            # pick lower value of jobs based on cores vs memory metric to minimize oom and swap usage during compilation
+            max_jobs = max(1, min(max_num_jobs_cores, max_num_jobs_memory))
+            os.environ["MAX_JOBS"] = str(max_jobs)
 
-        build_args = []
-        if "CMAKE_ARGS" in os.environ:
-            cmake_args += [item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
+        super().__init__(*args, **kwargs)
 
-        cmake_args += [f"-DEXAMPLE_VERSION_INFO={self.distribution.get_version()}"]
-
-        if not cmake_generator or cmake_generator == "Ninja":
-            try:
-                import ninja  # noqa: F401
-
-                ninja_executable_path = os.path.join(ninja.BIN_DIR, "ninja")
-                cmake_args += [
-                    "-GNinja",
-                    f"-DCMAKE_MAKE_PROGRAM:FILEPATH={ninja_executable_path}",
-                ]
-            except ImportError:
-                pass
-
-        if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
-            # self.parallel is a Python 3 only way to set parallel jobs by hand
-            # using -j in the build_ext call, not supported by pip or PyPA-build.
-            if hasattr(self, "parallel") and self.parallel:
-                # CMake 3.12+ only.
-                build_args += [f"-j{self.parallel}"]
-
-        build_temp = os.path.join(self.build_temp, ext.name)
-        if os.path.exists(build_temp):
-            shutil.rmtree(build_temp)
-        os.makedirs(build_temp)
-
-        cmake_args += ["-DPython_ROOT_DIR=" + os.path.dirname(os.path.dirname(sys.executable))]
-        subprocess.check_call(["cmake", ext.sourcedir] + cmake_args, cwd=build_temp)
-        subprocess.check_call(["cmake", "--build", "."] + build_args, cwd=build_temp)
 
 setup(
     name='llamacu',
@@ -78,9 +38,38 @@ setup(
         "pybind11",
     ],
     ext_modules=[
-        CMakeExtension("llamacu.C"),
+        CUDAExtension(
+            name='llamacu.C',
+            sources = [
+                "src/model.cu",
+                "src/utils.cu",
+                # *glob.glob("src/flash_attn/src/*.cu"),
+                *glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"),
+            ],
+            extra_compile_args={
+                "cxx": ["-O3", "-std=c++17"],
+                "nvcc": append_nvcc_threads(
+                    [
+                        "-O3", "-std=c++17",
+                        "-U__CUDA_NO_HALF_OPERATORS__",
+                        "-U__CUDA_NO_HALF_CONVERSIONS__",
+                        "-U__CUDA_NO_HALF2_OPERATORS__",
+                        "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
+                        "--expt-relaxed-constexpr",
+                        "--expt-extended-lambda",
+                        "--use_fast_math",
+                        "-gencode", "arch=compute_80,code=sm_80",
+                    ]
+                ),
+            },
+            include_dirs=[
+                f"{this_dir}/src/flash_attn",
+                f"{this_dir}/src/flash_attn/src",
+                f"{this_dir}/src/cutlass/include",
+            ],
+        )
     ],
     cmdclass={
-        'build_ext': CMakeBuild
+        'build_ext': NinjaBuildExtension
     }
 ) 

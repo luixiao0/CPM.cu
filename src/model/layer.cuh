@@ -2,6 +2,7 @@
 #include "norm.cuh"
 #include "attn.cuh"
 #include "ffn.cuh"
+#include "kvcache.cuh"
 #include <cuda_runtime.h>
 
 template <typename T>
@@ -22,7 +23,7 @@ struct Layer {
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         int64_t attn_end = this->attn->init_output_ptr(memory, num_tokens, offset);
         int64_t ffn_end = this->ffn->init_output_ptr(memory, num_tokens, offset);
-        return ffn_end;
+        return std::max(attn_end, ffn_end);
     }
 
     void load_to_storage(std::string name, void* ptr) {
@@ -35,8 +36,8 @@ struct Layer {
         }
     }
 
-    void prefill(int32_t num_tokens, T* input, int32_t* position_ids) {
-        this->attn->prefill(num_tokens, input, position_ids);
+    void prefill(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
+        this->attn->prefill(num_tokens, input, position_ids, cache_length, kv_cache);
         // this->ffn->prefill(num_tokens, input);
     }
 };
