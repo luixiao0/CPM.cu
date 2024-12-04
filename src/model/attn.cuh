@@ -97,7 +97,7 @@ struct Attention {
             TypeTraits<T>::type_code()==1,
             1,
             num_tokens,
-            num_tokens, // TODO max kvcache length here
+            kv_cache->budget,
             num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
