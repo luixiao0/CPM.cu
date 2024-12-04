@@ -60,6 +60,8 @@ struct GatedFFN : FFN<T> {
     Linear<T, true> *gate_proj, *up_proj;
     Linear<T, false> *down_proj;
 
+    T* gated_up;
+
     GatedFFN(int hidden_size, int intermediate_size, float rms_norm_eps) {
         this->hidden_size = hidden_size;
         this->intermediate_size = intermediate_size;
@@ -82,7 +84,9 @@ struct GatedFFN : FFN<T> {
         int64_t ffn_norm_end = this->ffn_norm->init_output_ptr(memory, num_tokens, offset);
         int64_t gate_proj_end = this->gate_proj->init_output_ptr(memory, num_tokens, ffn_norm_end);
         int64_t up_proj_end = this->up_proj->init_output_ptr(memory, num_tokens, gate_proj_end);
-        return up_proj_end;
+        this->gated_up = (T*)(memory->memory_pool + up_proj_end);
+        int64_t gated_up_end = up_proj_end + num_tokens * intermediate_size * sizeof(T);
+        return gated_up_end;
     }
 
     void load_to_storage(std::string name, void* ptr) {
@@ -101,13 +105,11 @@ struct GatedFFN : FFN<T> {
 
     void prefill(int32_t num_tokens, T* input) {
         this->ffn_norm->prefill(num_tokens, input);
-        this->gate_proj->prefill(num_tokens, this->ffn_norm->output);
-        this->up_proj->prefill(num_tokens, this->ffn_norm->output);
-        gated_silu<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->up_proj->output);
-        linear<T, false, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->up_proj->output, this->down_proj->weight, input);
+        // this->gate_proj->prefill(num_tokens, this->ffn_norm->output);
+        // this->up_proj->prefill(num_tokens, this->ffn_norm->output);
+        // gated_silu<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
+        linear<T, true>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
+        gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
+        linear<T, false, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->gated_up, this->down_proj->weight, input);
     }
-
-    // void verify()
-        // linear<T, true>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
-        // gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->up_proj->output);
 };
