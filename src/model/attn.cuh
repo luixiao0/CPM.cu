@@ -90,8 +90,7 @@ struct Attention {
         this->q_proj->prefill(num_tokens, this->attn_norm->output);
         this->k_proj->prefill(num_tokens, this->attn_norm->output);
         this->v_proj->prefill(num_tokens, this->attn_norm->output);
-        this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->q_proj->output, position_ids);
-        this->rotary_emb->prefill(num_tokens, this->num_key_value_heads, this->k_proj->output, position_ids);
+        this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, this->k_proj->output, position_ids);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -117,7 +116,7 @@ struct Attention {
             -1,
             -1,
             0,
-            1,
+            1, // TODO 4 for decode
             0 // TODO 0 for default stream
         );
 
