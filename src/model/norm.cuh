@@ -5,6 +5,7 @@
 template <typename T>
 __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* output, float eps) {
     __shared__ float shared_sum;
+    __shared__ float warp_sum[8];
     int row = blockIdx.x;
     int col = threadIdx.x;
     float sum = 0.0f;
@@ -17,9 +18,15 @@ __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* out
     sum += __shfl_down_sync(0xffffffff, sum, 4);
     sum += __shfl_down_sync(0xffffffff, sum, 2);
     sum += __shfl_down_sync(0xffffffff, sum, 1);
-    if (col == 0) {
-        shared_sum = rsqrt(sum / dim + eps);
+    if (col % 32 == 0) warp_sum[col / 32] = sum;
+    __syncthreads();
+    if (col < 8) {
+        sum = warp_sum[col];
+        sum += __shfl_down_sync(0x000000ff, sum, 4);
+        sum += __shfl_down_sync(0x000000ff, sum, 2);
+        sum += __shfl_down_sync(0x000000ff, sum, 1);
     }
+    if (col == 0) shared_sum = rsqrt(sum / dim + eps);
     __syncthreads();
     sum = shared_sum;
     for (int i = col; i < dim; i += blockDim.x) {
@@ -53,6 +60,6 @@ struct RMSNorm {
     }
 
     void prefill(int32_t num_tokens, T* input) {
-        rms_norm_kernel<<<num_tokens, 32>>>(dim, input, weight, this->output, eps); // TODO 32, TODO float4, TODO shared memory for input
+        rms_norm_kernel<<<num_tokens, 256>>>(dim, input, weight, this->output, eps); // TODO float4, TODO shared memory for input
     }
 };
