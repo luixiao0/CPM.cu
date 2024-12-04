@@ -63,12 +63,6 @@ class LLM(torch.nn.Module):
                 param = param.contiguous().to(self.dtype)
                 C.load_model(name, param.data_ptr())
 
-    def generate(self, prompt):
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(torch.int32).cuda()
-        output_ids = torch.empty_like(input_ids)
-        position_ids = torch.arange(input_ids.numel(), dtype=torch.int32, device="cuda")
-        cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
+    def prefill(self, input_ids, position_ids, cache_length, output_ids):
         C.prefill(input_ids.numel(), input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr())
-        if False:
-            print(do_bench(lambda: C.prefill(input_ids.numel(), input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr()), warmup=100, rep=100000))
         return output_ids

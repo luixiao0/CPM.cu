@@ -6,7 +6,7 @@
 
 namespace {
 template <typename T>
-__global__ void inplace_gated_silu_interleaved_kernel(int intermediate_size, const T* src, T* tgt) {
+__global__ void gated_silu_interleaved_kernel(int intermediate_size, const T* src, T* tgt) {
     int row_offset = blockIdx.x * intermediate_size;
     int row_offset_2 = row_offset * 2;
     int col = blockIdx.y * 256 + threadIdx.x;
@@ -19,9 +19,26 @@ __global__ void inplace_gated_silu_interleaved_kernel(int intermediate_size, con
     }
 }
 
+template<typename T>
+__global__ void gated_silu_kernel(int intermediate_size, const T* src, T* tgt) {
+    int row_offset = blockIdx.x * intermediate_size;
+    int col = blockIdx.y * 256 + threadIdx.x;
+    if (col < intermediate_size) {
+        float g = TypeTraits<T>::to_float(src[row_offset + col]);
+        float u = TypeTraits<T>::to_float(tgt[row_offset + col]);
+        float s = 1.0f / (1.0f + exp(-g));
+        tgt[row_offset + col] = TypeTraits<T>::from_float(g * s * u);
+    }
+}
+
 template <typename T>
-void inplace_gated_silu_interleaved(int num_tokens, int intermediate_size, const T* src, T* tgt) {
-    inplace_gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
+void gated_silu_interleaved(int num_tokens, int intermediate_size, const T* src, T* tgt) {
+    gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
+}
+
+template <typename T>
+void gated_silu(int num_tokens, int intermediate_size, const T* src, T* tgt) {
+    gated_silu_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
 }
 }
 
@@ -84,8 +101,13 @@ struct GatedFFN : FFN<T> {
 
     void prefill(int32_t num_tokens, T* input) {
         this->ffn_norm->prefill(num_tokens, input);
-        linear<T, true>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
-        inplace_gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->ffn_norm->output);
-        linear<T, false, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->ffn_norm->output, this->down_proj->weight, input);
+        this->gate_proj->prefill(num_tokens, this->ffn_norm->output);
+        this->up_proj->prefill(num_tokens, this->ffn_norm->output);
+        gated_silu<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->up_proj->output);
+        linear<T, false, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->up_proj->output, this->down_proj->weight, input);
     }
+
+    // void verify()
+        // linear<T, true>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
+        // gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->up_proj->output);
 };
