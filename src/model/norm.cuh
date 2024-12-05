@@ -3,6 +3,7 @@
 #include "../trait.cuh"
 #include "../utils.cuh"
 
+namespace {
 template <typename T>
 __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* output, float eps) {
     __shared__ float shared_sum;
@@ -11,7 +12,7 @@ __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* out
     int col = threadIdx.x;
     float sum = 0.0f;
     for (int i = col; i < dim; i += blockDim.x) {
-        float val = TypeTraits<T>::to_float(input[row * dim + i]);
+        float val = float(input[row * dim + i]);
         sum += val * val;
     }
     sum += __shfl_down_sync(0xffffffff, sum, 16);
@@ -27,12 +28,58 @@ __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* out
         sum += __shfl_down_sync(0x000000ff, sum, 2);
         sum += __shfl_down_sync(0x000000ff, sum, 1);
     }
-    if (col == 0) shared_sum = rsqrt(sum / dim + eps);
+    if (col == 0) {
+        shared_sum = rsqrtf(sum / dim + eps);
+    }
     __syncthreads();
     sum = shared_sum;
     for (int i = col; i < dim; i += blockDim.x) {
-        output[row * dim + i] = TypeTraits<T>::from_float(sum * TypeTraits<T>::to_float(input[row * dim + i]) * TypeTraits<T>::to_float(weight[i]));
+        output[row * dim + i] = T(sum * float(input[row * dim + i]) * float(weight[i]));
     }
+}
+
+template <typename T, typename T2>
+__global__ void rms_norm_kernel_half2(int dim, const T2* input, const T2* weight, T2* output, float eps) {
+    __shared__ float shared_sum;
+    __shared__ float warp_sum[8];
+    int row = blockIdx.x;
+    int col = threadIdx.x;
+    float sum1 = 0.0f, sum2 = 0.0f;
+    for (int i = col; i < dim; i += blockDim.x) {
+        T2 val = input[row * dim + i];
+        float val1 = float(val.x);
+        float val2 = float(val.y);
+        sum1 += val1 * val1;
+        sum2 += val2 * val2;
+    }
+    float sum = sum1 + sum2;
+    sum += __shfl_down_sync(0xffffffff, sum, 16);
+    sum += __shfl_down_sync(0xffffffff, sum, 8);
+    sum += __shfl_down_sync(0xffffffff, sum, 4);
+    sum += __shfl_down_sync(0xffffffff, sum, 2);
+    sum += __shfl_down_sync(0xffffffff, sum, 1);
+    if (col % 32 == 0) warp_sum[col / 32] = sum;
+    __syncthreads();
+    if (col < 8) {
+        sum = warp_sum[col];
+        sum += __shfl_down_sync(0x000000ff, sum, 4);
+        sum += __shfl_down_sync(0x000000ff, sum, 2);
+        sum += __shfl_down_sync(0x000000ff, sum, 1);
+    }
+    if (col == 0) {
+        shared_sum = rsqrtf(sum / (2*dim) + eps);
+    }
+    __syncthreads();
+    sum = shared_sum;
+    for (int i = col; i < dim; i += blockDim.x) {
+        T2 inp = input[row * dim + i];
+        T2 w = weight[i];
+        output[row * dim + i] = T2(
+            T(sum * float(inp.x) * float(w.x)),
+            T(sum * float(inp.y) * float(w.y))
+        );
+    }
+}
 }
 
 template <typename T>
@@ -61,6 +108,8 @@ struct RMSNorm {
     }
 
     void prefill(int32_t num_tokens, T* input) {
-        rms_norm_kernel<<<num_tokens, 256, 0, calc_stream>>>(dim, input, weight, this->output, eps); // TODO float4, TODO shared memory for input
+        // rms_norm_kernel<T><<<num_tokens, 256, 0, calc_stream>>>(dim, input, weight, this->output, eps);
+        using T2 = typename TypeTraits<T>::half2;
+        rms_norm_kernel_half2<T, T2><<<num_tokens, 256, 0, calc_stream>>>(dim/2, (T2*)input, (T2*)weight, (T2*)this->output, eps);
     }
 };

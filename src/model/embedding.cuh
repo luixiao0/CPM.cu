@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include "../utils.cuh"
 
+namespace {
 template <typename T>
 __global__ void embedding_kernel(int32_t num_cols, const int32_t* input, const T* weight, T* output) {
     int row = blockIdx.x;
@@ -11,6 +12,18 @@ __global__ void embedding_kernel(int32_t num_cols, const int32_t* input, const T
     for (int i = col; i < num_cols; i += blockDim.x) {
         output[offset_output + i] = weight[offset_weight + i];
     }
+}
+
+template <typename T>
+__global__ void embedding_kernel_float4(int32_t num_cols, const int32_t* input, const float4* weight, float4* output) {
+    int row = blockIdx.x;
+    int col = threadIdx.x;
+    int offset_output = row * num_cols;
+    int offset_weight = input[row] * num_cols;
+    for (int i = col; i < num_cols; i += blockDim.x) {
+        output[offset_output + i] = weight[offset_weight + i];
+    }
+}
 }
 
 template <typename T>
@@ -39,6 +52,7 @@ struct Embedding {
     }
 
     void prefill(int32_t num_tokens, int32_t* input) {
-        embedding_kernel<T><<<num_tokens, 256, 0, calc_stream>>>(hidden_size, input, weight, this->output); // TODO float4, TODO adjust 256
+        // embedding_kernel<T><<<num_tokens, 256, 0, calc_stream>>>(hidden_size, input, weight, this->output);
+        embedding_kernel_float4<T><<<num_tokens, 256, 0, calc_stream>>>(hidden_size/(16/sizeof(T)), input, (float4*)weight, (float4*)this->output);
     }
 };

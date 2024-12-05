@@ -8,17 +8,7 @@ struct TypeTraits;
 
 template <>
 struct TypeTraits<__half> {
-    static __inline__ __device__ float to_float(__half h) {
-        return __half2float(h);
-    }
-
-    static __inline__ __device__ __half from_float(float f) {
-        return __float2half(f);
-    }
-
-    static __inline__ __device__ float mul(__half a, __half b) {
-        return __half2float(__hmul(a, b));
-    }
+    using half2 = __half2;
 
     static __inline__ cudaDataType_t cublas_type() {
         return CUDA_R_16F;
@@ -31,17 +21,7 @@ struct TypeTraits<__half> {
 
 template <>
 struct TypeTraits<__nv_bfloat16> {
-    static __inline__ __device__ float to_float(__nv_bfloat16 b) {
-        return __bfloat162float(b);
-    }
-
-    static __inline__ __device__ __nv_bfloat16 from_float(float f) {
-        return __float2bfloat16(f);
-    }
-
-    static __inline__ __device__ float mul(__nv_bfloat16 a, __nv_bfloat16 b) {
-        return __bfloat162float(__hmul(a, b));
-    }
+    using half2 = __nv_bfloat162;
 
     static __inline__ cudaDataType_t cublas_type() {
         return CUDA_R_16BF;

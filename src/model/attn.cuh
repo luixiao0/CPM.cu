@@ -114,7 +114,7 @@ struct Attention {
             this->softmax_lse,
             this->softmax_lse_accum,
             this->oaccum,
-            rsqrt(float(this->head_dim)),
+            rsqrtf(float(this->head_dim)),
             true,
             -1,
             -1,
@@ -128,7 +128,7 @@ struct Attention {
 
     void decode(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(num_tokens, input);
-        this->q_proj->prefill(num_tokens, this->attn_norm->output);
+        this->q_proj->prefill(num_tokens, this->attn_norm->output); // TODO fused these three
         this->k_proj->prefill(num_tokens, this->attn_norm->output);
         this->v_proj->prefill(num_tokens, this->attn_norm->output);
         this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, this->k_proj->output, position_ids);
@@ -152,7 +152,7 @@ struct Attention {
             this->softmax_lse,
             this->softmax_lse_accum,
             this->oaccum,
-            rsqrt(float(this->head_dim)),
+            rsqrtf(float(this->head_dim)),
             true,
             -1,
             -1,

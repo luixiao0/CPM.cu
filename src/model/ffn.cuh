@@ -12,10 +12,10 @@ __global__ void gated_silu_interleaved_kernel(int intermediate_size, const T* sr
     int col = blockIdx.y * 256 + threadIdx.x;
     int col2 = col + intermediate_size;
     if (col < intermediate_size) {
-        float g = TypeTraits<T>::to_float(src[row_offset_2 + col]);
-        float u = TypeTraits<T>::to_float(src[row_offset_2 + col2]);
+        float g = float(src[row_offset_2 + col]);
+        float u = float(src[row_offset_2 + col2]);
         float s = 1.0f / (1.0f + exp(-g));
-        tgt[row_offset + col] = TypeTraits<T>::from_float(g * s * u);
+        tgt[row_offset + col] = T(g * s * u);
     }
 }
 
@@ -24,10 +24,10 @@ __global__ void gated_silu_kernel(int intermediate_size, const T* src, T* tgt) {
     int row_offset = blockIdx.x * intermediate_size;
     int col = blockIdx.y * 256 + threadIdx.x;
     if (col < intermediate_size) {
-        float g = TypeTraits<T>::to_float(src[row_offset + col]);
-        float u = TypeTraits<T>::to_float(tgt[row_offset + col]);
+        float g = float(src[row_offset + col]);
+        float u = float(tgt[row_offset + col]);
         float s = 1.0f / (1.0f + exp(-g));
-        tgt[row_offset + col] = TypeTraits<T>::from_float(g * s * u);
+        tgt[row_offset + col] = T(g * s * u);
     }
 }
 

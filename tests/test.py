@@ -6,7 +6,7 @@ from triton.testing import do_bench
 path = "../../models/MiniCPM-1B-sft-llama-format"
 dtype = torch.bfloat16
 Bench = True
-cuda_graph = True
+cuda_graph = False
 
 # seed
 torch.manual_seed(0)
