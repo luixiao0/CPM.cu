@@ -1,5 +1,6 @@
 #pragma once
 #include <cuda_runtime.h>
+#include "../utils.cuh"
 
 template <typename T>
 __global__ void embedding_kernel(int32_t num_cols, const int32_t* input, const T* weight, T* output) {
@@ -38,6 +39,6 @@ struct Embedding {
     }
 
     void prefill(int32_t num_tokens, int32_t* input) {
-        embedding_kernel<T><<<num_tokens, 256>>>(hidden_size, input, weight, this->output); // TODO float4, TODO adjust 256
+        embedding_kernel<T><<<num_tokens, 256, 0, calc_stream>>>(hidden_size, input, weight, this->output); // TODO float4, TODO adjust 256
     }
 };

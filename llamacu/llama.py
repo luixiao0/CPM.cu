@@ -7,7 +7,6 @@ from triton.testing import do_bench
 dtype_map = {
     torch.float16: 0,
     torch.bfloat16: 1,
-    torch.float32: 2,
 }
 
 def dtype_to_int(dtype):
@@ -70,6 +69,6 @@ class LLM(torch.nn.Module):
             torch.cuda.nvtx.range_pop()
         return output_ids
 
-    def decode(self, input_ids, position_ids, cache_length, output_ids):
-        C.decode(input_ids.numel(), input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr())
+    def decode(self, input_ids, position_ids, cache_length, output_ids, cuda_graph=False):
+        C.decode(input_ids.numel(), input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr(), cuda_graph)
         return output_ids

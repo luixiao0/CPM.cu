@@ -22,7 +22,7 @@ void init_model(
     int torch_dtype,
     int chunk_length
 ) {
-    init_cublas();
+    init_resources();
 
     if (torch_dtype == 0) {
         std::cout << "Using float16 precision" << std::endl;
@@ -56,22 +56,6 @@ void init_model(
             rope_theta,
             chunk_length
         );
-    } else if (torch_dtype == 2) {
-        std::cout << "Using float32 precision" << std::endl;
-        model = new ModelImpl<float>(
-            memory_limit,
-            reinterpret_cast<void*>(memory_pool),
-            vocab_size,
-            num_hidden_layers,
-            hidden_size,
-            intermediate_size,
-            num_attention_heads,
-            num_key_value_heads,
-            head_dim,
-            rms_norm_eps,
-            rope_theta,
-            chunk_length
-        );
     } else {
         throw std::invalid_argument("Unsupported dtype");
     }
@@ -87,8 +71,19 @@ void prefill(int input_length, int history_length, std::uintptr_t input, std::ui
     model->prefill(input_length, history_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(output));
 }
 
-void decode(int input_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t output) {
-    model->decode(input_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<int32_t*>(output));
+void decode(int input_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t output, bool cuda_graph) {
+    if (cuda_graph) {
+        if (!graphCreated) {
+            cudaStreamBeginCapture(calc_stream, cudaStreamCaptureModeGlobal);
+            model->decode(input_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<int32_t*>(output));
+            cudaStreamEndCapture(calc_stream, &graph);
+            cudaGraphInstantiate(&graphExec, graph, nullptr, nullptr, 0);
+            graphCreated = true;
+        }
+        cudaGraphLaunch(graphExec, calc_stream);
+    } else {
+        model->decode(input_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<int32_t*>(output));
+    }
 }
 
 PYBIND11_MODULE(C, m) {

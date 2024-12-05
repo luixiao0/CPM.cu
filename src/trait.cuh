@@ -51,27 +51,3 @@ struct TypeTraits<__nv_bfloat16> {
         return 1;
     }
 };
-
-// TODO fp32 not supported for now since flash attention only supports fp16 and bf16
-template <>
-struct TypeTraits<float> {
-    static __inline__ __device__ float to_float(float f) {
-        return f;
-    }
-
-    static __inline__ __device__ float from_float(float f) {
-        return f;
-    }
-
-    static __inline__ __device__ float mul(float a, float b) {
-        return a * b;
-    }
-
-    static __inline__ cudaDataType_t cublas_type() {
-        return CUDA_R_32F;
-    }
-
-    static __inline__ int type_code() {
-        return 2;
-    }
-};

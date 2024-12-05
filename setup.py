@@ -41,7 +41,7 @@ setup(
         CUDAExtension(
             name='llamacu.C',
             sources = [
-                "src/model.cu",
+                "src/entry.cu",
                 "src/utils.cu",
                 # *glob.glob("src/flash_attn/src/*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"),

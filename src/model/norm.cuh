@@ -1,6 +1,7 @@
 #pragma once
 #include <cuda_runtime.h>
 #include "../trait.cuh"
+#include "../utils.cuh"
 
 template <typename T>
 __global__ void rms_norm_kernel(int dim, const T* input, const T* weight, T* output, float eps) {
@@ -60,6 +61,6 @@ struct RMSNorm {
     }
 
     void prefill(int32_t num_tokens, T* input) {
-        rms_norm_kernel<<<num_tokens, 256>>>(dim, input, weight, this->output, eps); // TODO float4, TODO shared memory for input
+        rms_norm_kernel<<<num_tokens, 256, 0, calc_stream>>>(dim, input, weight, this->output, eps); // TODO float4, TODO shared memory for input
     }
 };

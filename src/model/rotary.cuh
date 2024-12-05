@@ -1,5 +1,6 @@
 #pragma once
 #include <cuda_runtime.h>
+#include "../utils.cuh"
 
 namespace {
 template<typename T>
@@ -48,6 +49,6 @@ struct RotaryEmbedding {
     void load_to_storage(std::string name, void* ptr) {}
 
     void prefill(int32_t num_tokens, int num_heads, int num_heads_kv, T* q, T* k, int32_t* position_ids) {
-        rotary_embedding<<<num_tokens, 256>>>(num_heads, num_heads_kv, half_dim, theta, position_ids, q, k); // TODO 256, TODO float4
+        rotary_embedding<<<num_tokens, 256, 0, calc_stream>>>(num_heads, num_heads_kv, half_dim, theta, position_ids, q, k); // TODO 256, TODO float4
     }
 };

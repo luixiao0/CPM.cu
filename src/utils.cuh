@@ -8,7 +8,13 @@
 #include <cublas_v2.h>
 
 extern bool initialized;
+
+extern cudaStream_t calc_stream;
 extern cublasHandle_t cublas_handle;
+
+extern bool graphCreated;
+extern cudaGraph_t graph;
+extern cudaGraphExec_t graphExec;
 
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
 
@@ -26,4 +32,4 @@ extern cublasHandle_t cublas_handle;
     exit(EXIT_FAILURE); \
   }
 
-void init_cublas();
+void init_resources();

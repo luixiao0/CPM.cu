@@ -1,11 +1,12 @@
 #pragma once
+#include <cuda_runtime.h>
 #include "../trait.cuh"
+#include "../utils.cuh"
+#include "../flash_attn/flash_api.hpp"
 #include "norm.cuh"
 #include "linear.cuh"
 #include "rotary.cuh"
 #include "kvcache.cuh"
-#include "../flash_attn/flash_api.hpp"
-#include <cuda_runtime.h>
 
 template <typename T>
 struct Attention {
@@ -55,7 +56,6 @@ struct Attention {
         int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
         int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
         
-        // TODO suppose num_splits = 1 for encode and 4 for decode for now
         this->attn_output = (T*)(memory->memory_pool + offset);
         this->softmax_lse = (float*)(memory->memory_pool + v_proj_end);
         int64_t softmax_lse_end = v_proj_end + num_tokens * this->num_attention_heads * sizeof(float);
@@ -119,7 +119,7 @@ struct Attention {
             -1,
             -1,
             0,
-            0 // TODO 0 for default stream
+            calc_stream
         );
 
         // flash attention and put output to attn_norm->output
@@ -157,7 +157,7 @@ struct Attention {
             -1,
             -1,
             0,
-            0 // TODO 0 for default stream
+            calc_stream
         );
 
         // flash attention and put output to attn_norm->output

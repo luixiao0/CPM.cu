@@ -33,12 +33,12 @@ __global__ void gated_silu_kernel(int intermediate_size, const T* src, T* tgt) {
 
 template <typename T>
 void gated_silu_interleaved(int num_tokens, int intermediate_size, const T* src, T* tgt) {
-    gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
+    gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
 }
 
 template <typename T>
 void gated_silu(int num_tokens, int intermediate_size, const T* src, T* tgt) {
-    gated_silu_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
+    gated_silu_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
 }
 }
 
