@@ -65,7 +65,11 @@ struct Linear {
         cudaMemcpy((void*)weight, ptr, dim_in * dim_out * sizeof(T), cudaMemcpyHostToDevice);
     }
 
-    void prefill(int32_t num_tokens, T* input) {
-        linear<T, transposed>(num_tokens, dim_in, dim_out, input, weight, this->output);
+    void prefill(int32_t num_tokens, T* input, T* tgt=nullptr) {
+        if (tgt == nullptr) {
+            linear<T, transposed>(num_tokens, dim_in, dim_out, input, weight, this->output);
+        } else {
+            linear<T, transposed>(num_tokens, dim_in, dim_out, input, weight, tgt);
+        }
     }
 };

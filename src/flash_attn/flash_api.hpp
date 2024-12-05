@@ -225,7 +225,6 @@ void mha_fwd_kvcache(
     int window_size_left,
     int window_size_right,
     const float softcap,
-    int num_splits,
     cudaStream_t stream
 ) {
     // causal=true is the same as causal=false in this case
@@ -272,23 +271,8 @@ void mha_fwd_kvcache(
                      softcap
                      );
 
-    params.seqlen_knew = seqlen_knew;
-    params.knew_ptr = k;
-    params.vnew_ptr = v;
-    // All stride are in elements, not bytes.
-    params.knew_batch_stride = seqlen_knew * num_heads_k * head_size;
-    params.vnew_batch_stride = seqlen_knew * num_heads_k * head_size;
-    params.knew_row_stride = num_heads_k * head_size;
-    params.vnew_row_stride = num_heads_k * head_size;
-    params.knew_head_stride = head_size;
-    params.vnew_head_stride = head_size;
-
-    params.cu_seqlens_k = seqlens_k;
-    params.is_seqlens_k_cumulative = false;
-
     params.rotary_dim = 0;
 
-    params.num_splits = num_splits;
     params.softmax_lseaccum_ptr = (void*)softmax_lse_accum;
     params.oaccum_ptr = (void*)oaccum;
 
@@ -296,7 +280,27 @@ void mha_fwd_kvcache(
 
     params.alibi_slopes_ptr = nullptr;
 
-    run_mha_fwd(params, stream, /*force_split_kernel=*/true);
+    if (k != nullptr) {
+        params.seqlen_knew = seqlen_knew;
+        params.knew_ptr = k;
+        params.vnew_ptr = v;
+        // All stride are in elements, not bytes.
+        params.knew_batch_stride = seqlen_knew * num_heads_k * head_size;
+        params.vnew_batch_stride = seqlen_knew * num_heads_k * head_size;
+        params.knew_row_stride = num_heads_k * head_size;
+        params.vnew_row_stride = num_heads_k * head_size;
+        params.knew_head_stride = head_size;
+        params.vnew_head_stride = head_size;
+
+        params.cu_seqlens_k = seqlens_k;
+        params.is_seqlens_k_cumulative = false;
+
+        params.num_splits = 4; // TODO 4 for decode
+        run_mha_fwd(params, stream);
+    } else {
+        params.num_splits = 1;
+        run_mha_fwd(params, stream);
+    }
 
     // TODO ignore this for now
     // if (seqlenq_ngroups_swapped) {

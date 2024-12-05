@@ -63,6 +63,13 @@ class LLM(torch.nn.Module):
                 param = param.contiguous().to(self.dtype)
                 C.load_model(name, param.data_ptr())
 
-    def prefill(self, input_ids, position_ids, cache_length, output_ids):
-        C.prefill(input_ids.numel(), input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr())
+    def prefill(self, input_ids, position_ids, output_ids):
+        for i in range(0, input_ids.numel(), self.chunk_length):
+            torch.cuda.nvtx.range_push(f"chunk from {i}")
+            C.prefill(min(input_ids.numel() - i, self.chunk_length), i, input_ids.view(-1)[i:].data_ptr(), position_ids.view(-1)[i:].data_ptr(), output_ids.view(-1)[i:].data_ptr())
+            torch.cuda.nvtx.range_pop()
+        return output_ids
+
+    def decode(self, input_ids, position_ids, cache_length, output_ids):
+        C.decode(input_ids.numel(), input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr())
         return output_ids

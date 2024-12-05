@@ -21,6 +21,9 @@ struct KVCache {
         offset += budget * dim * sizeof(T);
         return offset;
     }
+
+    T* offset_k(int offset) { return k_cache + offset * dim; }
+    T* offset_v(int offset) { return v_cache + offset * dim; }
 };
 
 template <typename T>

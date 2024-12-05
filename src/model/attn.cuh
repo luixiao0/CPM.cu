@@ -85,7 +85,48 @@ struct Attention {
         }
     }
 
-    void prefill(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
+    void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input, int32_t* position_ids, KVCache<T>* kv_cache) {
+        T* k_cache = kv_cache->offset_k(num_history_tokens);
+        T* v_cache = kv_cache->offset_v(num_history_tokens);
+
+        this->attn_norm->prefill(num_tokens, input);
+        this->q_proj->prefill(num_tokens, this->attn_norm->output);
+        this->k_proj->prefill(num_tokens, this->attn_norm->output, k_cache);
+        this->v_proj->prefill(num_tokens, this->attn_norm->output, v_cache);
+        this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
+
+        mha_fwd_kvcache(
+            TypeTraits<T>::type_code()==1,
+            1,
+            num_tokens,
+            num_history_tokens+num_tokens,
+            num_tokens,
+            this->num_attention_heads,
+            this->num_key_value_heads,
+            this->head_dim,
+            this->q_proj->output,
+            kv_cache->k_cache,
+            kv_cache->v_cache,
+            nullptr,
+            nullptr,
+            nullptr,
+            this->attn_output,
+            this->softmax_lse,
+            this->softmax_lse_accum,
+            this->oaccum,
+            rsqrt(float(this->head_dim)),
+            true,
+            -1,
+            -1,
+            0,
+            0 // TODO 0 for default stream
+        );
+
+        // flash attention and put output to attn_norm->output
+        linear<T, false, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
+    }
+
+    void decode(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(num_tokens, input);
         this->q_proj->prefill(num_tokens, this->attn_norm->output);
         this->k_proj->prefill(num_tokens, this->attn_norm->output);
@@ -116,7 +157,6 @@ struct Attention {
             -1,
             -1,
             0,
-            1, // TODO 4 for decode
             0 // TODO 0 for default stream
         );
 
