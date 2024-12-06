@@ -128,10 +128,22 @@ struct Attention {
 
     void decode(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(num_tokens, input);
-        this->q_proj->prefill(num_tokens, this->attn_norm->output); // TODO fused these three
-        this->k_proj->prefill(num_tokens, this->attn_norm->output);
-        this->v_proj->prefill(num_tokens, this->attn_norm->output);
-        this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, this->k_proj->output, position_ids);
+        T *q, *k, *v;
+        if (num_tokens > 1) {
+            this->q_proj->prefill(num_tokens, this->attn_norm->output); // TODO fused these three
+            this->k_proj->prefill(num_tokens, this->attn_norm->output);
+            this->v_proj->prefill(num_tokens, this->attn_norm->output);
+            this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, this->k_proj->output, position_ids);
+            q = this->q_proj->output;
+            k = this->k_proj->output;
+            v = this->v_proj->output;
+        } else {
+            linear<T, true>(num_tokens, this->hidden_size, (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
+            q = this->q_proj->output;
+            k = q + this->num_attention_heads * this->head_dim;
+            v = k + this->num_key_value_heads * this->head_dim;
+        }
+        this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -142,11 +154,11 @@ struct Attention {
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,
-            this->q_proj->output,
+            q,
             kv_cache->k_cache,
             kv_cache->v_cache,
-            this->k_proj->output,
-            this->v_proj->output,
+            k,
+            v,
             cache_length,
             this->attn_output,
             this->softmax_lse,
