@@ -94,7 +94,7 @@
  // TODO only compile 64 for debug
 #define HEADDIM_SWITCH(HEADDIM, ...)   \
   [&] {                                    \
-    constexpr static int kHeadDim = 64; \
+    constexpr static int kHeadDim = 128; \
     return __VA_ARGS__();              \
   }()
   //   if (HEADDIM <= 32) {                   \

@@ -1,6 +1,7 @@
-import torch
 from . import C
 
+import os, json
+import torch
 from transformers import AutoTokenizer, AutoConfig
 from triton.testing import do_bench
 
@@ -52,15 +53,28 @@ class LLM(torch.nn.Module):
             self.chunk_length,
         )
 
+    def _load(self, name, param):
+        if 'o_proj' in name or 'down_proj' in name:
+            param = param.transpose(0, 1)
+
+        param = param.contiguous().to(self.dtype)
+        C.load_model(name, param.data_ptr())
+
     def load_from_hf(self):
         with torch.no_grad():
-            ckpt = torch.load(self.path+"/pytorch_model.bin", map_location="cpu")
-            for name, param in ckpt.items():
-                if 'o_proj' in name or 'down_proj' in name:
-                    param = param.transpose(0, 1)
-
-                param = param.contiguous().to(self.dtype)
-                C.load_model(name, param.data_ptr())
+            if os.path.exists(os.path.join(self.path, "pytorch_model.bin")):
+                ckpt = torch.load(os.path.join(self.path, "pytorch_model.bin"), map_location="cpu")
+                for name, param in ckpt.items():
+                    self._load(name, param)
+            elif os.path.exists(os.path.join(self.path, "pytorch_model.bin.index.json")):
+                with open(os.path.join(self.path, "pytorch_model.bin.index.json"), "r") as f:
+                    file_list = set(json.load(f)["weight_map"].values())
+                for file in file_list:
+                    ckpt = torch.load(os.path.join(self.path, file), map_location="cpu")
+                    for name, param in ckpt.items():
+                        self._load(name, param)
+            else:
+                raise NotImplementedError(f"Unsupported checkpoint format for {self.path}")
 
     def prefill(self, input_ids, position_ids, output_ids):
         for i in range(0, input_ids.numel(), self.chunk_length):

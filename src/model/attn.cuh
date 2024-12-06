@@ -130,7 +130,7 @@ struct Attention {
         this->attn_norm->prefill(num_tokens, input);
         T *q, *k, *v;
         if (num_tokens > 1) {
-            this->q_proj->prefill(num_tokens, this->attn_norm->output); // TODO fused these three
+            this->q_proj->prefill(num_tokens, this->attn_norm->output);
             this->k_proj->prefill(num_tokens, this->attn_norm->output);
             this->v_proj->prefill(num_tokens, this->attn_norm->output);
             this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, this->k_proj->output, position_ids);

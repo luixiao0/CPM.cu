@@ -107,9 +107,10 @@ struct RMSNorm {
         cudaMemcpy((void*)weight, ptr, dim * sizeof(T), cudaMemcpyHostToDevice);
     }
 
-    void prefill(int32_t num_tokens, T* input) {
+    void prefill(int32_t num_tokens, T* input, T* tgt=nullptr) {
+        if (tgt == nullptr) tgt = this->output;
         // rms_norm_kernel<T><<<num_tokens, 256, 0, calc_stream>>>(dim, input, weight, this->output, eps);
         using T2 = typename TypeTraits<T>::half2;
-        rms_norm_kernel_half2<T, T2><<<num_tokens, 256, 0, calc_stream>>>(dim/2, (T2*)input, (T2*)weight, (T2*)this->output, eps);
+        rms_norm_kernel_half2<T, T2><<<num_tokens, 256, 0, calc_stream>>>(dim/2, (T2*)input, (T2*)weight, (T2*)tgt, eps);
     }
 };

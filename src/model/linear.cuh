@@ -66,10 +66,7 @@ struct Linear {
     }
 
     void prefill(int32_t num_tokens, T* input, T* tgt=nullptr) {
-        if (tgt == nullptr) {
-            linear<T, transposed>(num_tokens, dim_in, dim_out, input, weight, this->output);
-        } else {
-            linear<T, transposed>(num_tokens, dim_in, dim_out, input, weight, tgt);
-        }
+        if (tgt == nullptr) tgt = this->output;
+        linear<T, transposed>(num_tokens, dim_in, dim_out, input, weight, tgt);
     }
 };

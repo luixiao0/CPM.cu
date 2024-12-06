@@ -3,7 +3,8 @@ from llamacu.llama import LLM
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from triton.testing import do_bench
 
-path = "../../models/MiniCPM-1B-sft-llama-format"
+# path = "../../models/MiniCPM-1B-sft-llama-format"
+path = "../../models/Llama-2-7b-hf"
 dtype = torch.bfloat16
 Bench = True
 cuda_graph = False
@@ -27,18 +28,15 @@ with torch.no_grad():
         time = do_bench(lambda: model.model(input_ids, position_ids=position_ids, use_cache=True, return_dict=False), warmup=10, rep=1000)
     last_hidden = last_hidden.view(num_tokens, -1)
 
-llm = LLM(path, dtype=dtype, chunk_length=chunk_length)
+llm = LLM(path, dtype=dtype, chunk_length=chunk_length, memory_limit=0.4)
 llm.load_from_hf()
 
-model_offset = 2946100224//2
-
-output_ids = torch.empty_like(input_ids)
+our_last_hidden = torch.empty((chunk_length, llm.config.hidden_size), dtype=dtype, device="cuda")
 torch.cuda.nvtx.range_push("our prefill")
-llm.prefill(input_ids, position_ids, output_ids)
+llm.prefill(input_ids, position_ids, our_last_hidden)
 torch.cuda.nvtx.range_pop()
 if Bench:
-    our_time = do_bench(lambda: llm.prefill(input_ids, position_ids, output_ids), warmup=10, rep=1000)
-our_last_hidden = llm.memory_pool.view(dtype)[model_offset:model_offset+chunk_length*llm.config.hidden_size].view(chunk_length,-1)
+    our_time = do_bench(lambda: llm.prefill(input_ids, position_ids, our_last_hidden), warmup=10, rep=1000)
 
 print(last_hidden)
 print(our_last_hidden)
@@ -59,12 +57,11 @@ if Bench:
     time = do_bench(lambda: model.model(input_ids, position_ids=position_ids, use_cache=True, past_key_values=past_key_values, return_dict=False), warmup=10, rep=1000)
 
 torch.cuda.nvtx.range_push("our decode")
-llm.decode(input_ids, position_ids, cache_length, output_ids, cuda_graph=cuda_graph)
+llm.decode(input_ids, position_ids, cache_length, our_last_hidden, cuda_graph=cuda_graph)
 torch.cuda.nvtx.range_pop()
-our_last_hidden = llm.memory_pool.view(dtype)[model_offset:model_offset+num_verify*llm.config.hidden_size].view(1,-1)
 if Bench:
-    our_time = do_bench(lambda: llm.decode(input_ids, position_ids, cache_length, output_ids, cuda_graph=cuda_graph), warmup=10, rep=1000)
+    our_time = do_bench(lambda: llm.decode(input_ids, position_ids, cache_length, our_last_hidden, cuda_graph=cuda_graph), warmup=10, rep=1000)
 
-print(f"decode diff: {(last_hidden-our_last_hidden).abs().mean()}")
+print(f"decode diff: {(last_hidden-our_last_hidden[:1]).abs().mean()}")
 print(f"baseline decode: {num_verify / time * 1000} tok/s")
 print(f"our decode: {num_verify / our_time * 1000} tok/s")

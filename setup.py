@@ -44,7 +44,8 @@ setup(
                 "src/entry.cu",
                 "src/utils.cu",
                 # *glob.glob("src/flash_attn/src/*.cu"),
-                *glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"),
+                # *glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"),
+                *glob.glob("src/flash_attn/src/*hdim128_bf16*.cu"),
             ],
             extra_compile_args={
                 "cxx": ["-O3", "-std=c++17"],
