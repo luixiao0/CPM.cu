@@ -213,8 +213,6 @@ void mha_fwd_kvcache(
     void* q,                    // batch_size x seqlen_q x num_heads x head_size
     void* kcache,               // batch_size x seqlen_k x num_heads_k x head_size
     void* vcache,               // batch_size x seqlen_k x num_heads_k x head_size
-    void* k,                    // batch_size x seqlen_knew x num_heads_k x head_size
-    void* v,                    // batch_size x seqlen_knew x num_heads_k x head_size
     int* seqlens_k,             // batch_size
     void* out,                  // batch_size x seqlen_q x num_heads x head_size
     float* softmax_lse,         // batch_size x num_heads x seqlen_q
@@ -280,27 +278,15 @@ void mha_fwd_kvcache(
 
     params.alibi_slopes_ptr = nullptr;
 
-    if (k != nullptr) {
-        params.seqlen_knew = seqlen_knew;
-        params.knew_ptr = k;
-        params.vnew_ptr = v;
-        // All stride are in elements, not bytes.
-        params.knew_batch_stride = seqlen_knew * num_heads_k * head_size;
-        params.vnew_batch_stride = seqlen_knew * num_heads_k * head_size;
-        params.knew_row_stride = num_heads_k * head_size;
-        params.vnew_row_stride = num_heads_k * head_size;
-        params.knew_head_stride = head_size;
-        params.vnew_head_stride = head_size;
-
+    if (seqlens_k != nullptr) {
         params.cu_seqlens_k = seqlens_k;
         params.is_seqlens_k_cumulative = false;
-
         params.num_splits = 4; // TODO 4 for decode
-        run_mha_fwd(params, stream);
     } else {
         params.num_splits = 1;
-        run_mha_fwd(params, stream);
     }
+
+    run_mha_fwd(params, stream);
 
     // TODO ignore this for now
     // if (seqlenq_ngroups_swapped) {

@@ -85,6 +85,9 @@ class LLM(torch.nn.Module):
 
     def decode(self, input_ids, position_ids, cache_length, output_ids, cuda_graph=False):
         torch.cuda.nvtx.range_push(f"decode")
-        C.decode(input_ids.numel(), input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr(), cuda_graph)
+        cache_length += input_ids.numel() # temparary add for convinience in flash_attn
+        padded_length = (cache_length[0].item() + 128 - 1) // 128 * 128
+        C.decode(input_ids.numel(), padded_length, input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(), output_ids.data_ptr(), cuda_graph)
+        cache_length -= input_ids.numel()
         torch.cuda.nvtx.range_pop()
         return output_ids

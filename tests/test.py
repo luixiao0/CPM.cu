@@ -3,8 +3,8 @@ from llamacu.llama import LLM
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from triton.testing import do_bench
 
-path = "../../models/MiniCPM-1B-sft-llama-format"
-# path = "../../models/Llama-2-7b-hf"
+# path = "../../models/MiniCPM-1B-sft-llama-format"
+path = "../../models/Llama-2-7b-hf"
 dtype = torch.float16
 Bench = True
 cuda_graph = False

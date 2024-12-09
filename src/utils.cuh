@@ -12,7 +12,7 @@ extern bool initialized;
 extern cudaStream_t calc_stream;
 extern cublasHandle_t cublas_handle;
 
-extern bool graphCreated;
+extern int graphCreated;
 extern cudaGraph_t graph;
 extern cudaGraphExec_t graphExec;
 

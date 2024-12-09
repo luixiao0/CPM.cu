@@ -8,6 +8,24 @@
 #include "rotary.cuh"
 #include "kvcache.cuh"
 
+namespace {
+__global__ void copy_to_kvcache_kernel_float4(int num_tokens, int dim, int total, float4* k, float4* v, float4* k_cache, float4* v_cache, int* cache_length) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int offset = idx + (cache_length[0] - num_tokens) * dim;
+    if (idx < total) {
+        k_cache[offset] = k[idx];
+        v_cache[offset] = v[idx];
+    }
+}
+
+template <typename T>
+void copy_to_kvcache(int num_tokens, T* k, T* v, KVCache<T>* kv_cache, int* cache_length) {
+    int dim = kv_cache->dim / (16/sizeof(T));
+    int total = num_tokens * dim;
+    copy_to_kvcache_kernel_float4<<<(total+255)/256, 256, 0, calc_stream>>>(num_tokens, dim, total, (float4*)k, (float4*)v, (float4*)kv_cache->k_cache, (float4*)kv_cache->v_cache, cache_length);
+}
+}
+
 template <typename T>
 struct Attention {
     int hidden_size;
@@ -108,8 +126,6 @@ struct Attention {
             kv_cache->k_cache,
             kv_cache->v_cache,
             nullptr,
-            nullptr,
-            nullptr,
             this->attn_output,
             this->softmax_lse,
             this->softmax_lse_accum,
@@ -126,7 +142,7 @@ struct Attention {
         linear<T, false, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
     }
 
-    void decode(int32_t num_tokens, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
+    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(num_tokens, input);
         T *q, *k, *v;
         if (num_tokens > 1) {
@@ -145,12 +161,13 @@ struct Attention {
         }
         this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
+        copy_to_kvcache(num_tokens, k, v, kv_cache, cache_length);
+
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
             num_tokens,
-            1024+256,
-            // kv_cache->budget,
+            padded_length,
             num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
@@ -158,8 +175,6 @@ struct Attention {
             q,
             kv_cache->k_cache,
             kv_cache->v_cache,
-            k,
-            v,
             cache_length,
             this->attn_output,
             this->softmax_lse,

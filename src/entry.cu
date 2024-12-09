@@ -71,18 +71,18 @@ void prefill(int input_length, int history_length, std::uintptr_t input, std::ui
     model->prefill(input_length, history_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), (void*)(output));
 }
 
-void decode(int input_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t output, bool cuda_graph) {
+void decode(int input_length, int padded_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t output, bool cuda_graph) {
     if (cuda_graph) {
-        if (!graphCreated) {
+        if (graphCreated != padded_length) {
             cudaStreamBeginCapture(calc_stream, cudaStreamCaptureModeGlobal);
-            model->decode(input_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), (void*)(output));
+            model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), (void*)(output));
             cudaStreamEndCapture(calc_stream, &graph);
             cudaGraphInstantiate(&graphExec, graph, nullptr, nullptr, 0);
-            graphCreated = true;
+            graphCreated = padded_length;
         }
         cudaGraphLaunch(graphExec, calc_stream);
     } else {
-        model->decode(input_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), (void*)(output));
+        model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), (void*)(output));
     }
 }
 
