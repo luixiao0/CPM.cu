@@ -14,7 +14,7 @@ __global__ void gated_silu_interleaved_kernel(int intermediate_size, const T* sr
     if (col < intermediate_size) {
         float g = float(src[row_offset_2 + col]);
         float u = float(src[row_offset_2 + col2]);
-        float s = 1.0f / (1.0f + exp(-g));
+        float s = 1.0f / (1.0f + expf(-g));
         tgt[row_offset + col] = T(g * s * u);
     }
 }
@@ -26,7 +26,7 @@ __global__ void gated_silu_kernel(int intermediate_size, const T* src, T* tgt) {
     if (col < intermediate_size) {
         float g = float(src[row_offset + col]);
         float u = float(tgt[row_offset + col]);
-        float s = 1.0f / (1.0f + exp(-g));
+        float s = 1.0f / (1.0f + expf(-g));
         tgt[row_offset + col] = T(g * s * u);
     }
 }
