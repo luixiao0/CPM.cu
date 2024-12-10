@@ -149,7 +149,6 @@ struct Attention {
             this->q_proj->prefill(num_tokens, this->attn_norm->output);
             this->k_proj->prefill(num_tokens, this->attn_norm->output);
             this->v_proj->prefill(num_tokens, this->attn_norm->output);
-            this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, this->k_proj->output, position_ids);
             q = this->q_proj->output;
             k = this->k_proj->output;
             v = this->v_proj->output;

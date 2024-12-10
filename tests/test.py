@@ -49,7 +49,7 @@ print(f"our prefill: {num_tokens / our_time * 1000} tok/s")
 
 # decode
 input_ids = torch.randint(0, 32000, (1, num_verify), dtype=torch.int32, device="cuda")
-position_ids = torch.tensor([[num_tokens]], dtype=torch.int32, device="cuda")
+position_ids = torch.tensor([[num_tokens] * num_verify], dtype=torch.int32, device="cuda")
 cache_length = torch.tensor([num_tokens], dtype=torch.int32, device="cuda")
 
 with torch.no_grad():
