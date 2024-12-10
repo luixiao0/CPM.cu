@@ -123,6 +123,7 @@ struct ModelImpl : Model {
         }
         this->norm->prefill(num_tokens, this->embedding->output);
         this->lm_head->prefill(1, this->norm->output + (num_tokens - 1) * this->hidden_size, (T*)output);
+        cudaStreamSynchronize(calc_stream);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, void* output) {
@@ -132,6 +133,7 @@ struct ModelImpl : Model {
         }
         this->norm->prefill(num_tokens, this->embedding->output);
         this->lm_head->prefill(num_tokens, this->norm->output, (T*)output);
+        cudaStreamSynchronize(calc_stream);
     }
 };
 
