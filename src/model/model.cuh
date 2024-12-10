@@ -23,6 +23,7 @@ struct ModelImpl : Model {
     Memory* memory;
 
     int num_hidden_layers;
+    int hidden_size;
     int chunk_length;
     int max_output_length;
 
@@ -48,6 +49,7 @@ struct ModelImpl : Model {
         int chunk_length
     ) {
         this->num_hidden_layers = num_hidden_layers;
+        this->hidden_size = hidden_size;
         this->chunk_length = chunk_length;
         
         memory = new Memory(memory_limit, memory_pool);
@@ -79,7 +81,7 @@ struct ModelImpl : Model {
         }
         // norm and lm_head are not used in prefill
         int64_t norm_end = norm->init_output_ptr(memory, chunk_length, memory->model_offset);
-        int64_t lm_head_end = lm_head->init_output_ptr(memory, 1, norm_end); // TODO speculative needs 64/128/256 for this but not 1
+        int64_t lm_head_end = lm_head->init_output_ptr(memory, 64, norm_end);
 
         memory->kv_cache_offset = std::max(layer_end, lm_head_end);
         this->max_output_length = kv_cache->init_output_ptr(memory, memory->kv_cache_offset);
@@ -119,7 +121,8 @@ struct ModelImpl : Model {
         for (int i = 0; i < num_hidden_layers; i++) {
             this->layers[i]->prefill(num_tokens, num_history_tokens, this->embedding->output, position_ids, this->kv_cache->caches[i]);
         }
-        this->norm->prefill(num_tokens, this->embedding->output, (T*)output);
+        this->norm->prefill(num_tokens, this->embedding->output);
+        this->lm_head->prefill(1, this->norm->output + (num_tokens - 1) * this->hidden_size, (T*)output);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, void* output) {
@@ -127,6 +130,8 @@ struct ModelImpl : Model {
         for (int i = 0; i < num_hidden_layers; i++) {
             this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, this->kv_cache->caches[i]);
         }
-        this->norm->prefill(num_tokens, this->embedding->output, (T*)output);
+        this->norm->prefill(num_tokens, this->embedding->output);
+        this->lm_head->prefill(num_tokens, this->norm->output, (T*)output);
     }
 };
+
