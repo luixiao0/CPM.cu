@@ -33,12 +33,12 @@ __global__ void gated_silu_kernel(int intermediate_size, const T* src, T* tgt) {
 
 template <typename T>
 void gated_silu_interleaved(int num_tokens, int intermediate_size, const T* src, T* tgt) {
-    gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
+    gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt);
 }
 
 template <typename T>
 void gated_silu(int num_tokens, int intermediate_size, const T* src, T* tgt) {
-    gated_silu_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt); // TODO adjust 256, TODO float4
+    gated_silu_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt);
 }
 }
 
@@ -58,7 +58,7 @@ struct GatedFFN : FFN<T> {
 
     RMSNorm<T> *ffn_norm;
     Linear<T, true> *gate_proj, *up_proj;
-    Linear<T, false> *down_proj;
+    Linear<T, true> *down_proj;
 
     T* gated_up;
 
@@ -70,7 +70,7 @@ struct GatedFFN : FFN<T> {
         this->ffn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         this->gate_proj = new Linear<T, true>(hidden_size, intermediate_size);
         this->up_proj = new Linear<T, true>(hidden_size, intermediate_size);
-        this->down_proj = new Linear<T, false>(intermediate_size, hidden_size);
+        this->down_proj = new Linear<T, true>(intermediate_size, hidden_size);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -110,6 +110,6 @@ struct GatedFFN : FFN<T> {
         // gated_silu<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
         linear<T, true>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
         gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
-        linear<T, false, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->gated_up, this->down_proj->weight, input);
+        linear<T, true, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->gated_up, this->down_proj->weight, input);
     }
 };

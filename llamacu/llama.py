@@ -58,9 +58,8 @@ class LLM(torch.nn.Module):
         self.logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
 
     def _load(self, name, param):
-        if 'o_proj' in name or 'down_proj' in name:
-            param = param.transpose(0, 1)
-
+        # if 'o_proj' in name or 'down_proj' in name:
+        #     param = param.transpose(0, 1)
         param = param.contiguous().to(self.dtype)
         C.load_model(name, param.data_ptr())
 

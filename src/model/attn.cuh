@@ -37,7 +37,7 @@ struct Attention {
 
     RMSNorm<T> *attn_norm;
     Linear<T, true> *q_proj, *k_proj, *v_proj;
-    Linear<T, false> *o_proj;
+    Linear<T, true> *o_proj;
     RotaryEmbedding<T> *rotary_emb;
 
     T* attn_output;
@@ -56,7 +56,7 @@ struct Attention {
         this->k_proj = new Linear<T, true>(hidden_size, num_key_value_heads * head_dim);
         this->v_proj = new Linear<T, true>(hidden_size, num_key_value_heads * head_dim);
         this->rotary_emb = new RotaryEmbedding<T>(head_dim, rope_theta);
-        this->o_proj = new Linear<T, false>(hidden_size, num_attention_heads * head_dim);
+        this->o_proj = new Linear<T, true>(hidden_size, num_attention_heads * head_dim);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -139,7 +139,7 @@ struct Attention {
         );
 
         // flash attention and put output to attn_norm->output
-        linear<T, false, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
+        linear<T, true, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
@@ -188,6 +188,6 @@ struct Attention {
         );
 
         // flash attention and put output to attn_norm->output
-        linear<T, false, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
+        linear<T, true, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
     }
 };
