@@ -10,8 +10,8 @@ struct Layer {
     Attention<T> *attn;
     FFN<T> *ffn;
 
-    Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float rope_theta) {
-        this->attn = new Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, rope_theta);
+    Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
+        this->attn = new Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps);
         this->ffn = new GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps);
     }
 

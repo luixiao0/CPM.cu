@@ -12,7 +12,7 @@
 #include <regex>
 
 struct Model {
-    virtual void init_storage() = 0;
+    virtual int init_storage() = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
     virtual void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) = 0;
     virtual void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, void* output) = 0;
@@ -27,7 +27,7 @@ struct ModelImpl : Model {
     int chunk_length;
     int max_output_length;
 
-    KVCacheManager<T>* kv_cache;
+    KVCacheManager<T>* kv_caches;
 
     Embedding<T>* embedding;
     std::vector<Layer<T>*> layers;
@@ -45,7 +45,6 @@ struct ModelImpl : Model {
         int num_key_value_heads,
         int head_dim,
         float rms_norm_eps,
-        float rope_theta,
         int chunk_length
     ) {
         this->num_hidden_layers = num_hidden_layers;
@@ -54,11 +53,11 @@ struct ModelImpl : Model {
         
         memory = new Memory(memory_limit, memory_pool);
 
-        kv_cache = new KVCacheManager<T>(num_hidden_layers, num_key_value_heads * head_dim);
+        kv_caches = new KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim);
 
         embedding = new Embedding<T>(vocab_size, hidden_size);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, rope_theta));
+            layers.push_back(new Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         lm_head = new Linear<T, true>(hidden_size, vocab_size);
@@ -71,6 +70,7 @@ struct ModelImpl : Model {
         }
         norm->init_weight_ptr(memory);
         lm_head->init_weight_ptr(memory);
+        kv_caches->init_weight_ptr(memory);
     }
 
     void init_output_ptr() {
@@ -84,15 +84,16 @@ struct ModelImpl : Model {
         int64_t lm_head_end = lm_head->init_output_ptr(memory, 64, norm_end);
 
         memory->kv_cache_offset = std::max(layer_end, lm_head_end);
-        this->max_output_length = kv_cache->init_output_ptr(memory, memory->kv_cache_offset);
+        this->max_output_length = kv_caches->init_output_ptr(memory, memory->kv_cache_offset);
 
-        printf("model offset: %lld, kv_cache offset: %lld\n", memory->model_offset, memory->kv_cache_offset);
-        printf("maximum possible output length: %d\n", max_output_length);
+        // printf("model offset: %lld, kv_cache offset: %lld\n", memory->model_offset, memory->kv_cache_offset);
+        // printf("maximum possible output length: %d\n", max_output_length);
     }
 
-    void init_storage() {
+    int init_storage() {
         init_weight_ptr();
         init_output_ptr();
+        return this->kv_caches->budget;
     }
 
     void load_to_storage(std::string name, void* ptr) {
@@ -102,6 +103,8 @@ struct ModelImpl : Model {
             norm->load_to_storage(name, ptr);
         } else if (name.substr(0, 7) == "lm_head") {
             lm_head->load_to_storage(name, ptr);
+        } else if (name.find("rotary_emb") != std::string::npos) {
+            kv_caches->rotary_embedding->load_to_storage(name, ptr);
         } else if (name.substr(0, 12) == "model.layers") { // e.g. model.layers.20.attn.q_proj.weight
             std::regex layer_regex("model\\.layers\\.(\\d+)\\.(.*)");
             std::smatch matches;
@@ -119,21 +122,19 @@ struct ModelImpl : Model {
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->embedding->prefill(num_tokens, input);
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->prefill(num_tokens, num_history_tokens, this->embedding->output, position_ids, this->kv_cache->caches[i]);
+            this->layers[i]->prefill(num_tokens, num_history_tokens, this->embedding->output, position_ids, this->kv_caches->caches[i]);
         }
         this->norm->prefill(num_tokens, this->embedding->output);
         this->lm_head->prefill(1, this->norm->output + (num_tokens - 1) * this->hidden_size, (T*)output);
-        cudaStreamSynchronize(calc_stream);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, void* output) {
         this->embedding->prefill(num_tokens, input);
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, this->kv_cache->caches[i]);
+            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, this->kv_caches->caches[i]);
         }
         this->norm->prefill(num_tokens, this->embedding->output);
         this->lm_head->prefill(num_tokens, this->norm->output, (T*)output);
-        cudaStreamSynchronize(calc_stream);
     }
 };
 

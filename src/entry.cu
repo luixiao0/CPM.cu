@@ -7,7 +7,7 @@
 
 Model* model;
 
-void init_model(
+int init_model(
     int64_t memory_limit,
     std::uintptr_t memory_pool,
     int vocab_size,
@@ -18,7 +18,6 @@ void init_model(
     int num_key_value_heads,
     int head_dim,
     float rms_norm_eps,
-    float rope_theta,
     int torch_dtype,
     int chunk_length
 ) {
@@ -37,7 +36,6 @@ void init_model(
             num_key_value_heads,
             head_dim,
             rms_norm_eps,
-            rope_theta,
             chunk_length
         );
     } else if (torch_dtype == 1) {
@@ -53,14 +51,13 @@ void init_model(
             num_key_value_heads,
             head_dim,
             rms_norm_eps,
-            rope_theta,
             chunk_length
         );
     } else {
         throw std::invalid_argument("Unsupported dtype");
     }
 
-    model->init_storage();
+    return model->init_storage();
 }
 
 void load_model(std::string name, std::uintptr_t param) {

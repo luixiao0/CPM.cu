@@ -4,7 +4,7 @@
 
 namespace {
 template<typename T>
-__global__ void rotary_embedding(int num_heads, int num_heads_kv, int half_dim, float theta, const int* pos, T* q, T* k) {
+__global__ void rotary_embedding(int num_heads, int num_heads_kv, int half_dim, const float *inv_freq, const int* pos, T* q, T* k) {
     int tid = threadIdx.x;
 
     int p = pos[blockIdx.x];
@@ -13,7 +13,7 @@ __global__ void rotary_embedding(int num_heads, int num_heads_kv, int half_dim, 
         int row = i / half_dim;
         int col = i % half_dim;
         int offset = blockIdx.x * num_heads * half_dim * 2 + row * half_dim * 2;
-        float freq = p * powf(theta, -float(col) / half_dim);
+        float freq = p * inv_freq[col];
         float cos_freq = cos(freq), sin_freq = sin(freq);
         float a = float(q[offset + col]);
         float b = float(q[offset + col + half_dim]);
@@ -24,7 +24,7 @@ __global__ void rotary_embedding(int num_heads, int num_heads_kv, int half_dim, 
         int row = i / half_dim;
         int col = i % half_dim;
         int offset = blockIdx.x * num_heads_kv * half_dim * 2 + row * half_dim * 2;
-        float freq = p * powf(theta, -float(col) / half_dim);
+        float freq = p * inv_freq[col];
         float cos_freq = cos(freq), sin_freq = sin(freq);
         float a = float(k[offset + col]);
         float b = float(k[offset + col + half_dim]);
@@ -37,18 +37,27 @@ __global__ void rotary_embedding(int num_heads, int num_heads_kv, int half_dim, 
 template <typename T>
 struct RotaryEmbedding {
     int half_dim;
-    float theta;
 
-    RotaryEmbedding(int head_dim, float theta) {
+    float *inv_freq;
+    // float attention_scaling;
+
+    RotaryEmbedding(int head_dim) {
         this->half_dim = head_dim / 2;
-        this->theta = theta;
     }
 
-    void init_weight_ptr(Memory* memory) {}
-    void init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {}
-    void load_to_storage(std::string name, void* ptr) {}
+    void init_weight_ptr(Memory* memory) {
+        this->inv_freq = (float*)memory->allocate_for_model(half_dim * sizeof(float));
+    }
+
+    void load_to_storage(std::string name, void* ptr) {
+        if (name.find("inv_freq") != std::string::npos) {
+            cudaMemcpy((void*)inv_freq, ptr, half_dim * sizeof(float), cudaMemcpyHostToDevice);
+        } else {
+            throw std::runtime_error("Unsupported rotary embedding weight name: " + name);
+        }
+    }
 
     void prefill(int32_t num_tokens, int num_heads, int num_heads_kv, T* q, T* k, int32_t* position_ids) {
-        rotary_embedding<T><<<num_tokens, 256, 0, calc_stream>>>(num_heads, num_heads_kv, half_dim, theta, position_ids, q, k);
+        rotary_embedding<T><<<num_tokens, 256, 0, calc_stream>>>(num_heads, num_heads_kv, half_dim, inv_freq, position_ids, q, k);
     }
 };

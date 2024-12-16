@@ -1,10 +1,16 @@
+import os
 import torch
 from llamacu.llama import LLM
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from triton.testing import do_bench
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 # path = "../../models/MiniCPM-1B-sft-llama-format"
-path = "../../models/Llama-2-7b-hf"
+# path = "../../models/MiniCPM-1B-sft-llama-format-gptq-1016-v2dataset-wolmhead-perchannel-desc-true"
+# path = "../../models/Llama-2-7b-hf"
+# path = "../../models/TheBloke/Llama-2-7B-Chat-GPTQ"
+path = "../../models/Meta-Llama-3-8B"
 dtype = torch.float16
 Bench = True
 cuda_graph = False
@@ -18,7 +24,7 @@ torch.manual_seed(0)
 
 # prefill
 tokenizer = AutoTokenizer.from_pretrained(path)
-model = AutoModelForCausalLM.from_pretrained(path, torch_dtype=dtype).cuda()
+model = AutoModelForCausalLM.from_pretrained(path, torch_dtype=dtype, device_map="auto")
 input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()[:, :num_tokens]
 # input_ids = torch.randint(0, 32000, (1, num_tokens,), dtype=torch.int32).cuda()
 position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1, num_tokens)

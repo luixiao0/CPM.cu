@@ -33,29 +33,25 @@ struct Attention {
     int num_key_value_heads;
     int head_dim;
     float rms_norm_eps;
-    float rope_theta;
 
     RMSNorm<T> *attn_norm;
     Linear<T, true> *q_proj, *k_proj, *v_proj;
     Linear<T, true> *o_proj;
-    RotaryEmbedding<T> *rotary_emb;
 
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
 
-    Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float rope_theta) {
+    Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
         this->head_dim = head_dim;
         this->rms_norm_eps = rms_norm_eps;
-        this->rope_theta = rope_theta;
 
         this->attn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         this->q_proj = new Linear<T, true>(hidden_size, num_attention_heads * head_dim);
         this->k_proj = new Linear<T, true>(hidden_size, num_key_value_heads * head_dim);
         this->v_proj = new Linear<T, true>(hidden_size, num_key_value_heads * head_dim);
-        this->rotary_emb = new RotaryEmbedding<T>(head_dim, rope_theta);
         this->o_proj = new Linear<T, true>(hidden_size, num_attention_heads * head_dim);
     }
 
@@ -64,7 +60,6 @@ struct Attention {
         this->q_proj->init_weight_ptr(memory);
         this->k_proj->init_weight_ptr(memory);
         this->v_proj->init_weight_ptr(memory);
-        this->rotary_emb->init_weight_ptr(memory);
         this->o_proj->init_weight_ptr(memory);
     }
 
@@ -74,13 +69,10 @@ struct Attention {
         int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
         int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
         
-        this->attn_output = (T*)(memory->memory_pool + offset);
-        this->softmax_lse = (float*)(memory->memory_pool + v_proj_end);
-        int64_t softmax_lse_end = v_proj_end + num_tokens * this->num_attention_heads * sizeof(float);
-        this->softmax_lse_accum = (float*)(memory->memory_pool + softmax_lse_end);
-        int64_t softmax_lse_accum_end = softmax_lse_end + num_tokens * this->num_attention_heads * sizeof(float);
-        this->oaccum = (float*)(memory->memory_pool + softmax_lse_accum_end);
-        int64_t oaccum_end = softmax_lse_accum_end + num_tokens * this->num_attention_heads * this->head_dim * sizeof(float);
+        memory->allocate((void**)&this->attn_output, offset);
+        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
 
         return oaccum_end;
     }
@@ -96,8 +88,6 @@ struct Attention {
             this->o_proj->load_to_storage(name, ptr);
         } else if (name.find("input_layernorm") != std::string::npos) {
             this->attn_norm->load_to_storage(name, ptr);
-        } else if (name.find("rotary_emb") != std::string::npos) {
-            this->rotary_emb->load_to_storage(name, ptr);
         } else {
             throw std::invalid_argument("Unsupported name " + name);
         }
@@ -111,7 +101,7 @@ struct Attention {
         this->q_proj->prefill(num_tokens, this->attn_norm->output);
         this->k_proj->prefill(num_tokens, this->attn_norm->output, k_cache);
         this->v_proj->prefill(num_tokens, this->attn_norm->output, v_cache);
-        this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
+        kv_cache->rotary_embedding->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -158,7 +148,7 @@ struct Attention {
             k = q + this->num_attention_heads * this->head_dim;
             v = k + this->num_key_value_heads * this->head_dim;
         }
-        this->rotary_emb->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
+        kv_cache->rotary_embedding->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
         copy_to_kvcache(num_tokens, k, v, kv_cache, cache_length);
 

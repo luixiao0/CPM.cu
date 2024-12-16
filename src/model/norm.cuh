@@ -99,8 +99,7 @@ struct RMSNorm {
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        this->output = (T*)(memory->memory_pool + offset);
-        return offset + num_tokens * dim * sizeof(T);
+        return memory->allocate((void**)&this->output, offset, num_tokens * dim * sizeof(T));
     }
 
     void load_to_storage(std::string name, void* ptr) {

@@ -84,8 +84,7 @@ struct GatedFFN : FFN<T> {
         int64_t ffn_norm_end = this->ffn_norm->init_output_ptr(memory, num_tokens, offset);
         int64_t gate_proj_end = this->gate_proj->init_output_ptr(memory, num_tokens, ffn_norm_end);
         int64_t up_proj_end = this->up_proj->init_output_ptr(memory, num_tokens, gate_proj_end);
-        this->gated_up = (T*)(memory->memory_pool + up_proj_end);
-        int64_t gated_up_end = up_proj_end + num_tokens * intermediate_size * sizeof(T);
+        int64_t gated_up_end = memory->allocate((void**)&this->gated_up, up_proj_end, num_tokens * intermediate_size * sizeof(T));
         return gated_up_end;
     }
 

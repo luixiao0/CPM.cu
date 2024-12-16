@@ -3,7 +3,8 @@ from . import C
 import os, json
 import torch
 from transformers import AutoTokenizer, AutoConfig
-from triton.testing import do_bench
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from safetensors.torch import load_file
 
 dtype_map = {
     torch.float16: 0,
@@ -21,7 +22,6 @@ class LLM(torch.nn.Module):
                  path: str, # hf model path
                  memory_limit: float = 0.8,
                  chunk_length: int = 1024,
-                 output_length: int = 32,
                  dtype: torch.dtype = None,
                  cuda_graph: bool = False,
     ):
@@ -37,9 +37,9 @@ class LLM(torch.nn.Module):
         self.memory_pool = torch.nn.Parameter(torch.empty(self.memory_limit, dtype=torch.uint8, device="cuda"), requires_grad=False)
 
         self.chunk_length = chunk_length
-        self.output_length = output_length
-
-        C.init_model(
+        if not hasattr(self.config, "head_dim"):
+            self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
+        self.max_total_length = C.init_model(
             self.memory_limit,
             self.memory_pool.data.data_ptr(),
             self.config.vocab_size,
@@ -50,18 +50,29 @@ class LLM(torch.nn.Module):
             self.config.num_key_value_heads,
             self.config.head_dim,
             self.config.rms_norm_eps,
-            self.config.rope_theta,
             dtype_to_int(self.dtype),
             self.chunk_length,
         )
 
         self.logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
 
-    def _load(self, name, param):
-        # if 'o_proj' in name or 'down_proj' in name:
-        #     param = param.transpose(0, 1)
-        param = param.contiguous().to(self.dtype)
-        C.load_model(name, param.data_ptr())
+    def _load(self, name, param, dtype=None):
+        if dtype is None:
+            if 'rotary_emb' in name:
+                dtype = torch.float32
+            else:
+                dtype = self.dtype
+
+        if 'gate_up_proj' in name:
+            self._load(name.replace("gate_up_proj", "gate_proj"), param[:param.shape[0]//2], dtype)
+            self._load(name.replace("gate_up_proj", "up_proj"), param[param.shape[0]//2:])
+        elif 'qkv_proj' in name:
+            self._load(name.replace("qkv_proj", "q_proj"), param[:self.config.num_attention_heads * self.config.head_dim])
+            self._load(name.replace("qkv_proj", "k_proj"), param[self.config.num_attention_heads * self.config.head_dim:(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim])
+            self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:])
+        else:
+            param = param.contiguous().to(dtype)
+            C.load_model(name, param.data_ptr())
 
     def load_from_hf(self):
         with torch.no_grad():
@@ -76,8 +87,30 @@ class LLM(torch.nn.Module):
                     ckpt = torch.load(os.path.join(self.path, file), map_location="cpu")
                     for name, param in ckpt.items():
                         self._load(name, param)
+            elif os.path.exists(os.path.join(self.path, "model.safetensors")):
+                ckpt = load_file(os.path.join(self.path, "model.safetensors"))
+                for name, param in ckpt.items():
+                    self._load(name, param)
+            elif os.path.exists(os.path.join(self.path, "model.safetensors.index.json")):
+                with open(os.path.join(self.path, "model.safetensors.index.json"), "r") as f:
+                    file_list = set(json.load(f)["weight_map"].values())
+                for file in file_list:
+                    ckpt = load_file(os.path.join(self.path, file))
+                    for name, param in ckpt.items():
+                        self._load(name, param)
             else:
                 raise NotImplementedError(f"Unsupported checkpoint format for {self.path}")
+
+            # rope
+            if self.config.rope_scaling is not None:
+                rope_type = self.config.rope_scaling.get("rope_type", self.config.rope_scaling.get("type"))
+            else:
+                rope_type = "default"
+            # TODO only support "default", "llama3" or "longrope" with long_factor=short_factor
+            inv_freq, attention_scaling = ROPE_INIT_FUNCTIONS[rope_type](self.config, "cpu", seq_len=self.max_total_length)
+            # attention_scaling = torch.tensor([attention_scaling], dtype=torch.float32, device="cpu")
+            self._load("model.rotary_emb.inv_freq", inv_freq, dtype=torch.float32)
+            # self._load("model.rotary_emb.attention_scaling", attention_scaling, dtype=torch.float32)
 
     def prefill(self, input_ids, position_ids):
         assert input_ids.dtype == torch.int32

@@ -1,24 +1,23 @@
 #pragma once
 #include "../trait.cuh"
+#include "rotary.cuh"
 #include <vector>
 #include <cuda_runtime.h>
 
 template <typename T>
 struct KVCache {
     int dim;
-    int budget;
     T *k_cache, *v_cache;
+    RotaryEmbedding<T> *rotary_embedding;
     
-    KVCache(int dim, int budget) {
+    KVCache(int dim, RotaryEmbedding<T> *rotary_embedding) {
         this->dim = dim;
-        this->budget = budget;
+        this->rotary_embedding = rotary_embedding;
     }
 
-    int64_t init_output_ptr(Memory* memory, int64_t offset) {
-        k_cache = (T*)(memory->memory_pool + offset);
-        offset += budget * dim * sizeof(T);
-        v_cache = (T*)(memory->memory_pool + offset);
-        offset += budget * dim * sizeof(T);
+    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        offset = memory->allocate((void**)&this->k_cache, offset, num_tokens * dim * sizeof(T));
+        offset = memory->allocate((void**)&this->v_cache, offset, num_tokens * dim * sizeof(T));
         return offset;
     }
 
@@ -30,21 +29,27 @@ template <typename T>
 struct KVCacheManager {
     int num_hidden_layers;
     int dim;
+    int budget;
     std::vector<KVCache<T>*> caches;
+    RotaryEmbedding<T> *rotary_embedding;
 
-    KVCacheManager(int num_hidden_layers, int dim) {
+    KVCacheManager(int num_hidden_layers, int num_key_value_heads, int head_dim) {
         this->num_hidden_layers = num_hidden_layers;
-        this->dim = dim;
+        this->dim = num_key_value_heads * head_dim;
+        this->rotary_embedding = new RotaryEmbedding<T>(head_dim);
+    }
+
+    void init_weight_ptr(Memory* memory) {
+        this->rotary_embedding->init_weight_ptr(memory);
     }
 
     int64_t init_output_ptr(Memory* memory, int64_t offset) {
-        int64_t budget = memory->memory_limit - offset;
-        budget /= this->num_hidden_layers * 2 * this->dim * sizeof(T);
+        budget = (memory->memory_limit - offset) / (this->num_hidden_layers * 2 * this->dim * sizeof(T));
         for (int i = 0; i < this->num_hidden_layers; i++) {
-            caches.push_back(new KVCache<T>(this->dim, budget));
+            caches.push_back(new KVCache<T>(this->dim, this->rotary_embedding));
         }
         for (int i = 0; i < this->num_hidden_layers; i++) {
-            offset = caches[i]->init_output_ptr(memory, offset);
+            offset = caches[i]->init_output_ptr(memory, budget, offset);
         }
         return budget;
     }

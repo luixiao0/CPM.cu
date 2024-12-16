@@ -11,7 +11,7 @@ cudaGraphExec_t graphExec;
 
 void init_resources() {
   if (initialized) return;
-  cudaCheck(cudaStreamCreateWithFlags(&calc_stream, cudaStreamNonBlocking));
+  cudaCheck(cudaStreamCreate(&calc_stream));
   cublasCheck(cublasCreate(&cublas_handle));
   cublasCheck(cublasSetStream(cublas_handle, calc_stream));
   initialized = true;
