@@ -105,7 +105,7 @@ class LLM(torch.nn.Module):
                 raise NotImplementedError(f"Unsupported checkpoint format for {self.path}")
 
             # rope
-            if self.config.rope_scaling is not None:
+            if hasattr(self.config, "rope_scaling") and self.config.rope_scaling is not None:
                 rope_type = self.config.rope_scaling.get("rope_type", self.config.rope_scaling.get("type"))
             else:
                 rope_type = "default"
