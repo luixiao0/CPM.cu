@@ -74,6 +74,9 @@ class LLM(torch.nn.Module):
             param = param.contiguous().to(dtype)
             C.load_model(name, param.data_ptr())
 
+        if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
+            self._load("lm_head", param)
+
     def load_from_hf(self):
         with torch.no_grad():
             if os.path.exists(os.path.join(self.path, "pytorch_model.bin")):
