@@ -5,7 +5,8 @@ bool initialized = false;
 cudaStream_t calc_stream;
 cublasHandle_t cublas_handle;
 
-int graphCreated = -1;
+int graphCreated_padding_length = -1;
+int graphCreated_input_length = -1;
 cudaGraph_t graph;
 cudaGraphExec_t graphExec;
 

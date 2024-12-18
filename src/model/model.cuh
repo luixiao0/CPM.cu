@@ -15,7 +15,7 @@ struct Model {
     virtual int init_storage() = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
     virtual void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) = 0;
-    virtual void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, void* output) = 0;
+    virtual void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, int32_t* mask_2d, void* output) = 0;
 };
 
 template <typename T>
@@ -128,10 +128,10 @@ struct ModelImpl : Model {
         this->lm_head->prefill(1, this->norm->output + (num_tokens - 1) * this->hidden_size, (T*)output);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, void* output) {
+    void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, int32_t* mask_2d, void* output) {
         this->embedding->prefill(num_tokens, input);
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, this->kv_caches->caches[i]);
+            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, this->kv_caches->caches[i]);
         }
         this->norm->prefill(num_tokens, this->embedding->output);
         this->lm_head->prefill(num_tokens, this->norm->output, (T*)output);

@@ -12,7 +12,8 @@ extern bool initialized;
 extern cudaStream_t calc_stream;
 extern cublasHandle_t cublas_handle;
 
-extern int graphCreated;
+extern int graphCreated_padding_length;
+extern int graphCreated_input_length;
 extern cudaGraph_t graph;
 extern cudaGraphExec_t graphExec;
 

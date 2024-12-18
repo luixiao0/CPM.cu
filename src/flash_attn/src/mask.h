@@ -107,20 +107,25 @@ __forceinline__ __device__ void apply_mask_causal_w_idx(
     }
 }
 
-template <bool Is_causal, bool Is_local, bool Has_alibi>
+template <bool Is_causal, bool Is_local, bool Has_alibi, bool Mask_2d=false>
 struct Mask {
 
     const int max_seqlen_k, max_seqlen_q;
     const int window_size_left, window_size_right;
+    const int *mask_2d, mask_len, mask_begin;
     const float alibi_slope;
 
     __forceinline__ __device__ Mask(const int max_seqlen_k, const int max_seqlen_q,
                                     const int window_size_left, const int window_size_right,
+                                    const int *mask_2d, const int mask_len,
                                     const float alibi_slope=0.f)
         : max_seqlen_k(max_seqlen_k)
         , max_seqlen_q(max_seqlen_q)
         , window_size_left(window_size_left)
         , window_size_right(window_size_right)
+        , mask_2d(mask_2d)
+        , mask_len(mask_len)
+        , mask_begin(max_seqlen_k - mask_len)
         , alibi_slope(!Has_alibi ? 0.0 : alibi_slope) {
     };
 
@@ -176,6 +181,13 @@ struct Mask {
                             #pragma unroll
                             for (int j = 0; j < size<1, 0>(tensor); ++j) {
                                 const int col_idx = col_idx_base + j;
+                                if constexpr (Mask_2d) {
+                                    if (col_idx >= mask_begin && col_idx < max_seqlen_k && row_idx < mask_len &&
+                                        mask_2d[row_idx * mask_len + col_idx - mask_begin] == 0
+                                    ) {
+                                        tensor(make_coord(i, mi), make_coord(j, nj)) = -INFINITY;
+                                    }
+                                }
                                 if constexpr (Has_alibi) {
                                     if constexpr (Is_causal) {
                                         tensor(make_coord(i, mi), make_coord(j, nj)) += alibi_slope * col_idx;

@@ -41,8 +41,8 @@ struct Layer {
         this->ffn->prefill(num_tokens, input);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, KVCache<T>* kv_cache) {
-        this->attn->decode(num_tokens, padded_length, input, position_ids, cache_length, kv_cache);
+    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, int32_t* mask_2d, KVCache<T>* kv_cache) {
+        this->attn->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, kv_cache);
         this->ffn->prefill(num_tokens, input);
     }
 };

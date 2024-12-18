@@ -68,18 +68,19 @@ void prefill(int input_length, int history_length, std::uintptr_t input, std::ui
     model->prefill(input_length, history_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), (void*)(output));
 }
 
-void decode(int input_length, int padded_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t output, bool cuda_graph) {
+void decode(int input_length, int padded_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t mask_2d, std::uintptr_t output, bool cuda_graph) {
     if (cuda_graph) {
-        if (graphCreated != padded_length) {
+        if (graphCreated_padding_length != padded_length || graphCreated_input_length != input_length) {
             cudaStreamBeginCapture(calc_stream, cudaStreamCaptureModeGlobal);
-            model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), (void*)(output));
+            model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<int32_t*>(mask_2d), reinterpret_cast<void*>(output));
             cudaStreamEndCapture(calc_stream, &graph);
             cudaGraphInstantiate(&graphExec, graph, nullptr, nullptr, 0);
-            graphCreated = padded_length;
+            graphCreated_padding_length = padded_length;
+            graphCreated_input_length = input_length;
         }
         cudaGraphLaunch(graphExec, calc_stream);
     } else {
-        model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), (void*)(output));
+        model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<int32_t*>(mask_2d), reinterpret_cast<void*>(output));
     }
 }
 

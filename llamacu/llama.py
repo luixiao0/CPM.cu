@@ -127,10 +127,13 @@ class LLM(torch.nn.Module):
             torch.cuda.nvtx.range_pop()
         return self.logits[:1].clone()
 
-    def decode(self, input_ids, position_ids, cache_length):
+    def decode(self, input_ids, position_ids, cache_length, mask_2d = None):
         assert input_ids.dtype == torch.int32
         assert position_ids.dtype == torch.int32
         assert cache_length.dtype == torch.int32
+        if mask_2d is not None:
+            assert mask_2d.dtype == torch.int32
+            assert input_ids.numel() == mask_2d.shape[0]
 
         torch.cuda.nvtx.range_push(f"decode")
         cache_length += input_ids.numel() # temparary add for convinience in flash_attn
@@ -138,6 +141,7 @@ class LLM(torch.nn.Module):
         C.decode(
             input_ids.numel(), padded_length,
             input_ids.data_ptr(), position_ids.data_ptr(), cache_length.data_ptr(),
+            mask_2d.data_ptr() if mask_2d is not None else 0,
             self.logits.data_ptr(),
             self.cuda_graph
         )
