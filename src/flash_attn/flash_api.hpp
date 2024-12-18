@@ -214,7 +214,7 @@ void mha_fwd_kvcache(
     void* kcache,               // batch_size x seqlen_k x num_heads_k x head_size
     void* vcache,               // batch_size x seqlen_k x num_heads_k x head_size
     int* seqlens_k,             // batch_size
-    int* mask_2d,               // batch_size x seqlen_q x seqlen_knew
+    uint64_t* mask_2d,               // batch_size x seqlen_q x seqlen_knew
     void* out,                  // batch_size x seqlen_q x num_heads x head_size
     float* softmax_lse,         // batch_size x num_heads x seqlen_q
     float* softmax_lse_accum,   // num_splits x batch_size x num_heads x seqlen_q
@@ -271,8 +271,11 @@ void mha_fwd_kvcache(
                      );
 
     if (mask_2d != nullptr) {
-        params.mask_2d = (int*)mask_2d;
+        params.mask_2d = (uint64_t*)mask_2d;
         params.mask_len = seqlen_knew;
+    } else {
+        params.mask_2d = nullptr;
+        params.mask_len = 0;
     }
 
     params.rotary_dim = 0;

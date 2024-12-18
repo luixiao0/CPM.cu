@@ -133,7 +133,7 @@ struct Attention {
         linear<T, true, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, int32_t* mask_2d, KVCache<T>* kv_cache) {
+    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(num_tokens, input);
         T *q, *k, *v;
         if (num_tokens > 1) {
