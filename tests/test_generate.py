@@ -12,6 +12,7 @@ dtype = torch.float16
 cuda_graph = True
 num_generate = 100
 use_medusa = True
+Bench = True
 
 prompt = "Beijing is the"
 tokenizer = AutoTokenizer.from_pretrained(path)
@@ -32,4 +33,5 @@ llm.init_storage()
 llm.load_from_hf()
 
 print(our_generate())
-print("our generate:", f"{num_generate / do_bench(our_generate, warmup=10, rep=1000) * 1000} tok/s")
+if Bench:
+    print("decode speed:", f"{num_generate / do_bench(our_generate, warmup=10, rep=1000) * 1000} tok/s")

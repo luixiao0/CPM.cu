@@ -45,32 +45,32 @@ __global__ void verify_kernel(int num_tokens, int32_t* pred, const int32_t* gt, 
 }
 
 template<typename T>
-__global__ void fix_kvcache_kernel_1(int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, T** flat_caches, T* tmp_kvcache) {
+__global__ void fix_kvcache_kernel_1(int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, const T* const* flat_caches, float4* tmp_kvcache) {
     int i = blockIdx.x;
     int j = threadIdx.x;
+    int k = blockIdx.y;
     int prefix_length = cache_length[0];
     int real_i = pred[i] + prefix_length;
-    T* tmp = tmp_kvcache + i * num_caches * dim;
-    for (int k = 0; k < num_caches; k++) {
-        for (int d = j; d < dim; d += blockDim.x) {
-            tmp[k * dim + d] = flat_caches[k][real_i * dim + d];
-        }
+    float4* tmp = tmp_kvcache + i * num_caches * dim;
+    const float4* flat = (const float4*)flat_caches[k];
+    for (int d = j; d < dim; d += blockDim.x) {
+        tmp[k * dim + d] = flat[real_i * dim + d];
     }
 }
 
 template<typename T>
-__global__ void fix_kvcache_kernel_2(int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, T** flat_caches, T* tmp_kvcache) {
+__global__ void fix_kvcache_kernel_2(int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, T** flat_caches, const float4* tmp_kvcache) {
     int i = blockIdx.x;
     int j = threadIdx.x;
+    int k = blockIdx.y;
     int prefix_length = cache_length[0];
     int real_i = i + prefix_length;
-    T* tmp = tmp_kvcache + i * num_caches * dim;
-    for (int k = 0; k < num_caches; k++) {
-        for (int d = j; d < dim; d += blockDim.x) {
-            flat_caches[k][real_i * dim + d] = tmp[k * dim + d];
-        }
+    const float4* tmp = tmp_kvcache + i * num_caches * dim;
+    float4* flat = (float4*)flat_caches[k];
+    for (int d = j; d < dim; d += blockDim.x) {
+        flat[real_i * dim + d] = tmp[k * dim + d];
     }
-    if (j == 0) {
+    if (j == 0 && k == 0) {
         pred[i] = gt[pred[i]];
     }
 }
@@ -78,9 +78,8 @@ __global__ void fix_kvcache_kernel_2(int num_caches, int dim, int32_t* pred, con
 
 template<typename T>
 void fix_kv_cache(int accept_length, int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, T** flat_caches, T* tmp_kvcache) {
-    // TODO float4
-    fix_kvcache_kernel_1<<<accept_length, 256, 0, calc_stream>>>(num_caches, dim, pred, gt, cache_length, flat_caches, tmp_kvcache);
-    fix_kvcache_kernel_2<<<accept_length, 256, 0, calc_stream>>>(num_caches, dim, pred, gt, cache_length, flat_caches, tmp_kvcache);
+    fix_kvcache_kernel_1<T><<<dim3(accept_length, num_caches, 1), 256, 0, calc_stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
+    fix_kvcache_kernel_2<T><<<dim3(accept_length, num_caches, 1), 256, 0, calc_stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
     cudaDeviceSynchronize();
 }
 
