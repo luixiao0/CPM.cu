@@ -16,6 +16,10 @@ struct Model {
     virtual void load_to_storage(std::string name, void* ptr) = 0;
     virtual void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) = 0;
     virtual void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) = 0;
+
+    virtual void draft(void* output) = 0;
+    virtual int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) = 0;
+    /* verify should find max accept length (based on tree_parent and position_ids) and return, fix kvcache (based on position_ids), and make pred[:accept_length] the accept path (based on attn_mask and position_ids) */
 };
 
 template <typename T>
@@ -24,6 +28,8 @@ struct ModelImpl : Model {
 
     int num_hidden_layers;
     int hidden_size;
+    int vocab_size;
+
     int chunk_length;
     int max_output_length;
 
@@ -32,7 +38,7 @@ struct ModelImpl : Model {
     Embedding<T>* embedding;
     std::vector<Layer<T>*> layers;
     RMSNorm<T>* norm;
-    Linear<T, true>* lm_head;
+    Linear<T>* lm_head;
 
     ModelImpl(
         int64_t memory_limit,
@@ -49,6 +55,8 @@ struct ModelImpl : Model {
     ) {
         this->num_hidden_layers = num_hidden_layers;
         this->hidden_size = hidden_size;
+        this->vocab_size = vocab_size;
+
         this->chunk_length = chunk_length;
         
         memory = new Memory(memory_limit, memory_pool);
@@ -60,10 +68,10 @@ struct ModelImpl : Model {
             layers.push_back(new Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        lm_head = new Linear<T, true>(hidden_size, vocab_size);
+        lm_head = new Linear<T>(hidden_size, vocab_size);
     }
 
-    void init_weight_ptr() {
+    void init_weight_ptr(Memory* memory) {
         embedding->init_weight_ptr(memory);
         for (int i = 0; i < num_hidden_layers; i++) {
             layers[i]->init_weight_ptr(memory);
@@ -73,26 +81,27 @@ struct ModelImpl : Model {
         kv_caches->init_weight_ptr(memory);
     }
 
-    void init_output_ptr() {
-        int64_t embedding_end = embedding->init_output_ptr(memory, chunk_length, memory->model_offset);
+    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        int64_t embedding_end = embedding->init_output_ptr(memory, num_tokens, offset);
         int64_t layer_end = 0;
         for (int i = 0; i < num_hidden_layers; i++) {
-            layer_end = layers[i]->init_output_ptr(memory, chunk_length, embedding_end);
+            layer_end = layers[i]->init_output_ptr(memory, num_tokens, embedding_end);
         }
         // norm and lm_head are not used in prefill
-        int64_t norm_end = norm->init_output_ptr(memory, chunk_length, memory->model_offset);
+        int64_t norm_end = norm->init_output_ptr(memory, num_tokens, offset);
         int64_t lm_head_end = lm_head->init_output_ptr(memory, 64, norm_end);
+        return std::max(layer_end, lm_head_end);
+    }
 
-        memory->kv_cache_offset = std::max(layer_end, lm_head_end);
+    void init_kv_cache(int64_t kv_cache_offset) {
+        memory->kv_cache_offset = kv_cache_offset;
         this->max_output_length = kv_caches->init_output_ptr(memory, memory->kv_cache_offset);
-
-        // printf("model offset: %lld, kv_cache offset: %lld\n", memory->model_offset, memory->kv_cache_offset);
-        // printf("maximum possible output length: %d\n", max_output_length);
     }
 
     int init_storage() {
-        init_weight_ptr();
-        init_output_ptr();
+        init_weight_ptr(memory);
+        int64_t kv_cache_offset = init_output_ptr(memory, chunk_length, memory->model_offset);
+        init_kv_cache(kv_cache_offset);
         return this->kv_caches->budget;
     }
 
@@ -125,7 +134,7 @@ struct ModelImpl : Model {
             this->layers[i]->prefill(num_tokens, num_history_tokens, this->embedding->output, position_ids, this->kv_caches->caches[i]);
         }
         this->norm->prefill(num_tokens, this->embedding->output);
-        this->lm_head->prefill(1, this->norm->output + (num_tokens - 1) * this->hidden_size, (T*)output);
+        this->lm_head->prefill(1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
@@ -136,5 +145,7 @@ struct ModelImpl : Model {
         this->norm->prefill(num_tokens, this->embedding->output);
         this->lm_head->prefill(num_tokens, this->norm->output, (T*)output);
     }
-};
 
+    void draft(void* output) { throw std::runtime_error("Draft is not supported"); }
+    int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Verify is not supported"); }
+};

@@ -31,6 +31,7 @@ struct KVCacheManager {
     int dim;
     int budget;
     std::vector<KVCache<T>*> caches;
+    T **h_flat_caches, **d_flat_caches;
     RotaryEmbedding<T> *rotary_embedding;
 
     KVCacheManager(int num_hidden_layers, int num_key_value_heads, int head_dim) {
@@ -51,6 +52,13 @@ struct KVCacheManager {
         for (int i = 0; i < this->num_hidden_layers; i++) {
             offset = caches[i]->init_output_ptr(memory, budget, offset);
         }
+        this->h_flat_caches = new T*[num_hidden_layers * 2];
+        for (int i = 0; i < num_hidden_layers; i++) {
+            this->h_flat_caches[i * 2] = caches[i]->k_cache;
+            this->h_flat_caches[i * 2 + 1] = caches[i]->v_cache;
+        }
+        memory->allocate((void**)&this->d_flat_caches, offset, num_hidden_layers * 2 * sizeof(T*));
+        cudaMemcpy(this->d_flat_caches, this->h_flat_caches, num_hidden_layers * 2 * sizeof(T*), cudaMemcpyHostToDevice);
         return budget;
     }
 };

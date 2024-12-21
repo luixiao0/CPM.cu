@@ -1,6 +1,6 @@
 from . import C
 
-import os, json
+import os, json, glob
 import torch
 from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -31,6 +31,7 @@ class LLM(torch.nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(path)
         self.config = AutoConfig.from_pretrained(path)
         self.dtype = dtype if dtype is not None else self.config.torch_dtype
+        self.dtype_int = dtype_to_int(self.dtype)
         self.cuda_graph = cuda_graph
 
         self.memory_limit = int(torch.cuda.get_device_properties(0).total_memory * memory_limit)
@@ -39,7 +40,7 @@ class LLM(torch.nn.Module):
         self.chunk_length = chunk_length
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
-        self.max_total_length = C.init_model(
+        C.init_base_model(
             self.memory_limit,
             self.memory_pool.data.data_ptr(),
             self.config.vocab_size,
@@ -50,13 +51,16 @@ class LLM(torch.nn.Module):
             self.config.num_key_value_heads,
             self.config.head_dim,
             self.config.rms_norm_eps,
-            dtype_to_int(self.dtype),
+            self.dtype_int,
             self.chunk_length,
         )
 
         self.logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
 
-    def _load(self, name, param, dtype=None):
+    def init_storage(self):
+        self.max_total_length = C.init_storage()
+
+    def _load(self, name, param, dtype=None, cls=None):
         if dtype is None:
             if 'rotary_emb' in name:
                 dtype = torch.float32
@@ -77,32 +81,47 @@ class LLM(torch.nn.Module):
         if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
             self._load("lm_head", param)
 
+    def _load_from_ckpt(self, path, cls=None):
+        supported_suffix_1 = ["bin.index.json", "safetensors.index.json"]
+        supported_suffix_2 = ["bin", "safetensors", "pt"]
+        file = None
+        for suffix in supported_suffix_1:
+            files = glob.glob(os.path.join(path, f"*.{suffix}"))
+            if len(files) > 1:
+                raise ValueError(f"Multiple files with suffix {suffix} found in {path}")
+            elif len(files) == 1:
+                file = files[0]
+                break
+        else:
+            for suffix in supported_suffix_2:
+                files = glob.glob(os.path.join(path, f"*.{suffix}"))
+                if len(files) > 1:
+                    raise ValueError(f"Multiple files with suffix {suffix} found in {path}")
+                elif len(files) == 1:
+                    file = files[0]
+                    break
+            else:
+                raise ValueError(f"No supported checkpoint file found in {path}, supported suffixes: {supported_suffix_1 + supported_suffix_2}")
+
+        if file.endswith(".index.json"):
+            with open(file, "r") as f:
+                file_list = set(json.load(f)["weight_map"].values())
+            file_list = [os.path.join(path, file) for file in file_list]
+        else:
+            file_list = [file]
+
+        for file in file_list:
+            print(f"load from {file}")
+            if file.endswith(".bin") or file.endswith(".pt"):
+                ckpt = torch.load(file, map_location="cpu")
+            elif file.endswith(".safetensors"):
+                ckpt = load_file(file)
+            for name, param in ckpt.items():
+                self._load(name, param, cls=cls)
+
     def load_from_hf(self):
         with torch.no_grad():
-            if os.path.exists(os.path.join(self.path, "pytorch_model.bin")):
-                ckpt = torch.load(os.path.join(self.path, "pytorch_model.bin"), map_location="cpu")
-                for name, param in ckpt.items():
-                    self._load(name, param)
-            elif os.path.exists(os.path.join(self.path, "pytorch_model.bin.index.json")):
-                with open(os.path.join(self.path, "pytorch_model.bin.index.json"), "r") as f:
-                    file_list = set(json.load(f)["weight_map"].values())
-                for file in file_list:
-                    ckpt = torch.load(os.path.join(self.path, file), map_location="cpu")
-                    for name, param in ckpt.items():
-                        self._load(name, param)
-            elif os.path.exists(os.path.join(self.path, "model.safetensors")):
-                ckpt = load_file(os.path.join(self.path, "model.safetensors"))
-                for name, param in ckpt.items():
-                    self._load(name, param)
-            elif os.path.exists(os.path.join(self.path, "model.safetensors.index.json")):
-                with open(os.path.join(self.path, "model.safetensors.index.json"), "r") as f:
-                    file_list = set(json.load(f)["weight_map"].values())
-                for file in file_list:
-                    ckpt = load_file(os.path.join(self.path, file))
-                    for name, param in ckpt.items():
-                        self._load(name, param)
-            else:
-                raise NotImplementedError(f"Unsupported checkpoint format for {self.path}")
+            self._load_from_ckpt(self.path)
 
             # rope
             if hasattr(self.config, "rope_scaling") and self.config.rope_scaling is not None:
@@ -152,23 +171,22 @@ class LLM(torch.nn.Module):
     def generate(self, input_ids, generation_length=100):
         assert input_ids.dtype == torch.int32
 
-        tokens = []
-
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         token = logits[0].argmax(dim=-1).item()
-        tokens.append(token)
 
-        input_ids = torch.tensor([[0]], dtype=torch.int32, device="cuda") # TODO move these to c and capture in graph
-        position_ids = torch.tensor([[0]], dtype=torch.int32, device="cuda") # TODO move these to c and capture in graph
-        cache_length = torch.tensor([0], dtype=torch.int32, device="cuda") # TODO move these to c and capture in graph
+        tokens = [token]
+        if not hasattr(self, "input_ids"):
+            self.input_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
+            self.position_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
+            self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
         for i in range(generation_length):
-            input_ids[0][0] = token # TODO move these to c and capture in graph
-            position_ids[0][0] = prefix_length + i # TODO move these to c and capture in graph
-            cache_length[0] = prefix_length + i # TODO move these to c and capture in graph
+            self.input_ids[0] = token
+            self.position_ids[0] = prefix_length + i
+            self.cache_length[0] = prefix_length + i
 
-            logits = self.decode(input_ids, position_ids, cache_length)
-            token = logits[0].argmax(dim=-1).item() # TODO move these to c and capture in graph
+            logits = self.decode(self.input_ids, self.position_ids, self.cache_length)
+            token = logits[0].argmax(dim=-1).item()
             tokens.append(token)
         return self.tokenizer.decode(tokens)

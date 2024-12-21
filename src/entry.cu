@@ -4,10 +4,22 @@
 #include "utils.cuh"
 #include "trait.cuh"
 #include "model/model.cuh"
+#include "model/medusa.cuh"
+
+#define DTYPE_SWITCH(COND, ...)               \
+  [&] {                                      \
+    if (COND == 0) {                              \
+      using elem_type = __half;     \
+      return __VA_ARGS__();                  \
+    } else {                                 \
+      using elem_type = __nv_bfloat16; \
+      return __VA_ARGS__();                  \
+    }                                        \
+  }()
 
 Model* model;
 
-int init_model(
+void init_base_model(
     int64_t memory_limit,
     std::uintptr_t memory_pool,
     int vocab_size,
@@ -23,9 +35,8 @@ int init_model(
 ) {
     init_resources();
 
-    if (torch_dtype == 0) {
-        std::cout << "Using float16 precision" << std::endl;
-        model = new ModelImpl<__half>(
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new ModelImpl<elem_type>(
             memory_limit,
             reinterpret_cast<void*>(memory_pool),
             vocab_size,
@@ -38,25 +49,25 @@ int init_model(
             rms_norm_eps,
             chunk_length
         );
-    } else if (torch_dtype == 1) {
-        std::cout << "Using bfloat16 precision" << std::endl;
-        model = new ModelImpl<__nv_bfloat16>(
-            memory_limit,
-            reinterpret_cast<void*>(memory_pool),
-            vocab_size,
-            num_hidden_layers,
-            hidden_size,
-            intermediate_size,
-            num_attention_heads,
-            num_key_value_heads,
-            head_dim,
-            rms_norm_eps,
-            chunk_length
-        );
-    } else {
-        throw std::invalid_argument("Unsupported dtype");
-    }
+    });
 
+}
+
+void init_medusa_model(
+    int num_heads,
+    int num_layers,
+    int torch_dtype
+) {
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new MedusaImpl<elem_type>(
+            (ModelImpl<elem_type>*)model,
+            num_heads,
+            num_layers
+        );
+    });
+}
+
+int init_storage() {
     return model->init_storage();
 }
 
@@ -84,9 +95,21 @@ void decode(int input_length, int padded_length, std::uintptr_t input, std::uint
     }
 }
 
+void draft(std::uintptr_t output) {
+    model->draft(reinterpret_cast<void*>(output));
+}
+
+int verify(int num_tokens, std::uintptr_t pred, std::uintptr_t gt, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t attn_mask, std::uintptr_t tree_parent) {
+    return model->verify(num_tokens, reinterpret_cast<int32_t*>(pred), reinterpret_cast<int32_t*>(gt), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(attn_mask), reinterpret_cast<int32_t*>(tree_parent));
+}
+
 PYBIND11_MODULE(C, m) {
-    m.def("init_model", &init_model, "Init model");
+    m.def("init_base_model", &init_base_model, "Init base model");
+    m.def("init_medusa_model", &init_medusa_model, "Init medusa model");
+    m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");
     m.def("decode", &decode, "Decode");
+    m.def("draft", &draft, "Draft");
+    m.def("verify", &verify, "Verify");
 } 

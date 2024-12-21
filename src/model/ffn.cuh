@@ -2,45 +2,8 @@
 #include "../trait.cuh"
 #include "norm.cuh"
 #include "linear.cuh"
+#include "activation.cuh"
 #include <cuda_runtime.h>
-
-namespace {
-template <typename T>
-__global__ void gated_silu_interleaved_kernel(int intermediate_size, const T* src, T* tgt) {
-    int row_offset = blockIdx.x * intermediate_size;
-    int row_offset_2 = row_offset * 2;
-    int col = blockIdx.y * 256 + threadIdx.x;
-    int col2 = col + intermediate_size;
-    if (col < intermediate_size) {
-        float g = float(src[row_offset_2 + col]);
-        float u = float(src[row_offset_2 + col2]);
-        float s = 1.0f / (1.0f + expf(-g));
-        tgt[row_offset + col] = T(g * s * u);
-    }
-}
-
-template<typename T>
-__global__ void gated_silu_kernel(int intermediate_size, const T* src, T* tgt) {
-    int row_offset = blockIdx.x * intermediate_size;
-    int col = blockIdx.y * 256 + threadIdx.x;
-    if (col < intermediate_size) {
-        float g = float(src[row_offset + col]);
-        float u = float(tgt[row_offset + col]);
-        float s = 1.0f / (1.0f + expf(-g));
-        tgt[row_offset + col] = T(g * s * u);
-    }
-}
-
-template <typename T>
-void gated_silu_interleaved(int num_tokens, int intermediate_size, const T* src, T* tgt) {
-    gated_silu_interleaved_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt);
-}
-
-template <typename T>
-void gated_silu(int num_tokens, int intermediate_size, const T* src, T* tgt) {
-    gated_silu_kernel<T><<<dim3(num_tokens, (intermediate_size+255)/256), 256, 0, calc_stream>>>(intermediate_size, src, tgt);
-}
-}
 
 template <typename T>
 struct FFN {
@@ -57,8 +20,8 @@ struct GatedFFN : FFN<T> {
     float rms_norm_eps;
 
     RMSNorm<T> *ffn_norm;
-    Linear<T, true> *gate_proj, *up_proj;
-    Linear<T, true> *down_proj;
+    Linear<T> *gate_proj, *up_proj;
+    Linear<T> *down_proj;
 
     T* gated_up;
 
@@ -68,9 +31,9 @@ struct GatedFFN : FFN<T> {
         this->rms_norm_eps = rms_norm_eps;
 
         this->ffn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        this->gate_proj = new Linear<T, true>(hidden_size, intermediate_size);
-        this->up_proj = new Linear<T, true>(hidden_size, intermediate_size);
-        this->down_proj = new Linear<T, true>(intermediate_size, hidden_size);
+        this->gate_proj = new Linear<T>(hidden_size, intermediate_size);
+        this->up_proj = new Linear<T>(hidden_size, intermediate_size);
+        this->down_proj = new Linear<T>(intermediate_size, hidden_size);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -107,8 +70,8 @@ struct GatedFFN : FFN<T> {
         // this->gate_proj->prefill(num_tokens, this->ffn_norm->output);
         // this->up_proj->prefill(num_tokens, this->ffn_norm->output);
         // gated_silu<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
-        linear<T, true>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
+        linear<T>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
         gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
-        linear<T, true, /*inplace=*/true>(num_tokens, this->intermediate_size, this->hidden_size, this->gated_up, this->down_proj->weight, input);
+        this->down_proj->prefill(num_tokens, this->gated_up, input, true);
     }
 };

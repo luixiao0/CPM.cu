@@ -76,7 +76,6 @@
   #define LOCAL_SWITCH BOOL_SWITCH
 #endif
 
-// TODO only compile bf16 for debug
 #define FP16_SWITCH(COND, ...)               \
   [&] {                                      \
     if (COND) {                              \

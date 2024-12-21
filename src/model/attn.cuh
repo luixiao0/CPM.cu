@@ -35,8 +35,8 @@ struct Attention {
     float rms_norm_eps;
 
     RMSNorm<T> *attn_norm;
-    Linear<T, true> *q_proj, *k_proj, *v_proj;
-    Linear<T, true> *o_proj;
+    Linear<T> *q_proj, *k_proj, *v_proj;
+    Linear<T> *o_proj;
 
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
@@ -49,10 +49,10 @@ struct Attention {
         this->rms_norm_eps = rms_norm_eps;
 
         this->attn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        this->q_proj = new Linear<T, true>(hidden_size, num_attention_heads * head_dim);
-        this->k_proj = new Linear<T, true>(hidden_size, num_key_value_heads * head_dim);
-        this->v_proj = new Linear<T, true>(hidden_size, num_key_value_heads * head_dim);
-        this->o_proj = new Linear<T, true>(hidden_size, num_attention_heads * head_dim);
+        this->q_proj = new Linear<T>(hidden_size, num_attention_heads * head_dim);
+        this->k_proj = new Linear<T>(hidden_size, num_key_value_heads * head_dim);
+        this->v_proj = new Linear<T>(hidden_size, num_key_value_heads * head_dim);
+        this->o_proj = new Linear<T>(hidden_size, num_attention_heads * head_dim);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -130,7 +130,7 @@ struct Attention {
         );
 
         // flash attention and put output to attn_norm->output
-        linear<T, true, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
+        this->o_proj->prefill(num_tokens, this->attn_output, input, true);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache) {
@@ -144,7 +144,7 @@ struct Attention {
             k = this->k_proj->output;
             v = this->v_proj->output;
         } else {
-            linear<T, true>(num_tokens, this->hidden_size, (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
+            linear<T>(num_tokens, this->hidden_size, (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
             q = this->q_proj->output;
             k = q + this->num_attention_heads * this->head_dim;
             v = k + this->num_key_value_heads * this->head_dim;
@@ -180,6 +180,6 @@ struct Attention {
         );
 
         // flash attention and put output to attn_norm->output
-        linear<T, true, /*inplace=*/true>(num_tokens, this->num_attention_heads * this->head_dim, this->hidden_size, this->attn_output, this->o_proj->weight, input);
+        this->o_proj->prefill(num_tokens, this->attn_output, input, true);
     }
 };
