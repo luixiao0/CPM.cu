@@ -226,7 +226,7 @@ class LLM_with_medusa(LLM):
         self._load_from_ckpt(self.medusa_path, cls="medusa")
         super().load_from_hf()
 
-    def generate(self, input_ids, generation_length=100, output_avg_accept_length=False):
+    def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
         prefix_length = input_ids.numel()
@@ -242,7 +242,9 @@ class LLM_with_medusa(LLM):
             self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.gt = torch.tensor([0]*64, dtype=torch.int32, device="cuda")
         i = 0
-        while i < generation_length:
+        model_step = 0
+        terminal = False
+        while i < generation_length and not terminal:
             torch.cuda.nvtx.range_push(f"medusa_draft")
             C.draft(self.medusa_logits.data_ptr())
             topk = self.medusa_logits.topk(self.medusa_topk, dim=-1).indices.view(-1)
@@ -265,12 +267,15 @@ class LLM_with_medusa(LLM):
             torch.cuda.nvtx.range_pop()
 
             i += accept_length
+            model_step += 1
             accept_lengths.append(accept_length)
             tokens.extend(self.input_ids[:accept_length].tolist())
             token = tokens[-1]
+            
+            for temin in teminators:
+                if temin in self.input_ids[:accept_length]:
+                    terminal = True
+            
         tokens = tokens[:generation_length]
-        avg_accept_length = sum(accept_lengths) / len(accept_lengths)
-        if output_avg_accept_length:
-            return self.tokenizer.decode(tokens), avg_accept_length
-        else:
-            return self.tokenizer.decode(tokens)
+        
+        return tokens, accept_lengths, model_step

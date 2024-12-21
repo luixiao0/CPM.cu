@@ -168,7 +168,7 @@ class LLM(torch.nn.Module):
         torch.cuda.nvtx.range_pop()
         return self.logits[:input_ids.numel()].clone()
 
-    def generate(self, input_ids, generation_length=100):
+    def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
         prefix_length = input_ids.numel()
@@ -189,4 +189,6 @@ class LLM(torch.nn.Module):
             logits = self.decode(self.input_ids, self.position_ids, self.cache_length)
             token = logits[0].argmax(dim=-1).item()
             tokens.append(token)
-        return self.tokenizer.decode(tokens)
+            if token in teminators:
+                break
+        return tokens
