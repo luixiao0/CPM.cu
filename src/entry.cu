@@ -82,6 +82,14 @@ void prefill(int input_length, int history_length, std::uintptr_t input, std::ui
 void decode(int input_length, int padded_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t mask_2d, std::uintptr_t output, bool cuda_graph) {
     if (cuda_graph) {
         if (graphCreated_padding_length != padded_length || graphCreated_input_length != input_length) {
+            if (graphExec != nullptr) {
+                cudaGraphExecDestroy(graphExec);
+                graphExec = nullptr;
+            }
+            if (graph != nullptr) {
+                cudaGraphDestroy(graph);
+                graph = nullptr;
+            }
             cudaStreamBeginCapture(calc_stream, cudaStreamCaptureModeGlobal);
             model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(mask_2d), reinterpret_cast<void*>(output));
             cudaStreamEndCapture(calc_stream, &graph);
