@@ -43,6 +43,7 @@ setup(
             sources = [
                 "src/entry.cu",
                 "src/utils.cu",
+                "src/qgemm/w8a8/w8a8_gemm_cuda.cu",
                 # *glob.glob("src/flash_attn/src/*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim64_fp16*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim128_fp16*.cu"),
