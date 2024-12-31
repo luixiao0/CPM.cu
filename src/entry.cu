@@ -6,6 +6,7 @@
 #include "model/model.cuh"
 #include "model/medusa.cuh"
 #include "model/w8a8/w8a8_model.cuh"
+#include "model/w8a8/medusa_base_w8a8.cuh"
 
 #define DTYPE_SWITCH(COND, ...)               \
   [&] {                                      \
@@ -103,6 +104,21 @@ void init_w8a8_base_model(
 
 }
 
+void init_medusa_w8a8_model(
+    int num_heads,
+    int num_layers,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new MedusaImplBaseW8A8<half>(
+        (W8A8ModelImpl<half>*)model,
+        num_heads,
+        num_layers
+    );
+}
+
 int init_storage() {
     return model->init_storage();
 }
@@ -151,6 +167,7 @@ PYBIND11_MODULE(C, m) {
     m.def("init_base_model", &init_base_model, "Init base model");
     m.def("init_medusa_model", &init_medusa_model, "Init medusa model");
     m.def("init_w8a8_base_model", &init_w8a8_base_model, "Init W8A8 base model");
+    m.def("init_medusa_w8a8_model", &init_medusa_w8a8_model, "Init medusa W8A8 model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");

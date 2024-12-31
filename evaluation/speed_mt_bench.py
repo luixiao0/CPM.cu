@@ -24,11 +24,15 @@ def speed(jsonl_file, jsonl_file_base, checkpoint_path, task=None, report=True):
 
     speeds=[]
     accept_lengths_list = []
+    forward_time_list = []
     for datapoint in data:
         tokens=sum(datapoint["choices"][0]['new_tokens'])
         times = sum(datapoint["choices"][0]['wall_time'])
         accept_lengths_list.extend(datapoint["choices"][0]['accept_lengths'])
         speeds.append(tokens/times)
+        
+        forward_times = sum(datapoint["choices"][0]['decoding_steps'])
+        forward_time_list.append(times/forward_times)
 
 
     data = []
@@ -67,6 +71,7 @@ def speed(jsonl_file, jsonl_file_base, checkpoint_path, task=None, report=True):
         print('Tokens per second: ', tokens_per_second)
         print('Tokens per second for the baseline: ', tokens_per_second_baseline)
         print("Speedup ratio: ", speedup_ratio)
+        print("Avg time per decode step: ", np.mean(forward_time_list))
     return tokens_per_second, tokens_per_second_baseline, speedup_ratio, accept_lengths_list
 
 

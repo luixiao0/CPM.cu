@@ -1,5 +1,5 @@
 from . import C
-from .llama import LLM
+from .llama_w8a8 import W8A8LLM
 
 import torch
 from transformers import AutoConfig
@@ -180,7 +180,7 @@ def pack_mask(mask_2d):
     mask_2d_packed = mask_2d_packed.view(torch.uint64)
     return mask_2d_packed
 
-class LLM_with_medusa(LLM):
+class W8A8LLM_with_medusa(W8A8LLM):
     def __init__(self,
                  medusa_path,
                  base_path,
@@ -209,7 +209,7 @@ class LLM_with_medusa(LLM):
 
         assert self.medusa_config.medusa_num_layers == 1, "Currently only supports 1 layer"
 
-        C.init_medusa_model(
+        C.init_medusa_w8a8_model(
             self.medusa_config.medusa_num_heads,
             self.medusa_config.medusa_num_layers,
             self.dtype_int,
