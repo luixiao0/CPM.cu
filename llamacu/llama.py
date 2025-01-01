@@ -181,7 +181,7 @@ class LLM(torch.nn.Module):
             self.input_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.position_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
-        for i in range(generation_length):
+        for i in range(generation_length-1):
             self.input_ids[0] = token
             self.position_ids[0] = prefix_length + i
             self.cache_length[0] = prefix_length + i

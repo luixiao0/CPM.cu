@@ -246,7 +246,7 @@ class W8A8LLM_with_medusa(W8A8LLM):
             self.position_ids = torch.tensor([0]*64, dtype=torch.int32, device="cuda")
             self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.gt = torch.tensor([0]*64, dtype=torch.int32, device="cuda")
-        i = 0
+        i = 1
         model_step = 0
         terminal = False
         while i < generation_length and not terminal:
