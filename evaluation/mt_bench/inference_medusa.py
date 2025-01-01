@@ -1,7 +1,7 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.eval import run_eval
+from evaluation.mt_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
 from llamacu.medusa import LLM_with_medusa
 
