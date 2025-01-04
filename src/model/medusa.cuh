@@ -21,11 +21,12 @@ __global__ void verify_kernel(int num_tokens, int32_t* pred, const int32_t* gt, 
 
     __shared__ int32_t mx[64], mx_idx[64];
     int prefix_length = cache_length[0];
-    if ((correct_mask & attn_mask[i]) == attn_mask[i]) {
+    if (i < num_tokens && ((correct_mask & attn_mask[i]) == attn_mask[i])) {
         mx[i] = position_ids[i] - prefix_length + 1; mx_idx[i] = i;
     } else {
         mx[i] = 1; mx_idx[i] = 0;
     }
+    __syncthreads();
     for (int offset = 32; offset > 0; offset >>= 1) {
         if (i < offset && mx[i + offset] > mx[i]) {
             mx[i] = mx[i + offset];
@@ -186,7 +187,7 @@ struct MedusaImpl : Model {
     }
 
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) {
-        verify_kernel<<<1, num_tokens, 0, calc_stream>>>(num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, d_best);
+        verify_kernel<<<1, 64, 0, calc_stream>>>(num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, d_best);
         cudaMemcpyAsync(h_best, d_best, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, calc_stream);
         cudaStreamSynchronize(calc_stream);
         fix_kv_cache(h_best[0], this->model->kv_caches->num_hidden_layers * 2, this->model->kv_caches->dim, pred, gt, cache_length, this->model->kv_caches->d_flat_caches, this->tmp_kvcache);
