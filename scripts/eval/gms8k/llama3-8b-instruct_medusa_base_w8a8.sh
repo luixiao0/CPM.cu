@@ -11,4 +11,6 @@ python3 evaluation/gms8k/inference_medusa_base_w8a8.py \
     --model-id ${Model_id}_medusa_base_w8a8 \
     --bench-path $Bench_Path \
     --memory-limit 0.8 \
-    --dtype "float16"
+    --dtype "float16" \
+    --medusa-num-heads 3 \
+    --medusa-choices 'mc_sim_7b_61'

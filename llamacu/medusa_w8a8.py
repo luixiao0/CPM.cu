@@ -6,12 +6,12 @@ from transformers import AutoConfig
 
 # /////////// BELOW PART COMES FROM https://github.com/FasterDecoding/Medusa ///////////
 
-# mc_sim_7b_63 = [[0], [0, 0], [1], [0, 1], [2], [0, 0, 0], [1, 0], [0, 2], [3], [0, 3], [4], [0, 4], [2, 0], [0, 5], [0, 0, 1], [5], [0, 6], [6], [0, 7], [0, 1, 0], [1, 1], [7], [0, 8], [0, 0, 2], [3, 0], [0, 9], [8], [9], [1, 0, 0], [0, 2, 0], [1, 2], [0, 0, 3], [4, 0], [2, 1], [0, 0, 4], [0, 0, 5], [0, 0, 0, 0], [0, 1, 1], [0, 0, 6], [0, 3, 0], [5, 0], [1, 3], [0, 0, 7], [0, 0, 8], [0, 0, 9], [6, 0], [0, 4, 0], [1, 4], [7, 0], [0, 1, 2], [2, 0, 0], [3, 1], [2, 2], [8, 0], [0, 5, 0], [1, 5], [1, 0, 1], [0, 2, 1], [9, 0], [0, 6, 0], [0, 0, 0, 1], [1, 6], [0, 7, 0]]
+mc_sim_7b_63 = [[0], [0, 0], [1], [0, 1], [2], [0, 0, 0], [1, 0], [0, 2], [3], [0, 3], [4], [0, 4], [2, 0], [0, 5], [0, 0, 1], [5], [0, 6], [6], [0, 7], [0, 1, 0], [1, 1], [7], [0, 8], [0, 0, 2], [3, 0], [0, 9], [8], [9], [1, 0, 0], [0, 2, 0], [1, 2], [0, 0, 3], [4, 0], [2, 1], [0, 0, 4], [0, 0, 5], [0, 0, 0, 0], [0, 1, 1], [0, 0, 6], [0, 3, 0], [5, 0], [1, 3], [0, 0, 7], [0, 0, 8], [0, 0, 9], [6, 0], [0, 4, 0], [1, 4], [7, 0], [0, 1, 2], [2, 0, 0], [3, 1], [2, 2], [8, 0], [0, 5, 0], [1, 5], [1, 0, 1], [0, 2, 1], [9, 0], [0, 6, 0], [0, 0, 0, 1], [1, 6], [0, 7, 0]]
 
 
 mc_sim_7b_63_3head = [[0], [0, 0], [1], [0, 1], [2], [0, 0, 0], [1, 0], [0, 2], [3], [0, 3], [4], [0, 4], [2, 0], [0, 5], [0, 0, 1], [5], [0, 6], [6], [0, 7], [0, 1, 0], [1, 1], [7], [0, 8], [0, 0, 2], [3, 0], [0, 9], [8], [9], [1, 0, 0], [0, 2, 0], [1, 2], [0, 0, 3], [4, 0], [2, 1], [0, 0, 4], [0, 0, 5], [0, 1, 1], [0, 0, 6], [0, 3, 0], [5, 0], [1, 3], [0, 0, 7], [0, 0, 8], [0, 0, 9], [6, 0], [0, 4, 0], [1, 4], [7, 0], [0, 1, 2], [2, 0, 0], [3, 1], [2, 2], [8, 0], [0, 5, 0], [1, 5], [1, 0, 1], [0, 2, 1], [9, 0], [0, 6, 0], [1, 6], [0, 7, 0], [0, 1, 3], [0, 1, 4]]
 
-# mc_sim_7b_61 = [[0], [0, 0], [1], [0, 1], [2], [0, 0, 0], [1, 0], [0, 2], [3], [0, 3], [4], [0, 4], [2, 0], [0, 5], [0, 0, 1], [5], [0, 6], [6], [0, 7], [0, 1, 0], [1, 1], [7], [0, 8], [0, 0, 2], [3, 0], [0, 9], [8], [9], [1, 0, 0], [0, 2, 0], [1, 2], [0, 0, 3], [4, 0], [2, 1], [0, 0, 4], [0, 0, 5], [0, 1, 1], [0, 0, 6], [0, 3, 0], [5, 0], [1, 3], [0, 0, 7], [0, 0, 8], [0, 0, 9], [6, 0], [0, 4, 0], [1, 4], [7, 0], [0, 1, 2], [2, 0, 0], [3, 1], [2, 2], [8, 0], [0, 5, 0], [1, 5], [1, 0, 1], [0, 2, 1], [9, 0], [0, 6, 0], [1, 6], [0, 7, 0]]
+mc_sim_7b_61 = [[0], [0, 0], [1], [0, 1], [2], [0, 0, 0], [1, 0], [0, 2], [3], [0, 3], [4], [0, 4], [2, 0], [0, 5], [0, 0, 1], [5], [0, 6], [6], [0, 7], [0, 1, 0], [1, 1], [7], [0, 8], [0, 0, 2], [3, 0], [0, 9], [8], [9], [1, 0, 0], [0, 2, 0], [1, 2], [0, 0, 3], [4, 0], [2, 1], [0, 0, 4], [0, 0, 5], [0, 1, 1], [0, 0, 6], [0, 3, 0], [5, 0], [1, 3], [0, 0, 7], [0, 0, 8], [0, 0, 9], [6, 0], [0, 4, 0], [1, 4], [7, 0], [0, 1, 2], [2, 0, 0], [3, 1], [2, 2], [8, 0], [0, 5, 0], [1, 5], [1, 0, 1], [0, 2, 1], [9, 0], [0, 6, 0], [1, 6], [0, 7, 0]]
 
 import torch
 import torch.nn.functional as F
@@ -184,22 +184,25 @@ class W8A8LLM_with_medusa(W8A8LLM):
     def __init__(self,
                  medusa_path,
                  base_path,
+                 medusa_num_heads=4,
+                 medusa_choices='mc_sim_7b_63',
                  **kwargs):
         super().__init__(base_path, **kwargs)
 
         self.medusa_path = medusa_path
         self.medusa_config = MedusaConfig.from_pretrained(medusa_path)
 
-        self.medusa_choices = mc_sim_7b_63_3head
-        self.medusa_config.medusa_num_heads = 3 # TODO 4 for mc_sim_7b_63
+        self.medusa_choices = eval(medusa_choices)
+        self.medusa_config.medusa_num_heads = medusa_num_heads # TODO 4 for mc_sim_7b_63
+        self.tree_size = len(self.medusa_choices) + 1
 
         self.medusa_topk = TOPK
         medusa_buffers = generate_medusa_buffers(self.medusa_choices)
         self.medusa_tree_indices = medusa_buffers["tree_indices"][1:] - 1
         self.medusa_attn_mask = pack_mask(medusa_buffers["medusa_attn_mask"][0][0].to(torch.int32))
         self.medusa_position_ids = medusa_buffers["medusa_position_ids"]
-        self.medusa_tree_parent = torch.tensor([-1] * 64, dtype=torch.int32, device="cuda")
-        for i in range(1, 64):
+        self.medusa_tree_parent = torch.tensor([-1] * self.tree_size, dtype=torch.int32, device="cuda")
+        for i in range(1, self.tree_size):
             for j in reversed(range(i)):
                 if medusa_buffers["medusa_attn_mask"][0][0][i][j] == 1:
                     self.medusa_tree_parent[i] = j
@@ -242,10 +245,10 @@ class W8A8LLM_with_medusa(W8A8LLM):
         tokens = [token]
         accept_lengths = []
         if not hasattr(self, "input_ids"):
-            self.input_ids = torch.tensor([0]*64, dtype=torch.int32, device="cuda")
-            self.position_ids = torch.tensor([0]*64, dtype=torch.int32, device="cuda")
+            self.input_ids = torch.tensor([0]*self.tree_size, dtype=torch.int32, device="cuda")
+            self.position_ids = torch.tensor([0]*self.tree_size, dtype=torch.int32, device="cuda")
             self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
-            self.gt = torch.tensor([0]*64, dtype=torch.int32, device="cuda")
+            self.gt = torch.tensor([0]*self.tree_size, dtype=torch.int32, device="cuda")
         i = 1
         model_step = 0
         terminal = False
