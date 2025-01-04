@@ -98,6 +98,16 @@ if __name__ == "__main__":
         type=str,
         default="llama-2",
     )
+    parser.add_argument(
+        "--medusa-num-heads",
+        type=int,
+        default=4,
+    )
+    parser.add_argument(
+        "--medusa-choices",
+        type=str,
+        default="mc_sim_7b_63",
+    )
 
     args = parser.parse_args()
 
@@ -119,6 +129,8 @@ if __name__ == "__main__":
         chunk_length=max_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
+        medusa_num_heads=args.medusa_num_heads,
+        medusa_choices=args.medusa_choices,
     )
     model.init_storage()
     model.load_from_hf()
