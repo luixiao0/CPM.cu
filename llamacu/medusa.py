@@ -2,7 +2,6 @@ from . import C
 from .llama import LLM
 
 import torch
-from transformers import AutoConfig
 
 # /////////// BELOW PART COMES FROM https://github.com/FasterDecoding/Medusa ///////////
 

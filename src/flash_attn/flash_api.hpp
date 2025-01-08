@@ -6,6 +6,7 @@
 
 #include "flash.h"
 #include "static_switch.h"
+#include "../model/mask.cuh"
 
 void set_params_fprop(Flash_fwd_params &params,
                       bool is_bf16,
@@ -214,7 +215,7 @@ void mha_fwd_kvcache(
     void* kcache,               // batch_size x seqlen_k x num_heads_k x head_size
     void* vcache,               // batch_size x seqlen_k x num_heads_k x head_size
     int* seqlens_k,             // batch_size
-    uint64_t* mask_2d,               // batch_size x seqlen_q x seqlen_knew
+    const Mask& mask,           // batch_size x seqlen_q x seqlen_k_range
     void* out,                  // batch_size x seqlen_q x num_heads x head_size
     float* softmax_lse,         // batch_size x num_heads x seqlen_q
     float* softmax_lse_accum,   // num_splits x batch_size x num_heads x seqlen_q
@@ -270,13 +271,9 @@ void mha_fwd_kvcache(
                      softcap
                      );
 
-    if (mask_2d != nullptr) {
-        params.mask_2d = (uint64_t*)mask_2d;
-        params.mask_len = seqlen_knew;
-    } else {
-        params.mask_2d = nullptr;
-        params.mask_len = 0;
-    }
+    params.mask_2d = mask.ptr;
+    params.mask_q_range = mask.mask_q_range;
+    params.mask_k_range = mask.mask_k_range;
 
     params.rotary_dim = 0;
 

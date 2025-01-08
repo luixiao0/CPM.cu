@@ -113,20 +113,20 @@ struct Mask {
     const int max_seqlen_k, max_seqlen_q;
     const int window_size_left, window_size_right;
     const uint64_t *mask_2d;
-    const int mask_len, mask_begin;
+    const int mask_q_range, mask_k_begin;
     const float alibi_slope;
 
     __forceinline__ __device__ Mask(const int max_seqlen_k, const int max_seqlen_q,
                                     const int window_size_left, const int window_size_right,
-                                    const uint64_t *mask_2d, const int mask_len,
-                                    const float alibi_slope=0.f)
+                                    const float alibi_slope=0.f,
+                                    const uint64_t *mask_2d = nullptr, const int mask_q_range = 0, const int mask_k_range = 0)
         : max_seqlen_k(max_seqlen_k)
         , max_seqlen_q(max_seqlen_q)
         , window_size_left(window_size_left)
         , window_size_right(window_size_right)
         , mask_2d(mask_2d)
-        , mask_len(mask_len)
-        , mask_begin(max_seqlen_k - mask_len)
+        , mask_q_range(mask_q_range)
+        , mask_k_begin(max_seqlen_k - mask_k_range)
         , alibi_slope(!Has_alibi ? 0.0 : alibi_slope) {
     };
 
@@ -176,7 +176,7 @@ struct Mask {
                         const int row_idx = row_idx_base + i * 8;
                         const int col_idx_limit_left = std::max(0, row_idx + max_seqlen_k - max_seqlen_q - window_size_left);
                         const int col_idx_limit_right = std::min(max_seqlen_k, row_idx + 1 + max_seqlen_k - max_seqlen_q + window_size_right);
-                        const uint64_t mask = (Mask_2d && mask_len > 0 && row_idx < mask_len) ? mask_2d[row_idx] : 0;
+                        const uint64_t mask = (Mask_2d && row_idx < mask_q_range) ? mask_2d[row_idx] : 0;
                         #pragma unroll
                         for (int nj = 0; nj < size<1, 1>(tensor); ++nj) {
                             const int col_idx_base = col_idx_offset + nj * 8;
@@ -184,7 +184,7 @@ struct Mask {
                             for (int j = 0; j < size<1, 0>(tensor); ++j) {
                                 const int col_idx = col_idx_base + j;
                                 if constexpr (Mask_2d) {
-                                    if (col_idx >= mask_begin && (mask >> (col_idx - mask_begin) & 1) == 0) {
+                                    if (col_idx >= mask_k_begin && (mask >> (col_idx - mask_k_begin) & 1) == 0) {
                                         tensor(make_coord(i, mi), make_coord(j, nj)) = -INFINITY;
                                     }
                                 }

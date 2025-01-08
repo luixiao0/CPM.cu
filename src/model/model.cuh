@@ -5,7 +5,7 @@
 #include "linear.cuh"
 #include "layer.cuh"
 #include "kvcache.cuh"
-
+#include "mask.cuh"
 #include <algorithm>
 #include <cuda_runtime.h>
 #include <vector>
@@ -140,10 +140,11 @@ struct ModelImpl : Model {
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
+        Mask mask(mask_2d, num_tokens);
         this->embedding->prefill(calc_stream, num_tokens, input);
         T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask_2d, this->kv_caches->caches[i]);
+            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
         this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);

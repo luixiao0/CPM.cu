@@ -3,6 +3,7 @@
 #include "attn.cuh"
 #include "ffn.cuh"
 #include "kvcache.cuh"
+#include "mask.cuh"
 #include <cuda_runtime.h>
 
 template <typename T>
@@ -43,8 +44,8 @@ struct Layer {
         this->ffn->prefill(calc_stream, num_tokens, input, this->attn->output);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache) {
-        this->attn->decode(calc_stream, num_tokens, padded_length, input, prev_output, position_ids, cache_length, mask_2d, kv_cache);
+    void decode(int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
+        this->attn->decode(calc_stream, num_tokens, padded_length, input, prev_output, position_ids, cache_length, mask, kv_cache);
         this->ffn->decode(calc_stream, num_tokens, input, this->attn->output);
     }
 };

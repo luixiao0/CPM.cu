@@ -1,5 +1,4 @@
 #pragma once
-#include <cuda_runtime.h>
 #include "../trait.cuh"
 #include "../utils.cuh"
 #include "../flash_attn/flash_api.hpp"
@@ -7,6 +6,8 @@
 #include "linear.cuh"
 #include "rotary.cuh"
 #include "kvcache.cuh"
+#include "mask.cuh"
+#include <cuda_runtime.h>
 
 namespace {
 __global__ void copy_to_kvcache_kernel(int num_tokens, int dim, int total, float4* k, float4* v, float4* k_cache, float4* v_cache, int* cache_length) {
@@ -120,7 +121,7 @@ struct Attention {
             kv_cache->k_cache,
             kv_cache->v_cache,
             nullptr,
-            nullptr,
+            Mask(nullptr),
             this->attn_output,
             this->softmax_lse,
             this->softmax_lse_accum,
@@ -137,7 +138,7 @@ struct Attention {
         this->o_proj->prefill(stream, num_tokens, this->attn_output);
     }
 
-    void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache) {
+    void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(stream, num_tokens, input, prev_output);
         T *q, *k, *v;
         if (num_tokens > 1) {
@@ -170,7 +171,7 @@ struct Attention {
             kv_cache->k_cache,
             kv_cache->v_cache,
             cache_length,
-            mask_2d,
+            mask,
             this->attn_output,
             this->softmax_lse,
             this->softmax_lse_accum,

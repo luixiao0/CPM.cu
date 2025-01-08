@@ -77,7 +77,8 @@ struct Flash_fwd_params : public Qkv_params {
 
     // The mask_2d matrix.
     uint64_t *__restrict__ mask_2d;
-    int mask_len;
+    int mask_q_range;
+    int mask_k_range;
 
     // The K_new and V_new matrices.
     void * __restrict__ knew_ptr;
