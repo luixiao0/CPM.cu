@@ -21,11 +21,12 @@ __global__ void verify_kernel(int num_tokens, int32_t* pred, const int32_t* gt, 
 
     __shared__ int32_t mx[64], mx_idx[64];
     int prefix_length = cache_length[0];
-    if ((correct_mask & attn_mask[i]) == attn_mask[i]) {
+    if (i < num_tokens && ((correct_mask & attn_mask[i]) == attn_mask[i])) {
         mx[i] = position_ids[i] - prefix_length + 1; mx_idx[i] = i;
     } else {
         mx[i] = 1; mx_idx[i] = 0;
     }
+    __syncthreads();
     for (int offset = 32; offset > 0; offset >>= 1) {
         if (i < offset && mx[i + offset] > mx[i]) {
             mx[i] = mx[i + offset];
@@ -77,7 +78,7 @@ __global__ void fix_kvcache_kernel_2(int num_caches, int dim, int32_t* pred, con
 }
 
 void verify_draft(const Stream& stream, int num_tokens, int32_t* pred, const int32_t* gt, const int32_t* position_ids, const int32_t* cache_length, const uint64_t* attn_mask, const int32_t* tree_parent, int32_t* best) {
-    verify_kernel<<<1, num_tokens, 0, stream.stream>>>(num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, best);
+    verify_kernel<<<1, 64, 0, stream.stream>>>(num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, best);
 }
 
 template<typename T>
