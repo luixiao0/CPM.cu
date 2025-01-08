@@ -27,6 +27,7 @@ class NinjaBuildExtension(BuildExtension):
 
         super().__init__(*args, **kwargs)
 
+arch = "80"
 
 setup(
     name='llamacu',
@@ -49,6 +50,7 @@ setup(
                 *glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim128_bf16*.cu"),
             ],
+            libraries=["cublas"],
             extra_compile_args={
                 "cxx": ["-O3", "-std=c++17"],
                 "nvcc": append_nvcc_threads(
@@ -61,7 +63,8 @@ setup(
                         "--expt-relaxed-constexpr",
                         "--expt-extended-lambda",
                         "--use_fast_math",
-                        "-gencode", "arch=compute_80,code=sm_80",
+                        "-gencode", f"arch=compute_{arch},code=sm_{arch}",
+                        f"-D_ARCH{arch}",
                     ]
                 ),
             },

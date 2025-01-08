@@ -2,7 +2,7 @@
 #include "model.cuh"
 
 namespace {
-__global__ void verify_kernel(int num_tokens, int32_t* pred, const int32_t* gt, int32_t* position_ids, const int32_t* cache_length, const uint64_t* attn_mask, const int32_t* tree_parent, int32_t* d_best) {
+__global__ void verify_kernel(int num_tokens, int32_t* pred, const int32_t* gt, const int32_t* position_ids, const int32_t* cache_length, const uint64_t* attn_mask, const int32_t* tree_parent, int32_t* d_best) {
     int i = threadIdx.x;
 
     __shared__ uint64_t s_correct_mask[2];
@@ -76,22 +76,25 @@ __global__ void fix_kvcache_kernel_2(int num_caches, int dim, int32_t* pred, con
 }
 }
 
+void verify_draft(const Stream& stream, int num_tokens, int32_t* pred, const int32_t* gt, const int32_t* position_ids, const int32_t* cache_length, const uint64_t* attn_mask, const int32_t* tree_parent, int32_t* best) {
+    verify_kernel<<<1, num_tokens, 0, stream.stream>>>(num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, best);
+}
+
 template<typename T>
-void fix_kv_cache(int accept_length, int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, T** flat_caches, T* tmp_kvcache) {
-    fix_kvcache_kernel_1<T><<<dim3(accept_length, num_caches, 1), 256, 0, calc_stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
-    fix_kvcache_kernel_2<T><<<dim3(accept_length, num_caches, 1), 256, 0, calc_stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
-    cudaDeviceSynchronize();
+void fix_kv_cache(const Stream& stream, int accept_length, int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, T** flat_caches, T* tmp_kvcache) {
+    fix_kvcache_kernel_1<T><<<dim3(accept_length, num_caches, 1), 256, 0, stream.stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
+    fix_kvcache_kernel_2<T><<<dim3(accept_length, num_caches, 1), 256, 0, stream.stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
 }
 
 template<typename T>
 struct ResidualBlock : Linear<T, /*transposed=*/true, /*bias=*/true> {
     ResidualBlock(int dim_in, int dim_out) : Linear<T, true, true>(dim_in, dim_out) {}
 
-    void prefill(int32_t num_tokens, T* input, T* tgt=nullptr, bool inplace=false) {
+    void prefill(const Stream& stream, int32_t num_tokens, T* input, T* tgt=nullptr, bool inplace=false) {
         if (tgt == nullptr) tgt = this->output;
-        Linear<T, true, true>::prefill(num_tokens, input);
-        silu_inplace<T>(num_tokens, this->dim_out, this->output);
-        elementwise_add<T>(num_tokens, this->dim_out, this->output, input, tgt);
+        Linear<T, true, true>::prefill(stream, num_tokens, input);
+        silu_inplace<T>(stream, num_tokens, this->dim_out, this->output);
+        elementwise_add<T>(stream, num_tokens, this->dim_out, this->output, input, tgt);
     }
 };
 
@@ -180,16 +183,16 @@ struct MedusaImpl : Model {
 
     void draft(void* output) {
         for (int i = 0; i < num_heads; i++) {
-            blocks[i]->prefill(1, this->last_token_hidden_state);
-            lm_heads[i]->prefill(1, blocks[i]->output, (T*)output + i * this->model->vocab_size);
+            blocks[i]->prefill(calc_stream, 1, this->last_token_hidden_state);
+            lm_heads[i]->prefill(calc_stream, 1, blocks[i]->output, (T*)output + i * this->model->vocab_size);
         }
     }
 
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) {
-        verify_kernel<<<1, num_tokens, 0, calc_stream>>>(num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, d_best);
-        cudaMemcpyAsync(h_best, d_best, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, calc_stream);
-        cudaStreamSynchronize(calc_stream);
-        fix_kv_cache(h_best[0], this->model->kv_caches->num_hidden_layers * 2, this->model->kv_caches->dim, pred, gt, cache_length, this->model->kv_caches->d_flat_caches, this->tmp_kvcache);
+        verify_draft(calc_stream, num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, this->d_best);
+        cudaMemcpyAsync(this->h_best, this->d_best, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, calc_stream.stream);
+        cudaStreamSynchronize(calc_stream.stream);
+        fix_kv_cache(calc_stream, h_best[0], this->model->kv_caches->num_hidden_layers * 2, this->model->kv_caches->dim, pred, gt, cache_length, this->model->kv_caches->d_flat_caches, this->tmp_kvcache);
         this->last_token_hidden_state = this->model->norm->output + h_best[1] * this->model->hidden_size;
         return h_best[0];
     }

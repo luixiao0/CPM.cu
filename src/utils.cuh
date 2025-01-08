@@ -9,15 +9,20 @@
 
 extern bool initialized;
 
-extern cudaStream_t calc_stream;
-extern cublasHandle_t cublas_handle;
+struct Stream {
+  cudaStream_t stream;
+  cublasHandle_t cublas_handle;
+};
+
+extern Stream calc_stream;
 
 extern int graphCreated_padding_length;
 extern int graphCreated_input_length;
 extern cudaGraph_t graph;
 extern cudaGraphExec_t graphExec;
 
-#define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
+#define CEIL_DIV(M, N) (((M) + (N) - 1) / (N))
+#define ROUND_UP(M, N) (((M) + (N) - 1) / (N) * (N))
 
 #define cudaCheck(err) \
   if (err != cudaSuccess) { \

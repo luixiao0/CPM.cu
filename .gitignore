@@ -204,6 +204,9 @@ build/
 *.out
 *.app
 
+.DS_Store
+.vscode
+
 # Checkpoints
 checkpoints/*
 !checkpoints/.gitkeep

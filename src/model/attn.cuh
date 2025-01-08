@@ -9,7 +9,7 @@
 #include "kvcache.cuh"
 
 namespace {
-__global__ void copy_to_kvcache_kernel_float4(int num_tokens, int dim, int total, float4* k, float4* v, float4* k_cache, float4* v_cache, int* cache_length) {
+__global__ void copy_to_kvcache_kernel(int num_tokens, int dim, int total, float4* k, float4* v, float4* k_cache, float4* v_cache, int* cache_length) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int offset = idx + (cache_length[0] - num_tokens) * dim;
     if (idx < total) {
@@ -19,10 +19,10 @@ __global__ void copy_to_kvcache_kernel_float4(int num_tokens, int dim, int total
 }
 
 template <typename T>
-void copy_to_kvcache(int num_tokens, T* k, T* v, KVCache<T>* kv_cache, int* cache_length) {
+void copy_to_kvcache(const Stream& stream, int num_tokens, T* k, T* v, KVCache<T>* kv_cache, int* cache_length) {
     int dim = kv_cache->dim / (16/sizeof(T));
     int total = num_tokens * dim;
-    copy_to_kvcache_kernel_float4<<<(total+255)/256, 256, 0, calc_stream>>>(num_tokens, dim, total, (float4*)k, (float4*)v, (float4*)kv_cache->k_cache, (float4*)kv_cache->v_cache, cache_length);
+    copy_to_kvcache_kernel<<<CEIL_DIV(total, 256), 256, 0, stream.stream>>>(num_tokens, dim, total, (float4*)k, (float4*)v, (float4*)kv_cache->k_cache, (float4*)kv_cache->v_cache, cache_length);
 }
 }
 
@@ -37,6 +37,7 @@ struct Attention {
     RMSNorm<T> *attn_norm;
     Linear<T> *q_proj, *k_proj, *v_proj;
     Linear<T> *o_proj;
+    T* output;
 
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
@@ -74,7 +75,10 @@ struct Attention {
         int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
 
-        return oaccum_end;
+        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, v_proj_end);
+        this->output = this->o_proj->output;
+
+        return std::max(oaccum_end, o_proj_end);
     }
 
     void load_to_storage(std::string name, void* ptr) {
@@ -93,15 +97,15 @@ struct Attention {
         }
     }
 
-    void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input, int32_t* position_ids, KVCache<T>* kv_cache) {
+    void prefill(const Stream& stream, int32_t num_tokens, int32_t num_history_tokens, T* input, T* prev_output, int32_t* position_ids, KVCache<T>* kv_cache) {
         T* k_cache = kv_cache->offset_k(num_history_tokens);
         T* v_cache = kv_cache->offset_v(num_history_tokens);
 
-        this->attn_norm->prefill(num_tokens, input);
-        this->q_proj->prefill(num_tokens, this->attn_norm->output);
-        this->k_proj->prefill(num_tokens, this->attn_norm->output, k_cache);
-        this->v_proj->prefill(num_tokens, this->attn_norm->output, v_cache);
-        kv_cache->rotary_embedding->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
+        this->attn_norm->prefill(stream, num_tokens, input, prev_output);
+        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output);
+        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, k_cache);
+        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, v_cache);
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -126,32 +130,32 @@ struct Attention {
             -1,
             -1,
             0,
-            calc_stream
+            stream.stream
         );
 
         // flash attention and put output to attn_norm->output
-        this->o_proj->prefill(num_tokens, this->attn_output, input, true);
+        this->o_proj->prefill(stream, num_tokens, this->attn_output);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache) {
-        this->attn_norm->prefill(num_tokens, input);
+    void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache) {
+        this->attn_norm->prefill(stream, num_tokens, input, prev_output);
         T *q, *k, *v;
         if (num_tokens > 1) {
-            this->q_proj->prefill(num_tokens, this->attn_norm->output);
-            this->k_proj->prefill(num_tokens, this->attn_norm->output);
-            this->v_proj->prefill(num_tokens, this->attn_norm->output);
+            this->q_proj->prefill(stream, num_tokens, this->attn_norm->output);
+            this->k_proj->prefill(stream, num_tokens, this->attn_norm->output);
+            this->v_proj->prefill(stream, num_tokens, this->attn_norm->output);
             q = this->q_proj->output;
             k = this->k_proj->output;
             v = this->v_proj->output;
         } else {
-            linear<T>(num_tokens, this->hidden_size, (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
+            linear<T>(stream, num_tokens, this->hidden_size, (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
             q = this->q_proj->output;
             k = q + this->num_attention_heads * this->head_dim;
             v = k + this->num_key_value_heads * this->head_dim;
         }
-        kv_cache->rotary_embedding->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
-        copy_to_kvcache(num_tokens, k, v, kv_cache, cache_length);
+        copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -176,10 +180,10 @@ struct Attention {
             -1,
             -1,
             0,
-            calc_stream
+            stream.stream
         );
 
         // flash attention and put output to attn_norm->output
-        this->o_proj->prefill(num_tokens, this->attn_output, input, true);
+        this->o_proj->prefill(stream, num_tokens, this->attn_output);
     }
 };

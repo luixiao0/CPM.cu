@@ -129,21 +129,25 @@ struct ModelImpl : Model {
     }
 
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
-        this->embedding->prefill(num_tokens, input);
+        this->embedding->prefill(calc_stream, num_tokens, input);
+        T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->prefill(num_tokens, num_history_tokens, this->embedding->output, position_ids, this->kv_caches->caches[i]);
+            this->layers[i]->prefill(num_tokens, num_history_tokens, this->embedding->output, layer_output, position_ids, this->kv_caches->caches[i]);
+            layer_output = this->layers[i]->output;
         }
-        this->norm->prefill(num_tokens, this->embedding->output);
-        this->lm_head->prefill(1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
+        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
+        this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
-        this->embedding->prefill(num_tokens, input);
+        this->embedding->prefill(calc_stream, num_tokens, input);
+        T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, this->kv_caches->caches[i]);
+            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask_2d, this->kv_caches->caches[i]);
+            layer_output = this->layers[i]->output;
         }
-        this->norm->prefill(num_tokens, this->embedding->output);
-        this->lm_head->prefill(num_tokens, this->norm->output, (T*)output);
+        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
+        this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*)output);
     }
 
     void draft(void* output) { throw std::runtime_error("Draft is not supported"); }
