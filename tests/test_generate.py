@@ -1,7 +1,6 @@
 import torch
 from llamacu.llama import LLM
-from llamacu.medusa import LLM_with_medusa
-from llamacu.eagle import LLM_with_eagle
+from llamacu.speculative import LLM_with_medusa, LLM_with_eagle
 from transformers import AutoTokenizer
 from triton.testing import do_bench
 

@@ -17,7 +17,7 @@ struct Model {
     virtual void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) = 0;
     virtual void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) = 0;
 
-    virtual void draft(void* output) = 0;
+    virtual void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) = 0;
     virtual int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) = 0;
     /* verify should find max accept length (based on tree_parent and position_ids) and return, fix kvcache (based on position_ids), and make pred[:accept_length] the accept path (based on attn_mask and position_ids) */
 };
@@ -151,6 +151,6 @@ struct ModelImpl : Model {
         this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*)output);
     }
 
-    void draft(void* output) { throw std::runtime_error("Draft is not supported"); }
+    void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { throw std::runtime_error("Draft is not supported"); }
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Verify is not supported"); }
 };
