@@ -26,12 +26,16 @@ template <typename T>
 struct ModelImpl : Model {
     Memory* memory;
 
+    int vocab_size;
     int num_hidden_layers;
     int hidden_size;
-    int vocab_size;
+    int intermediate_size;
+    int num_attention_heads;
+    int num_key_value_heads;
+    int head_dim;
+    float rms_norm_eps;
 
     int chunk_length;
-    int max_output_length;
 
     KVCacheManager<T>* kv_caches;
 
@@ -53,9 +57,14 @@ struct ModelImpl : Model {
         float rms_norm_eps,
         int chunk_length
     ) {
+        this->vocab_size = vocab_size;
         this->num_hidden_layers = num_hidden_layers;
         this->hidden_size = hidden_size;
-        this->vocab_size = vocab_size;
+        this->intermediate_size = intermediate_size;
+        this->num_attention_heads = num_attention_heads;
+        this->num_key_value_heads = num_key_value_heads;
+        this->head_dim = head_dim;
+        this->rms_norm_eps = rms_norm_eps;
 
         this->chunk_length = chunk_length;
         
@@ -93,15 +102,10 @@ struct ModelImpl : Model {
         return std::max(layer_end, lm_head_end);
     }
 
-    void init_kv_cache(int64_t kv_cache_offset) {
-        memory->kv_cache_offset = kv_cache_offset;
-        this->max_output_length = kv_caches->init_output_ptr(memory, memory->kv_cache_offset);
-    }
-
     int init_storage() {
         init_weight_ptr(memory);
         int64_t kv_cache_offset = init_output_ptr(memory, chunk_length, memory->model_offset);
-        init_kv_cache(kv_cache_offset);
+        kv_cache_offset = kv_caches->init_output_ptr(memory, kv_cache_offset);
         return this->kv_caches->budget;
     }
 
@@ -140,7 +144,7 @@ struct ModelImpl : Model {
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
-        Mask mask(mask_2d, num_tokens);
+        Mask mask(mask_2d, num_tokens, num_tokens);
         this->embedding->prefill(calc_stream, num_tokens, input);
         T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {

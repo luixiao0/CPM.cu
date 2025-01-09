@@ -36,6 +36,7 @@ else:
 llm.init_storage()
 llm.load_from_hf()
 
-print(our_generate())
 if Bench:
     print("decode speed:", f"{num_generate / do_bench(our_generate, warmup=10, rep=1000) * 1000} tok/s")
+
+print(our_generate())
