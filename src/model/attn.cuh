@@ -35,7 +35,7 @@ struct Attention {
     int head_dim;
     float rms_norm_eps;
 
-    RMSNorm<T> *attn_norm;
+    Norm<T> *attn_norm;
     Linear<T> *q_proj, *k_proj, *v_proj;
     Linear<T> *o_proj;
     T* output;

@@ -5,6 +5,7 @@
 #include "trait.cuh"
 #include "model/model.cuh"
 #include "model/medusa.cuh"
+#include "model/eagle.cuh"
 
 #define DTYPE_SWITCH(COND, ...)               \
   [&] {                                      \
@@ -75,6 +76,24 @@ void init_medusa_model(
     });
 }
 
+void init_eagle_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new EagleImpl<elem_type>(
+            (ModelImpl<elem_type>*)model,
+            num_layers,
+            num_iter,
+            topk_per_iter,
+            tree_size
+        );
+    });
+}
+
 int init_storage() {
     return model->init_storage();
 }
@@ -122,6 +141,7 @@ int verify_and_fix(int num_tokens, std::uintptr_t pred, std::uintptr_t gt, std::
 PYBIND11_MODULE(C, m) {
     m.def("init_base_model", &init_base_model, "Init base model");
     m.def("init_medusa_model", &init_medusa_model, "Init medusa model");
+    m.def("init_eagle_model", &init_eagle_model, "Init eagle model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");

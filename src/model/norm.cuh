@@ -112,11 +112,19 @@ void add_and_rms_norm(const Stream& stream, int num_tokens, int dim, T* input, c
 }
 
 template <typename T>
-struct RMSNorm {
+struct Norm {
+    T* output;
+    virtual void init_weight_ptr(Memory* memory) = 0;
+    virtual int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) = 0;
+    virtual void load_to_storage(std::string name, void* ptr) = 0;
+    virtual void prefill(const Stream& stream, int32_t num_tokens, T* input, T* prev_output, T* tgt=nullptr) = 0;
+};
+
+template <typename T>
+struct RMSNorm : Norm<T> {
     int dim;
     float eps;
     T* weight;
-    T* output;
 
     RMSNorm(int dim, float eps) {
         this->dim = dim;
