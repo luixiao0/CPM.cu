@@ -97,9 +97,9 @@ struct ModelImpl : Model {
             layer_end = layers[i]->init_output_ptr(memory, num_tokens, embedding_end);
         }
         // norm and lm_head are not used in prefill
-        int64_t norm_end = norm->init_output_ptr(memory, num_tokens, offset);
+        int64_t norm_end = norm->init_output_ptr(memory, num_tokens, layer_end);
         int64_t lm_head_end = lm_head->init_output_ptr(memory, 64, norm_end);
-        return std::max(layer_end, lm_head_end);
+        return lm_head_end;
     }
 
     int init_storage() {
@@ -132,20 +132,23 @@ struct ModelImpl : Model {
         }
     }
 
-    void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
-        this->embedding->prefill(calc_stream, num_tokens, input);
+    void prefill_embed(int32_t num_tokens, int32_t num_history_tokens, T* embed, int32_t* position_ids, void* output) {
         T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->prefill(num_tokens, num_history_tokens, this->embedding->output, layer_output, position_ids, this->kv_caches->caches[i]);
+            this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
-        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
+        this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
         this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
-        Mask mask(mask_2d, num_tokens, num_tokens);
+    void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->embedding->prefill(calc_stream, num_tokens, input);
+        prefill_embed(num_tokens, num_history_tokens, this->embedding->output, position_ids, output);
+    }
+
+    void decode_embed(int32_t num_tokens, int32_t padded_length, T* embed, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
+        Mask mask(mask_2d, num_tokens, num_tokens);
         T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
             this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
@@ -153,6 +156,11 @@ struct ModelImpl : Model {
         }
         this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
         this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*)output);
+    }
+
+    void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
+        this->embedding->prefill(calc_stream, num_tokens, input);
+        decode_embed(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output);
     }
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { throw std::runtime_error("Draft is not supported"); }

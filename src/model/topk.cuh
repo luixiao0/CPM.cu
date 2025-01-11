@@ -242,12 +242,16 @@ public:
     void prefill(
         const Stream& stream,
         int num_tokens,
-        const T* input
+        const T* input,
+        int dim = -1,
+        int top = -1
     ) {
+        if (dim == -1) dim = this->dim;
+        if (top == -1) top = this->top;
         bitonic_topk<T>(
             stream,
             num_tokens,
-            this->dim, this->top,
+            dim, top,
             input,
             this->topk_val, this->topk_pos,
             this->buf_val, this->buf_pos,
