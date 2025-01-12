@@ -249,10 +249,10 @@ class LLM_with_medusa(LLM):
             self.position_ids = torch.tensor([0]*self.tree_size, dtype=torch.int32, device="cuda")
             self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.gt = torch.tensor([0]*self.tree_size, dtype=torch.int32, device="cuda")
-        i = 1
+        i = 0
         model_step = 0
         terminal = False
-        while i < generation_length and not terminal:
+        while i < generation_length-1 and not terminal:
             torch.cuda.nvtx.range_push(f"medusa_draft")
             C.draft(self.medusa_logits.data_ptr())
             topk = self.medusa_logits.topk(self.medusa_topk, dim=-1).indices.view(-1)
