@@ -284,6 +284,5 @@ class W8A8LLM_with_medusa(W8A8LLM):
                 if temin in self.input_ids[:accept_length]:
                     terminal = True
             
-        tokens = tokens[:generation_length]
         
         return tokens, accept_lengths, model_step
