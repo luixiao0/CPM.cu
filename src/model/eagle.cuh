@@ -116,6 +116,10 @@ __global__ void remap_id_kernel(const int32_t* id_map, const int32_t* real_id, i
     output[threadIdx.x] = real_id[id_map[threadIdx.x]];
 }
 
+__global__ void make_arange_kernel(int32_t* offset, int32_t* output) {
+    output[threadIdx.x] = threadIdx.x + offset[0];
+}
+
 } // namespace
 
 void add(const Stream& stream, int32_t num_tokens, int32_t* ptr, int32_t value) {
@@ -164,6 +168,10 @@ void remap_hidden(const Stream& stream, int32_t num_tokens, int32_t dim, const i
 void remap_id(const Stream& stream, int32_t num_tokens, int32_t* id_map, const int32_t* real_id, int32_t* output=nullptr) {
     if (output == nullptr) output = id_map;
     remap_id_kernel<<<1, num_tokens, 0, stream.stream>>>(id_map, real_id, output);
+}
+
+void make_arange(const Stream& stream, int32_t range, int32_t* offset, int32_t* output) {
+    make_arange_kernel<<<1, range, 0, stream.stream>>>(offset, output);
 }
 
 template<typename T>
@@ -332,13 +340,12 @@ struct EagleImpl : Model {
     }
 
     void eagle_decode(int32_t* cache_length) {
-        cudaMemcpy(this->prev_embed + (num_prev - 1) * this->model->hidden_size, this->model->embedding->output, this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
         this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
         this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
-            this->layers[i]->decode(num_prev, this->eagle_padded_length, this->fc2->output, layer_output, this->eagle_position_ids, this->eagle_cache_length, Mask(nullptr), this->kv_caches->caches[i]);
+            this->layers[i]->decode(num_prev, this->eagle_padded_length, this->fc2->output, layer_output, this->eagle_position_ids, cache_length, Mask(nullptr), this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
@@ -368,11 +375,10 @@ struct EagleImpl : Model {
         cudaMemcpy(&this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
         this->eagle_padded_length = (this->eagle_original_length + 256 - 1) / 128 * 128;
 
-        this->model->embedding->prefill(calc_stream, 1, tree_draft_ids);
 
         if (this->is_first_draft) {
+            this->model->embedding->prefill(calc_stream, 1, tree_draft_ids);
             this->eagle_prefill(this->num_history_tokens);
-            this->is_first_draft = false;
         } else {
             this->eagle_decode(cache_length);
         }
@@ -452,28 +458,29 @@ struct EagleImpl : Model {
                     }
                 }
             }
-            {
-                printf("%d : position_ids = %d attn_mask = ", i, h_position_ids[i]);
-                for (int j = 0; j < 64; j++) {
-                    if (h_tree_mask[i] >> j & 1) {
-                        printf("%d ", j);
-                    }
-                }
-                printf("\n");
-            }
         }
         cudaMemcpy(tree_attn_mask, h_tree_mask, this->tree_size * sizeof(uint64_t), cudaMemcpyHostToDevice);
         cudaMemcpy(tree_position_ids, h_position_ids, this->tree_size * sizeof(int32_t), cudaMemcpyHostToDevice);
         remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, tree_draft_ids + 1);
+
+        this->is_first_draft = false;
     }
 
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, int32_t* tree_parent) {
         verify_draft(calc_stream, num_tokens, pred, gt, position_ids, cache_length, mask_2d, tree_parent, this->d_best);
         cudaMemcpyAsync(this->h_best, this->d_best, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, calc_stream.stream);
         cudaStreamSynchronize(calc_stream.stream);
+
+        this->num_prev = h_best[0];
+        remap_hidden(calc_stream, this->num_prev, this->model->hidden_size, pred, this->model->norm->output, this->prev_hidden_state);
+
         fix_kv_cache(calc_stream, h_best[0], this->model->kv_caches->num_hidden_layers * 2, this->model->kv_caches->dim, pred, gt, cache_length, this->model->kv_caches->d_flat_caches, this->tmp_kvcache);
-        this->prev_hidden_state = this->model->norm->output + h_best[1] * this->model->hidden_size;
-        // TODO prev embed, prev hidden state, num_prev
+
+        this->model->embedding->prefill(calc_stream, this->num_prev, pred);
+        cudaMemcpy(this->prev_embed, this->model->embedding->output, this->num_prev * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+
+        make_arange(calc_stream, this->num_prev, cache_length, this->eagle_position_ids);
+
         return h_best[0];
     }
 };
