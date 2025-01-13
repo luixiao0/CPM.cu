@@ -90,6 +90,10 @@ __global__ void init_tree_kernel(uint64_t* mask_2d) {
     mask_2d[threadIdx.x] = 1ULL << threadIdx.x;
 }
 
+__global__ void set_parent_kernel(int32_t num_tokens, int32_t* parent, const int32_t* pos, int32_t offset) {
+    parent[threadIdx.x] = pos[threadIdx.x] + offset;
+}
+
 __global__ void update_tree_kernel(int32_t num_tokens, int32_t offset, uint64_t* mask_2d, const uint64_t* tmp_mask_2d, const int32_t* topk_pos) {
     mask_2d[threadIdx.x] = tmp_mask_2d[topk_pos[threadIdx.x] / num_tokens] | (1ULL << (offset + threadIdx.x));
 }
@@ -99,17 +103,17 @@ __global__ void cumsum_kernel(int32_t dim, T* input, const T* weight) {
     input[blockIdx.x * dim + threadIdx.x] += weight[blockIdx.x];
 }
 
-__global__ void remap_hidden_kernel(int32_t num_tokens, int32_t dim, const int32_t* id_map, const float4* real_hidden, float4* output) {
+__global__ void remap_hidden_kernel(int32_t scale, int32_t dim, const int32_t* id_map, const float4* real_hidden, float4* output) {
     int row = blockIdx.x;
     int col = threadIdx.x;
-    int real_row = id_map[row] / num_tokens;
+    int real_row = id_map[row] / scale;
     for (int i = col; i < dim; i += blockDim.x) {
         output[row * dim + i] = real_hidden[real_row * dim + i];
     }
 }
 
-__global__ void remap_id_kernel(int32_t* id_map, const int32_t* real_id) {
-    id_map[threadIdx.x] = real_id[id_map[threadIdx.x]];
+__global__ void remap_id_kernel(const int32_t* id_map, const int32_t* real_id, int32_t* output) {
+    output[threadIdx.x] = real_id[id_map[threadIdx.x]];
 }
 
 } // namespace
@@ -138,6 +142,10 @@ void init_tree(const Stream& stream, int32_t num_tokens, uint64_t* mask_2d) {
     init_tree_kernel<<<1, num_tokens, 0, stream.stream>>>(mask_2d);
 }
 
+void set_parent(const Stream& stream, int32_t num_tokens, int32_t* parent, const int32_t* pos, int32_t offset) {
+    set_parent_kernel<<<1, num_tokens, 0, stream.stream>>>(num_tokens, parent, pos, offset);
+}
+
 void update_tree(const Stream& stream, int32_t num_tokens, int32_t offset, uint64_t* mask_2d, const uint64_t* tmp_mask_2d, const int32_t* topk_pos) {
     update_tree_kernel<<<1, num_tokens, 0, stream.stream>>>(num_tokens, offset, mask_2d, tmp_mask_2d, topk_pos);
 }
@@ -148,13 +156,14 @@ void cumsum(const Stream& stream, int32_t num_tokens, int32_t dim, T* input, con
 }
 
 template<typename T>
-void remap_hidden(const Stream& stream, int32_t num_tokens, int32_t dim, const int32_t* id_map, const T* real_hidden, T* output) {
+void remap_hidden(const Stream& stream, int32_t num_tokens, int32_t dim, const int32_t* id_map, const T* real_hidden, T* output, int32_t scale=1) {
     dim = dim / (16 / sizeof(T));
-    remap_hidden_kernel<<<num_tokens, 512, 0, stream.stream>>>(num_tokens, dim, id_map, (float4*)real_hidden, (float4*)output);
+    remap_hidden_kernel<<<num_tokens, 512, 0, stream.stream>>>(scale, dim, id_map, (float4*)real_hidden, (float4*)output);
 }
 
-void remap_id(const Stream& stream, int32_t num_tokens, int32_t* id_map, const int32_t* real_id) {
-    remap_id_kernel<<<1, num_tokens, 0, stream.stream>>>(id_map, real_id);
+void remap_id(const Stream& stream, int32_t num_tokens, int32_t* id_map, const int32_t* real_id, int32_t* output=nullptr) {
+    if (output == nullptr) output = id_map;
+    remap_id_kernel<<<1, num_tokens, 0, stream.stream>>>(id_map, real_id, output);
 }
 
 template<typename T>
@@ -201,7 +210,8 @@ struct EagleImpl : Model {
 
     T *prev_hidden_state, *prev_embed;
     int num_prev, num_history_tokens;
-    int32_t *eagle_position_ids, *eagle_cache_length, eagle_padded_length;
+    int32_t *eagle_position_ids, *eagle_cache_length;
+    int eagle_original_length, eagle_padded_length;
     uint64_t *eagle_mask_2d, *tmp_mask_2d;
     T* eagle_logits;
     T* tired_history_val; int32_t* tired_history_pos;
@@ -260,7 +270,7 @@ struct EagleImpl : Model {
         offset = memory->allocate((void**)&tmp_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&tired_history_val, offset, this->total_tried * sizeof(T));
         offset = memory->allocate((void**)&tired_history_pos, offset, this->total_tried * sizeof(int32_t));
-        offset = memory->allocate((void**)&tired_history_parent, offset, this->total_tried * sizeof(int32_t));
+        offset = memory->allocate((void**)&tired_history_parent, offset, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t));
 
         offset = topk_func->init_output_ptr(memory, this->topk_per_iter, offset);
         offset = topk_func_2->init_output_ptr(memory, 1, offset);
@@ -354,9 +364,9 @@ struct EagleImpl : Model {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
     }
 
-    void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length) {
-        cudaMemcpy(&this->eagle_padded_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
-        this->eagle_padded_length = (this->eagle_padded_length + 256 - 1) / 128 * 128;
+    void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask) {
+        cudaMemcpy(&this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+        this->eagle_padded_length = (this->eagle_original_length + 256 - 1) / 128 * 128;
 
         this->model->embedding->prefill(calc_stream, 1, tree_draft_ids);
 
@@ -404,14 +414,57 @@ struct EagleImpl : Model {
             this->topk_func_2->prefill(calc_stream, 1, this->topk_func->topk_val, topk_per_iter * topk_per_iter, topk_per_iter);
 
             cudaMemcpy(this->tmp_mask_2d, this->eagle_mask_2d, topk_per_iter * sizeof(uint64_t), cudaMemcpyDeviceToDevice);
+            set_parent(calc_stream, topk_per_iter, this->tired_history_parent + (d - 1) * topk_per_iter, this->topk_func_2->topk_pos, 10 + (d - 1) * topk_per_iter * topk_per_iter);
             update_tree(calc_stream, topk_per_iter, topk_per_iter * d, this->eagle_mask_2d, this->tmp_mask_2d, this->topk_func_2->topk_pos);
-            remap_hidden(calc_stream, topk_per_iter, this->model->hidden_size, this->topk_func_2->topk_pos, this->fc2->output, this->fc1->output);
+            remap_hidden(calc_stream, topk_per_iter, this->model->hidden_size, this->topk_func_2->topk_pos, this->fc2->output, this->fc1->output, topk_per_iter);
             remap_id(calc_stream, topk_per_iter, this->topk_func_2->topk_pos, this->topk_func->topk_pos);
         }
 
         this->topk_func_2->prefill(calc_stream, 1, this->tired_history_val);
-        remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos);
-        // TODO build tree
+
+        // build tree
+        int32_t* tree_parent = new int32_t[this->topk_per_iter * (this->num_iter - 1)];
+        cudaMemcpy(tree_parent, this->tired_history_parent, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
+        int32_t* tree_id = new int32_t[this->tree_size];
+        cudaMemcpy(tree_id+1, this->topk_func_2->topk_pos, (this->tree_size-1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
+        int32_t* tree_id_reverse = new int32_t[this->total_tried];
+        for (int i = 1; i < this->tree_size; i++) {
+            tree_id_reverse[tree_id[i]] = i;
+        }
+        uint64_t* h_tree_mask = new uint64_t[this->tree_size];
+        int32_t* h_position_ids = new int32_t[this->tree_size];
+        h_tree_mask[0] = 1;
+        h_position_ids[0] = this->eagle_original_length;
+        for (int i = 1; i < this->tree_size; i++) {
+            int p = tree_id[i];
+            h_position_ids[i] = this->eagle_original_length + ((p < this->topk_per_iter) ?  1 : (p - 10) / 100 + 2);
+            h_tree_mask[i] = 1;
+            while (p != -1) {
+                h_tree_mask[i] |= 1ULL << tree_id_reverse[p];
+                if (p < this->topk_per_iter) {
+                    p = -1;
+                } else {
+                    p = p - 10;
+                    if (p < this->topk_per_iter * this->topk_per_iter) {
+                        p = p / 10;
+                    } else {
+                        p = tree_parent[(p - this->topk_per_iter * this->topk_per_iter) / 10];
+                    }
+                }
+            }
+            {
+                printf("%d : position_ids = %d attn_mask = ", i, h_position_ids[i]);
+                for (int j = 0; j < 64; j++) {
+                    if (h_tree_mask[i] >> j & 1) {
+                        printf("%d ", j);
+                    }
+                }
+                printf("\n");
+            }
+        }
+        cudaMemcpy(tree_attn_mask, h_tree_mask, this->tree_size * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(tree_position_ids, h_position_ids, this->tree_size * sizeof(int32_t), cudaMemcpyHostToDevice);
+        remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, tree_draft_ids + 1);
     }
 
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, int32_t* tree_parent) {

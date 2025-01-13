@@ -178,7 +178,8 @@ void bitonic_topk(
             if (first) {
                 first = false;
                 kernel_bitonic_topk_multiblock<T, top_size, false><<<gridDim, blockDim, 0, stream.stream>>>(
-                    tmp_n, x,
+                    tmp_n,
+                    x,
                     nullptr,
                     buf_val,
                     buf_pos
@@ -210,7 +211,18 @@ void bitonic_topk(
         }
     });
 }
+
+template<typename T>
+static __global__ void set_topk_to_neg_inf_kernel(int dim, T* x, const int* topk_pos) {
+    x[blockIdx.x * dim + topk_pos[threadIdx.x]] = -TypeTraits<T>::inf();
+}
 } // namespace
+
+template<typename T>
+void set_topk_to_neg_inf(const Stream& stream, int num_tokens, int dim, int top, T* x, const int* topk_pos) {
+    set_topk_to_neg_inf_kernel<<<num_tokens, top, 0, stream.stream>>>(dim, x, topk_pos);
+}
+
 template <typename T>
 struct TopK {
 private:
@@ -220,6 +232,7 @@ public:
     int dim, top;
     T* topk_val;
     int* topk_pos;
+    T* tmp_x;
 
     TopK(const int dim, const int top) {
         this->dim = dim;
@@ -232,6 +245,9 @@ public:
             offset = memory->allocate((void**)&nw_buf_val, offset, num_tokens * CEIL_DIV(dim, 1024) * top_size * sizeof(T));
             offset = memory->allocate((void**)&nw_buf_pos, offset, num_tokens * CEIL_DIV(dim, 1024) * top_size * sizeof(int));
         });
+        if (top > 32) { // tmp fix
+            offset = memory->allocate((void**)&tmp_x, offset, num_tokens * dim * sizeof(T));
+        }
         offset = memory->allocate((void**)&topk_val, offset, num_tokens * top * sizeof(T));
         offset = memory->allocate((void**)&topk_pos, offset, num_tokens * top * sizeof(int));
         return offset;
@@ -254,6 +270,21 @@ public:
             this->buf_val, this->buf_pos,
             this->nw_buf_val, this->nw_buf_pos
         );
+        if (top > 32) {
+            assert(top <= 64); // tmp fix
+            cudaMemcpy(this->tmp_x, input, num_tokens * dim * sizeof(T), cudaMemcpyDeviceToDevice);
+            set_topk_to_neg_inf(stream, num_tokens, dim, top, this->tmp_x, this->topk_pos);
+            assert(num_tokens == 1); // tmp fix
+            bitonic_topk<T>(
+                stream,
+                num_tokens,
+                dim, top - 32,
+                this->tmp_x,
+                this->topk_val + 32, this->topk_pos + 32,
+                this->buf_val, this->buf_pos,
+                this->nw_buf_val, this->nw_buf_pos
+            );
+        }
     }
 };
 } // namespace functions
