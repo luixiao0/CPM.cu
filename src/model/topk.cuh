@@ -135,10 +135,7 @@ static __global__ void kernel_bitonic_topk_multiblock_copy (
 #define TOPK_SIZE_DISPATCH(top, ...) \
     do { \
         const int &top_v = top; \
-        if (top_v > 32) { \
-            const int top_size = 64; \
-            __VA_ARGS__ \
-        } else if (top_v > 16) { \
+        if (top_v > 16) { \
             const int top_size = 32; \
             __VA_ARGS__ \
         } else if (top_v > 8) { \
