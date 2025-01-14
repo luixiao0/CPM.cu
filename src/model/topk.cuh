@@ -273,7 +273,7 @@ public:
         if (top > 32) {
             assert(top <= 64); // tmp fix
             cudaMemcpy(this->tmp_x, input, num_tokens * dim * sizeof(T), cudaMemcpyDeviceToDevice);
-            set_topk_to_neg_inf(stream, num_tokens, dim, top, this->tmp_x, this->topk_pos);
+            set_topk_to_neg_inf(stream, num_tokens, dim, 32, this->tmp_x, this->topk_pos);
             assert(num_tokens == 1); // tmp fix
             bitonic_topk<T>(
                 stream,

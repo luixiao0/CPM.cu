@@ -36,7 +36,7 @@ __global__ void rotary_embedding_kernel(int num_heads, int num_heads_kv, int hal
 
 template<typename T>
 void rotary_embedding(const Stream& stream, int num_tokens, int num_heads, int num_heads_kv, int half_dim, const float *inv_freq, const int* pos, T* q, T* k) {
-    rotary_embedding_kernel<T><<<num_tokens, 256, 0, stream.stream>>>(num_heads, num_heads_kv, half_dim, inv_freq, pos, q, k);
+    rotary_embedding_kernel<T><<<num_tokens, 512, 0, stream.stream>>>(num_heads, num_heads_kv, half_dim, inv_freq, pos, q, k);
 }
 
 template <typename T>

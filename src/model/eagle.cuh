@@ -371,7 +371,7 @@ struct EagleImpl : Model {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
     }
 
-    void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask) {
+    void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
         cudaMemcpy(&this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
         this->eagle_padded_length = (this->eagle_original_length + 256 - 1) / 128 * 128;
 
@@ -429,14 +429,15 @@ struct EagleImpl : Model {
         this->topk_func_2->prefill(calc_stream, 1, this->tired_history_val);
 
         // build tree
-        int32_t* tree_parent = new int32_t[this->topk_per_iter * (this->num_iter - 1)];
-        cudaMemcpy(tree_parent, this->tired_history_parent, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
+        int32_t* history_tree_parent = new int32_t[this->topk_per_iter * (this->num_iter - 1)];
+        cudaMemcpy(history_tree_parent, this->tired_history_parent, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
         int32_t* tree_id = new int32_t[this->tree_size];
         cudaMemcpy(tree_id+1, this->topk_func_2->topk_pos, (this->tree_size-1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
         int32_t* tree_id_reverse = new int32_t[this->total_tried];
         for (int i = 1; i < this->tree_size; i++) {
             tree_id_reverse[tree_id[i]] = i;
         }
+        int32_t* h_tree_parent = new int32_t[this->tree_size];
         uint64_t* h_tree_mask = new uint64_t[this->tree_size];
         int32_t* h_position_ids = new int32_t[this->tree_size];
         h_tree_mask[0] = 1;
@@ -445,6 +446,7 @@ struct EagleImpl : Model {
             int p = tree_id[i];
             h_position_ids[i] = this->eagle_original_length + ((p < this->topk_per_iter) ?  1 : (p - 10) / 100 + 2);
             h_tree_mask[i] = 1;
+            bool is_parent_set = false;
             while (p != -1) {
                 h_tree_mask[i] |= 1ULL << tree_id_reverse[p];
                 if (p < this->topk_per_iter) {
@@ -454,11 +456,16 @@ struct EagleImpl : Model {
                     if (p < this->topk_per_iter * this->topk_per_iter) {
                         p = p / 10;
                     } else {
-                        p = tree_parent[(p - this->topk_per_iter * this->topk_per_iter) / 10];
+                        p = history_tree_parent[(p - this->topk_per_iter * this->topk_per_iter) / 10];
                     }
+                }
+                if (is_parent_set == false) {
+                    h_tree_parent[i] = tree_id_reverse[p];
+                    is_parent_set = true;
                 }
             }
         }
+        cudaMemcpy(tree_parent, h_tree_parent, this->tree_size * sizeof(int32_t), cudaMemcpyHostToDevice);
         cudaMemcpy(tree_attn_mask, h_tree_mask, this->tree_size * sizeof(uint64_t), cudaMemcpyHostToDevice);
         cudaMemcpy(tree_position_ids, h_position_ids, this->tree_size * sizeof(int32_t), cudaMemcpyHostToDevice);
         remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, tree_draft_ids + 1);

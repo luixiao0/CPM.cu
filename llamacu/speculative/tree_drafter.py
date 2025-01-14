@@ -61,7 +61,7 @@ class LLM_with_tree_drafter(LLM):
             self.cache_length[0] = prefix_length + i
 
             torch.cuda.nvtx.range_push(f"draft")
-            C.draft(self.tree_draft_ids.data_ptr(), self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(), self.tree_attn_mask.data_ptr())
+            C.draft(self.tree_draft_ids.data_ptr(), self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(), self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr())
             torch.cuda.nvtx.range_pop()
 
             logits = self.decode(self.tree_draft_ids, self.tree_position_ids, self.cache_length, mask_2d=self.tree_attn_mask)
