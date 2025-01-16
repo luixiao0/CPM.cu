@@ -7,7 +7,7 @@ template <typename T>
 __global__ void gated_silu_interleaved_kernel(int dim, const T* src, T* tgt) {
     int row_offset = blockIdx.x * dim;
     int row_offset_2 = row_offset * 2;
-    int col = blockIdx.y * 256 + threadIdx.x;
+    int col = blockIdx.y * blockDim.x + threadIdx.x;
     int col2 = col + dim;
     if (col < dim) {
         float g = float(src[row_offset_2 + col]);
@@ -20,7 +20,7 @@ __global__ void gated_silu_interleaved_kernel(int dim, const T* src, T* tgt) {
 template<typename T>
 __global__ void gated_silu_kernel(int dim, const T* src, T* tgt) {
     int row_offset = blockIdx.x * dim;
-    int col = blockIdx.y * 256 + threadIdx.x;
+    int col = blockIdx.y * blockDim.x + threadIdx.x;
     if (col < dim) {
         float g = float(src[row_offset + col]);
         float u = float(tgt[row_offset + col]);
@@ -32,7 +32,7 @@ __global__ void gated_silu_kernel(int dim, const T* src, T* tgt) {
 template<typename T>
 __global__ void silu_kernel(int dim, const T* src, T* tgt) {
     int row_offset = blockIdx.x * dim;
-    int col = blockIdx.y * 256 + threadIdx.x;
+    int col = blockIdx.y * blockDim.x + threadIdx.x;
     if (col < dim) {
         float g = float(src[row_offset + col]);
         float s = 1.0f / (1.0f + expf(-g));
@@ -43,7 +43,7 @@ __global__ void silu_kernel(int dim, const T* src, T* tgt) {
 template<typename T>
 __global__ void relu_kernel(int dim, const T* src, T* tgt) {
     int row_offset = blockIdx.x * dim;
-    int col = blockIdx.y * 256 + threadIdx.x;
+    int col = blockIdx.y * blockDim.x + threadIdx.x;
     if (col < dim) {
         T v = src[row_offset + col];
         tgt[row_offset + col] = v > T(0) ? v : T(0);

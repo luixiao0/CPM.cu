@@ -219,7 +219,7 @@ struct EagleImpl : Model {
     T *prev_hidden_state, *prev_embed;
     int num_prev, num_history_tokens;
     int32_t *eagle_position_ids, *eagle_cache_length;
-    int eagle_original_length, eagle_padded_length;
+    int *eagle_original_length, eagle_padded_length;
     uint64_t *eagle_mask_2d, *tmp_mask_2d;
     T* eagle_logits;
     T* tired_history_val; int32_t* tired_history_pos;
@@ -279,6 +279,7 @@ struct EagleImpl : Model {
         offset = memory->allocate((void**)&tired_history_val, offset, this->total_tried * sizeof(T));
         offset = memory->allocate((void**)&tired_history_pos, offset, this->total_tried * sizeof(int32_t));
         offset = memory->allocate((void**)&tired_history_parent, offset, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t));
+        cudaMallocHost(&eagle_original_length, sizeof(int32_t));
 
         offset = topk_func->init_output_ptr(memory, this->topk_per_iter, offset);
         offset = topk_func_2->init_output_ptr(memory, 1, offset);
@@ -372,8 +373,8 @@ struct EagleImpl : Model {
     }
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
-        cudaMemcpy(&this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
-        this->eagle_padded_length = (this->eagle_original_length + 256 - 1) / 128 * 128;
+        cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+        this->eagle_padded_length = (this->eagle_original_length[0] + 256 - 1) / 128 * 128;
 
 
         if (this->is_first_draft) {
@@ -441,10 +442,10 @@ struct EagleImpl : Model {
         uint64_t* h_tree_mask = new uint64_t[this->tree_size];
         int32_t* h_position_ids = new int32_t[this->tree_size];
         h_tree_mask[0] = 1;
-        h_position_ids[0] = this->eagle_original_length;
+        h_position_ids[0] = this->eagle_original_length[0];
         for (int i = 1; i < this->tree_size; i++) {
             int p = tree_id[i];
-            h_position_ids[i] = this->eagle_original_length + ((p < this->topk_per_iter) ?  1 : (p - 10) / 100 + 2);
+            h_position_ids[i] = this->eagle_original_length[0] + ((p < this->topk_per_iter) ?  1 : (p - 10) / 100 + 2);
             h_tree_mask[i] = 1;
             bool is_parent_set = false;
             while (p != -1) {

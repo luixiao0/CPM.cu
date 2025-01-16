@@ -54,7 +54,8 @@ class LLM_with_tree_drafter(LLM):
         logits = self.prefill(input_ids, position_ids)
         self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
 
-        tokens = [self.tree_draft_ids[0].item()]
+        tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
+        tokens[0].copy_(self.tree_draft_ids[0])
         accept_lengths = []
         i = 0
         while i < generation_length:
@@ -75,12 +76,13 @@ class LLM_with_tree_drafter(LLM):
             )
             torch.cuda.nvtx.range_pop()
 
-            i += accept_length
             accept_lengths.append(accept_length)
-            tokens.extend(self.tree_draft_ids[:accept_length].tolist())
+            append_length = min(accept_length, generation_length - 1 - i)
+            tokens[1+i:1+i+append_length].copy_(self.tree_draft_ids[:append_length])
             self.tree_draft_ids[0] = self.tree_draft_ids[accept_length - 1]
+            i += accept_length
 
-        tokens = tokens[:generation_length]
+        tokens = tokens[:generation_length].tolist()
         avg_accept_length = sum(accept_lengths) / len(accept_lengths)
         if output_avg_accept_length:
             return self.tokenizer.decode(tokens), avg_accept_length
