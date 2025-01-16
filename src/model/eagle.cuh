@@ -32,7 +32,7 @@ __global__ void log_softmax_kernel(int32_t dim, T* input) {
     int warp_id = threadIdx.x / 32;
     int lane_id = threadIdx.x % 32;
 
-    __shared__ float s_val[16];
+    __shared__ float s_val[32];
     float mx = -TypeTraits<T>::inf();
     for (int i = threadIdx.x; i < dim; i += blockDim.x) {
         mx = fmaxf(float(input[base_idx + i]), mx);
@@ -44,8 +44,9 @@ __global__ void log_softmax_kernel(int32_t dim, T* input) {
     mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 1), mx);
     if (lane_id == 0) s_val[warp_id] = mx;
     __syncthreads();
-    if (threadIdx.x < 16) {
+    if (threadIdx.x < 32) {
         mx = s_val[threadIdx.x];
+        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 16), mx);
         mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 8), mx);
         mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 4), mx);
         mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 2), mx);
@@ -68,8 +69,9 @@ __global__ void log_softmax_kernel(int32_t dim, T* input) {
     sum += __shfl_down_sync(0xffffffff, sum, 1);
     if (lane_id == 0) s_val[warp_id] = sum;
     __syncthreads();
-    if (threadIdx.x < 16) {
+    if (threadIdx.x < 32) {
         sum = s_val[threadIdx.x];
+        sum += __shfl_down_sync(0x0000ffff, sum, 16);
         sum += __shfl_down_sync(0x0000ffff, sum, 8);
         sum += __shfl_down_sync(0x0000ffff, sum, 4);
         sum += __shfl_down_sync(0x0000ffff, sum, 2);
@@ -139,7 +141,7 @@ void repeat(const Stream& stream, int32_t num_tokens, int32_t dim, int32_t pos, 
 
 template<typename T>
 void log_softmax(const Stream& stream, int32_t num_tokens, int32_t dim, T* input) {
-    log_softmax_kernel<<<num_tokens, 512, 0, stream.stream>>>(dim, input);
+    log_softmax_kernel<<<num_tokens, 1024, 0, stream.stream>>>(dim, input);
 }
 
 void init_tree(const Stream& stream, int32_t num_tokens, uint64_t* mask_2d) {
@@ -172,6 +174,42 @@ void remap_id(const Stream& stream, int32_t num_tokens, int32_t* id_map, const i
 
 void make_arange(const Stream& stream, int32_t range, int32_t* offset, int32_t* output) {
     make_arange_kernel<<<1, range, 0, stream.stream>>>(offset, output);
+}
+
+__global__ void build_dynamic_tree_kernel(int32_t tree_size, int32_t pos_offset, int32_t topk_per_iter, const int32_t* tried_history_parent, const int32_t* topk_pos, int32_t* tree_pos, uint64_t* tree_mask, int32_t* tree_parent) {
+    __shared__ int32_t reverse_tree_id[1024];
+    int tid = threadIdx.x;
+    if (tid != 0) {
+        reverse_tree_id[topk_pos[tid-1]] = tid;
+    }
+    __syncthreads();
+    if (tid == 0) {
+        tree_mask[0] = 1;
+        tree_pos[0] = pos_offset;
+        for (int i = 1; i < tree_size; i++) {
+            int p = topk_pos[i-1];
+            tree_pos[i] = pos_offset + ((p < topk_per_iter) ?  1 : (p - topk_per_iter) / (topk_per_iter * topk_per_iter) + 2);
+            tree_mask[i] = 1ULL << reverse_tree_id[p];;
+
+            if (p < topk_per_iter) {
+                p = -1;
+            } else {
+                p = p - topk_per_iter;
+                if (p < topk_per_iter * topk_per_iter) {
+                    p = p / topk_per_iter;
+                } else {
+                    p = tried_history_parent[(p - topk_per_iter * topk_per_iter) / topk_per_iter];
+                }
+            }
+            int parent = p == -1 ? 0 : reverse_tree_id[p];
+            tree_parent[i] = parent;
+            tree_mask[i] |= tree_mask[parent];
+        }
+    }
+}
+
+void build_dynamic_tree(const Stream& stream, int32_t tree_size, int32_t pos_offset, int32_t topk_per_iter, const int32_t* tried_history_parent, const int32_t* topk_pos, int32_t* tree_pos, uint64_t* tree_mask, int32_t* tree_parent) {
+    build_dynamic_tree_kernel<<<1, tree_size, 0, stream.stream>>>(tree_size, pos_offset, topk_per_iter, tried_history_parent, topk_pos, tree_pos, tree_mask, tree_parent);
 }
 
 template<typename T>
@@ -430,45 +468,7 @@ struct EagleImpl : Model {
         this->topk_func_2->prefill(calc_stream, 1, this->tired_history_val);
 
         // build tree
-        int32_t* history_tree_parent = new int32_t[this->topk_per_iter * (this->num_iter - 1)];
-        cudaMemcpy(history_tree_parent, this->tired_history_parent, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
-        int32_t* tree_id = new int32_t[this->tree_size];
-        cudaMemcpy(tree_id+1, this->topk_func_2->topk_pos, (this->tree_size-1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
-        int32_t* tree_id_reverse = new int32_t[this->total_tried];
-        for (int i = 1; i < this->tree_size; i++) {
-            tree_id_reverse[tree_id[i]] = i;
-        }
-        int32_t* h_tree_parent = new int32_t[this->tree_size];
-        uint64_t* h_tree_mask = new uint64_t[this->tree_size];
-        int32_t* h_position_ids = new int32_t[this->tree_size];
-        h_tree_mask[0] = 1;
-        h_position_ids[0] = this->eagle_original_length[0];
-        for (int i = 1; i < this->tree_size; i++) {
-            int p = tree_id[i];
-            h_position_ids[i] = this->eagle_original_length[0] + ((p < this->topk_per_iter) ?  1 : (p - 10) / 100 + 2);
-            h_tree_mask[i] = 1;
-            bool is_parent_set = false;
-            while (p != -1) {
-                h_tree_mask[i] |= 1ULL << tree_id_reverse[p];
-                if (p < this->topk_per_iter) {
-                    p = -1;
-                } else {
-                    p = p - 10;
-                    if (p < this->topk_per_iter * this->topk_per_iter) {
-                        p = p / 10;
-                    } else {
-                        p = history_tree_parent[(p - this->topk_per_iter * this->topk_per_iter) / 10];
-                    }
-                }
-                if (is_parent_set == false) {
-                    h_tree_parent[i] = tree_id_reverse[p];
-                    is_parent_set = true;
-                }
-            }
-        }
-        cudaMemcpy(tree_parent, h_tree_parent, this->tree_size * sizeof(int32_t), cudaMemcpyHostToDevice);
-        cudaMemcpy(tree_attn_mask, h_tree_mask, this->tree_size * sizeof(uint64_t), cudaMemcpyHostToDevice);
-        cudaMemcpy(tree_position_ids, h_position_ids, this->tree_size * sizeof(int32_t), cudaMemcpyHostToDevice);
+        build_dynamic_tree(calc_stream, this->tree_size, this->eagle_original_length[0], this->topk_per_iter, this->tired_history_parent, this->topk_func_2->topk_pos, tree_position_ids, tree_attn_mask, tree_parent);
         remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, tree_draft_ids + 1);
 
         this->is_first_draft = false;
