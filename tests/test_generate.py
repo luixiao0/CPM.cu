@@ -4,11 +4,12 @@ from llamacu.speculative import LLM_with_medusa, LLM_with_eagle
 from transformers import AutoTokenizer
 from triton.testing import do_bench
 
-# path = "../../models/MiniCPM-1B-sft-llama-format"
-# path = "../../models/Llama-2-7b-hf"
-path = "../../models/vicuna-7b-v1.3"
-medusa_path = "../../models/medusa/medusa-vicuna-7b-v1.3"
-eagle_path = "../../models/eagle-vicuna-7b-v1.3"
+# path = "../../models/vicuna-7b-v1.3"
+# medusa_path = "../../models/medusa/medusa-vicuna-7b-v1.3"
+# eagle_path = "../../models/eagle-vicuna-7b-v1.3"
+path = "../../models/Meta-Llama-3-8B-Instruct"
+medusa_path = ""
+eagle_path = "../../models/EAGLE-LLaMA3-Instruct-8B"
 dtype = torch.float16
 cuda_graph = True
 num_generate = 100

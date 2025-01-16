@@ -26,7 +26,7 @@ __global__ void permute_kernel(int num_tokens, int a, int b, float4* input, floa
     for (int i = threadIdx.x; i < a; i += blockDim.x) {
         output[output_offset + i] = input[input_offset + i];
     }
-    input_offset += b;
+    input_offset += a;
     output_offset = num_tokens * a + row * b;
     for (int i = threadIdx.x; i < b; i += blockDim.x) {
         output[output_offset + i] = input[input_offset + i];
