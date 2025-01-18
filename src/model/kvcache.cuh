@@ -44,8 +44,10 @@ struct KVCacheManager {
         this->rotary_embedding->init_weight_ptr(memory);
     }
 
-    int64_t init_output_ptr(Memory* memory, int64_t offset) {
-        budget = (memory->memory_limit - offset) / (this->num_hidden_layers * 2 * this->dim * sizeof(T));
+    int64_t init_output_ptr(Memory* memory, int64_t offset, float ratio=1.0) {
+        offset = memory->allocate((void**)&this->d_flat_caches, offset, num_hidden_layers * 2 * sizeof(T*));
+
+        budget = int64_t((memory->memory_limit - offset) * ratio) / (this->num_hidden_layers * 2 * this->dim * sizeof(T));
         for (int i = 0; i < this->num_hidden_layers; i++) {
             caches.push_back(new KVCache<T>(this->dim, this->rotary_embedding));
         }
@@ -57,8 +59,7 @@ struct KVCacheManager {
             this->h_flat_caches[i * 2] = caches[i]->k_cache;
             this->h_flat_caches[i * 2 + 1] = caches[i]->v_cache;
         }
-        memory->allocate((void**)&this->d_flat_caches, offset, num_hidden_layers * 2 * sizeof(T*));
         cudaMemcpy(this->d_flat_caches, this->h_flat_caches, num_hidden_layers * 2 * sizeof(T*), cudaMemcpyHostToDevice);
-        return budget;
+        return offset;
     }
 };

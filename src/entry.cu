@@ -5,6 +5,7 @@
 #include "trait.cuh"
 #include "model/model.cuh"
 #include "model/medusa.cuh"
+#include "model/eagle.cuh"
 
 #define DTYPE_SWITCH(COND, ...)               \
   [&] {                                      \
@@ -56,13 +57,39 @@ void init_base_model(
 void init_medusa_model(
     int num_heads,
     int num_layers,
+    int topk_per_head,
+    int tree_size,
+    std::uintptr_t tree_indices,
+    std::uintptr_t draft_position_ids,
     int torch_dtype
 ) {
     DTYPE_SWITCH(torch_dtype, [&] {
         model = new MedusaImpl<elem_type>(
             (ModelImpl<elem_type>*)model,
             num_heads,
-            num_layers
+            num_layers,
+            topk_per_head,
+            tree_size,
+            reinterpret_cast<int32_t*>(tree_indices),
+            reinterpret_cast<int32_t*>(draft_position_ids)
+        );
+    });
+}
+
+void init_eagle_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new EagleImpl<elem_type>(
+            (ModelImpl<elem_type>*)model,
+            num_layers,
+            num_iter,
+            topk_per_iter,
+            tree_size
         );
     });
 }
@@ -103,21 +130,22 @@ void decode(int input_length, int padded_length, std::uintptr_t input, std::uint
     }
 }
 
-void draft(std::uintptr_t output) {
-    model->draft(reinterpret_cast<void*>(output));
+void draft(std::uintptr_t tree_draft_ids, std::uintptr_t tree_position_ids, std::uintptr_t cache_length, std::uintptr_t attn_mask, std::uintptr_t tree_parent) {
+    model->draft(reinterpret_cast<int32_t*>(tree_draft_ids), reinterpret_cast<int32_t*>(tree_position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(attn_mask), reinterpret_cast<int32_t*>(tree_parent));
 }
 
-int verify(int num_tokens, std::uintptr_t pred, std::uintptr_t gt, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t attn_mask, std::uintptr_t tree_parent) {
+int verify_and_fix(int num_tokens, std::uintptr_t pred, std::uintptr_t gt, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t attn_mask, std::uintptr_t tree_parent) {
     return model->verify(num_tokens, reinterpret_cast<int32_t*>(pred), reinterpret_cast<int32_t*>(gt), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(attn_mask), reinterpret_cast<int32_t*>(tree_parent));
 }
 
 PYBIND11_MODULE(C, m) {
     m.def("init_base_model", &init_base_model, "Init base model");
     m.def("init_medusa_model", &init_medusa_model, "Init medusa model");
+    m.def("init_eagle_model", &init_eagle_model, "Init eagle model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");
     m.def("decode", &decode, "Decode");
     m.def("draft", &draft, "Draft");
-    m.def("verify", &verify, "Verify");
+    m.def("verify_and_fix", &verify_and_fix, "Verify and fix");
 } 

@@ -18,7 +18,7 @@ struct TypeTraits<__half> {
         return 0;
     }
 
-    __host__ __device__ __inline__ constexpr __half inf() { const short v = 0x7c00; return *(reinterpret_cast<const __half *>(&(v))); }
+    static __host__ __device__ __inline__ constexpr __half inf() { const short v = 0x7c00; return *(reinterpret_cast<const __half *>(&(v))); }
 };
 
 template <>
@@ -33,5 +33,5 @@ struct TypeTraits<__nv_bfloat16> {
         return 1;
     }
 
-    __host__ __device__ __inline__ constexpr __nv_bfloat16 inf() { const short v = 0x7f80; return *(reinterpret_cast<const __nv_bfloat16 *>(&(v))); }
+    static __host__ __device__ __inline__ constexpr __nv_bfloat16 inf() { const short v = 0x7f80; return *(reinterpret_cast<const __nv_bfloat16 *>(&(v))); }
 };

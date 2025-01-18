@@ -8,7 +8,6 @@ struct Memory {
     int64_t memory_limit;
     uint8_t* memory_pool;
     int64_t model_offset;
-    int64_t kv_cache_offset;
 
     Memory(int64_t memory_limit, void* memory_pool) {
         this->memory_limit = memory_limit;

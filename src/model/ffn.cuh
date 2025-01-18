@@ -21,7 +21,7 @@ struct GatedFFN : FFN<T> {
     int intermediate_size;
     float rms_norm_eps;
 
-    RMSNorm<T> *ffn_norm;
+    Norm<T> *ffn_norm;
     Linear<T> *gate_proj, *up_proj;
     Linear<T> *down_proj;
 
