@@ -9,6 +9,7 @@ struct MedusaImplBaseW4A8PerChn : Model {
     int num_layers;
 
     W4A8PerChnModelImpl<T>* model;
+    Linear<T>* rotation;
     std::vector<ResidualBlock<T>*> blocks;
     std::vector<Linear<T>*> lm_heads;
 
@@ -26,6 +27,7 @@ struct MedusaImplBaseW4A8PerChn : Model {
         this->num_heads = num_heads;
         this->num_layers = num_layers; // asserted in python that num_layers == 1
 
+        this->rotation = new Linear<T>(model->hidden_size, model->hidden_size);
         for (int i = 0; i < num_heads; i++) {
             blocks.push_back(new ResidualBlock<T>(model->hidden_size, model->hidden_size));
             lm_heads.push_back(new Linear<T>(model->hidden_size, model->vocab_size));
@@ -33,6 +35,7 @@ struct MedusaImplBaseW4A8PerChn : Model {
     }
 
     void init_weight_ptr(Memory* memory) {
+        rotation->init_weight_ptr(memory);
         for (int i = 0; i < num_heads; i++) {
             blocks[i]->init_weight_ptr(memory);
             lm_heads[i]->init_weight_ptr(memory);
@@ -40,6 +43,7 @@ struct MedusaImplBaseW4A8PerChn : Model {
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        offset = rotation->init_output_ptr(memory, num_tokens, offset);
         for (int i = 0; i < num_heads; i++) {
             offset = blocks[i]->init_output_ptr(memory, num_tokens, offset);
             // lm_head do not allocate, directly output
@@ -61,15 +65,19 @@ struct MedusaImplBaseW4A8PerChn : Model {
 
     void load_to_storage(std::string name, void* ptr) {
         if (name.substr(0, 6) == "medusa") {
-            std::regex layer_regex("medusa\\.(\\d+)\\.(\\d+).*");
-            std::smatch matches;
-            if (std::regex_search(name, matches, layer_regex)) {
-                int head_idx = std::stoi(matches[1]);
-                int layer_idx = std::stoi(matches[2]);
-                if (layer_idx == 0) {
-                    blocks[head_idx]->load_to_storage(name, ptr);
-                } else {
-                    lm_heads[head_idx]->load_to_storage(name, ptr);
+            if (name.find("rotation") != std::string::npos) {
+                this->rotation->load_to_storage(name, ptr);
+            } else {
+                std::regex layer_regex("medusa\\.(\\d+)\\.(\\d+).*");
+                std::smatch matches;
+                if (std::regex_search(name, matches, layer_regex)) {
+                    int head_idx = std::stoi(matches[1]);
+                    int layer_idx = std::stoi(matches[2]);
+                    if (layer_idx == 0) {
+                        blocks[head_idx]->load_to_storage(name, ptr);
+                    } else {
+                        lm_heads[head_idx]->load_to_storage(name, ptr);
+                    }
                 }
             }
         } else {
@@ -87,8 +95,9 @@ struct MedusaImplBaseW4A8PerChn : Model {
     }
 
     void draft(void* output) {
+        rotation->prefill(1, this->last_token_hidden_state);
         for (int i = 0; i < num_heads; i++) {
-            blocks[i]->prefill(1, this->last_token_hidden_state);
+            blocks[i]->prefill(1, this->rotation->output);
             lm_heads[i]->prefill(1, blocks[i]->output, (T*)output + i * this->model->vocab_size);
         }
     }
