@@ -52,9 +52,10 @@ struct W4A8PerChnLinear{
         }
     }
 
-    void prefill(int32_t num_tokens, int8_t* input, half* input_scale, half* input_sum, T* tgt=nullptr) {
+    void prefill(const Stream& stream, int32_t num_tokens, int8_t* input, half* input_scale, half* input_sum, T* tgt=nullptr) {
         if (tgt == nullptr) tgt = this->output;
         w4a8_per_chn_gemm_forward_cuda(
+            stream,
             input,
             weight,
             s1_scales,

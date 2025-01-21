@@ -4,7 +4,7 @@
 
 namespace {
 template<typename T>
-__global__ void rotary_embedding(int num_heads, int num_heads_kv, int half_dim, const float *inv_freq, const int* pos, T* q, T* k) {
+__global__ void rotary_embedding_kernel(int num_heads, int num_heads_kv, int half_dim, const float *inv_freq, const int* pos, T* q, T* k) {
     int tid = threadIdx.x;
 
     int p = pos[blockIdx.x];
@@ -34,6 +34,11 @@ __global__ void rotary_embedding(int num_heads, int num_heads_kv, int half_dim, 
 }
 }
 
+template<typename T>
+void rotary_embedding(const Stream& stream, int num_tokens, int num_heads, int num_heads_kv, int half_dim, const float *inv_freq, const int* pos, T* q, T* k) {
+    rotary_embedding_kernel<T><<<num_tokens, 512, 0, stream.stream>>>(num_heads, num_heads_kv, half_dim, inv_freq, pos, q, k);
+}
+
 template <typename T>
 struct RotaryEmbedding {
     int half_dim;
@@ -57,7 +62,7 @@ struct RotaryEmbedding {
         }
     }
 
-    void prefill(int32_t num_tokens, int num_heads, int num_heads_kv, T* q, T* k, int32_t* position_ids) {
-        rotary_embedding<T><<<num_tokens, 256, 0, calc_stream>>>(num_heads, num_heads_kv, half_dim, inv_freq, position_ids, q, k);
+    void prefill(const Stream& stream, int32_t num_tokens, int num_heads, int num_heads_kv, T* q, T* k, int32_t* position_ids) {
+        rotary_embedding(stream, num_tokens, num_heads, num_heads_kv, this->half_dim, this->inv_freq, position_ids, q, k);
     }
 };

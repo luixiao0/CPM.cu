@@ -50,7 +50,7 @@
       dense_kernel0<CTA_M, CTA_N, CTA_K, WARP_M, WARP_N, WARP_K, STAGES>;        \
   cudaFuncSetAttribute(kernel_func, cudaFuncAttributeMaxDynamicSharedMemorySize, \
                        kSmemByteSize);                                           \
-  kernel_func<<<num_blocks, threads_per_block, kSmemByteSize, calc_stream>>>(                 \
+  kernel_func<<<num_blocks, threads_per_block, kSmemByteSize, stream.stream>>>(                 \
       in_feats, kernel, wscales, ascales, out_feats, num_in_feats, num_out_channels,               \
       num_in_channels);
 
@@ -530,7 +530,8 @@ __global__ void dense_kernel0(int8_t *__restrict__ A, int8_t *__restrict__ B,
   }
 }
 
-void w8a8_gemm_forward_cuda(int8_t *in_feats,
+void w8a8_gemm_forward_cuda(const Stream& stream,
+                            int8_t *in_feats,
                             int8_t *kernel,
                             half2 *wscales,
                             half *ascales,

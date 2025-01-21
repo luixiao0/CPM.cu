@@ -81,12 +81,13 @@ struct W4A8PerChnGatedFFN{
         }
     }
 
-    void prefill(int32_t num_tokens, T* input, void* output=nullptr) {
-        this->ffn_norm->prefill(num_tokens, input);
+    void prefill(const Stream& stream, int32_t num_tokens, T* input, void* output=nullptr) {
+        this->ffn_norm->prefill(stream, num_tokens, input);
         // if (output == nullptr) {
         //     output = this->gated_up;
         // }
         w4a8_per_chn_gemm_forward_cuda(
+            stream,
             this->ffn_norm->output,
             this->gate_proj->weight,
             this->gate_proj->s1_scales,
@@ -99,11 +100,11 @@ struct W4A8PerChnGatedFFN{
             num_tokens,
             intermediate_size*2
         );
-        gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
+        gated_silu_interleaved<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
 
-        this->down_quant_invoker->invoke(this->gated_up, num_tokens);
-        this->down_proj->prefill(num_tokens, this->down_quant_invoker->output, this->down_quant_invoker->output_scale, this->down_quant_invoker->output_sum);
-        elementwise_add<T>(num_tokens, this->hidden_size, input, this->down_proj->output, input);
+        this->down_quant_invoker->invoke(stream, this->gated_up, num_tokens);
+        this->down_proj->prefill(stream, num_tokens, this->down_quant_invoker->output, this->down_quant_invoker->output_scale, this->down_quant_invoker->output_sum);
+        elementwise_add<T>(stream, num_tokens, this->hidden_size, input, this->down_proj->output, input);
     }
 
     

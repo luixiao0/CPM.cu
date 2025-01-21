@@ -117,13 +117,14 @@ struct Quantizer
     }
     
 
-    void invoke(T *input,
+    void invoke(const Stream& stream,
+                T *input,
                 int num_tokens)
     {
         dim3 grid(num_tokens);
         dim3 block(std::min(dim, 1024));
 
-        quant_kernel<T, half *, true><<<grid, block, 0, calc_stream>>>(input, output, output_scale, num_tokens, dim);
+        quant_kernel<T, half *, true><<<grid, block, 0, stream.stream>>>(input, output, output_scale, num_tokens, dim);
 
     }
 };
@@ -151,7 +152,8 @@ struct QuantizerFuseSum
         return memory->allocate((void**)&this->output_sum, scale_offset, num_tokens * sizeof(half));
     }
 
-    void invoke(T *input,
+    void invoke(const Stream& stream,
+                T *input,
                 int num_tokens)
     {
         // 配置线程块和线程网格
@@ -160,7 +162,7 @@ struct QuantizerFuseSum
 
         // 调用核函数
         // quant_kernel<T, half *, true><<<grid, block, 0, calc_stream>>>(input, output, scale, num_tokens, dim);
-        quant_kernel_fuse_sum<T, half *, true><<<grid, block, 0, calc_stream>>>(
+        quant_kernel_fuse_sum<T, half *, true><<<grid, block, 0, stream.stream>>>(
         input, output, output_sum, output_scale, num_tokens, dim);
 
         // 检查内核调用的错误

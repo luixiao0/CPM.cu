@@ -63,26 +63,17 @@ print(f"our prefill: {num_tokens / our_time * 1000} tok/s")
 input_ids = torch.randint(0, 32000, (1, num_verify), dtype=torch.int32, device="cuda")
 position_ids = torch.tensor([[num_tokens] * num_verify], dtype=torch.int32, device="cuda")
 cache_length = torch.tensor([num_tokens], dtype=torch.int32, device="cuda")
-if num_verify > 1:
-    mask_2d = torch.randint(0, 2, (num_verify, num_verify), dtype=torch.int32, device="cuda")
-    mask_2d = mask_2d & torch.tril(torch.ones((num_verify, num_verify), dtype=torch.int32, device="cuda"), diagonal=0) # 1 means visible
-
-    from llamacu.medusa import pack_mask
-    mask_2d_packed = pack_mask(mask_2d)
-else:
-    mask_2d = None
-    mask_2d_packed = None
 
 with torch.no_grad():
     torch.cuda.nvtx.range_push("baseline decode")
-    baseline_decode = lambda: model(input_ids, position_ids=position_ids, use_cache=True, past_key_values=past_key_values, mask_2d=mask_2d, return_dict=False)[0]
+    baseline_decode = lambda: model(input_ids, position_ids=position_ids, use_cache=True, past_key_values=past_key_values, return_dict=False)[0]
     logits = baseline_decode()
     torch.cuda.nvtx.range_pop()
     if Bench:
         time = do_bench(baseline_decode, warmup=10, rep=1000)
 
 torch.cuda.nvtx.range_push("our decode")
-our_decode = lambda: llm.decode(input_ids, position_ids, cache_length, mask_2d=mask_2d_packed)
+our_decode = lambda: llm.decode(input_ids, position_ids, cache_length)
 our_logits = our_decode()
 torch.cuda.nvtx.range_pop()
 if Bench:

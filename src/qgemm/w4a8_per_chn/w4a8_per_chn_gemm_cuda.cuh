@@ -8,8 +8,10 @@
 
 #pragma once
 #include <cuda_fp16.h>
+#include "../../utils.cuh"
 
-void w4a8_per_chn_gemm_forward_cuda(int8_t* in_feats, 
+void w4a8_per_chn_gemm_forward_cuda(const Stream& stream,
+                                int8_t* in_feats, 
                                 int8_t* kernel, 
                                 half2* wscales, 
                                 half* ascales, 

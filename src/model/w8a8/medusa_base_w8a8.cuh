@@ -7,6 +7,10 @@ template<typename T>
 struct MedusaImplBaseW8A8 : Model {
     int num_heads;
     int num_layers;
+    int topk_per_head;
+    int tree_size;
+    int32_t* tree_indices;
+    int32_t* draft_position_ids;
 
     W8A8ModelImpl<T>* model;
     std::vector<ResidualBlock<T>*> blocks;
@@ -14,22 +18,33 @@ struct MedusaImplBaseW8A8 : Model {
 
     T* last_token_hidden_state;
     int32_t *h_best, *d_best;
+    T* logits;
 
     T* tmp_kvcache;
+    functions::TopK<T>* topk_func;
 
     MedusaImplBaseW8A8(
         W8A8ModelImpl<T>* model,
         int num_heads,
-        int num_layers
+        int num_layers,
+        int topk_per_head,
+        int tree_size,
+        int32_t* tree_indices,
+        int32_t* draft_position_ids
     ) {
         this->model = model;
         this->num_heads = num_heads;
         this->num_layers = num_layers; // asserted in python that num_layers == 1
+        this->topk_per_head = topk_per_head;
+        this->tree_size = tree_size;
+        this->tree_indices = tree_indices;
+        this->draft_position_ids = draft_position_ids;
 
         for (int i = 0; i < num_heads; i++) {
             blocks.push_back(new ResidualBlock<T>(model->hidden_size, model->hidden_size));
             lm_heads.push_back(new Linear<T>(model->hidden_size, model->vocab_size));
         }
+        topk_func = new functions::TopK<T>(model->vocab_size, topk_per_head);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -44,6 +59,9 @@ struct MedusaImplBaseW8A8 : Model {
             offset = blocks[i]->init_output_ptr(memory, num_tokens, offset);
             // lm_head do not allocate, directly output
         } 
+        offset = memory->allocate((void**)&logits, offset, this->num_heads * this->model->vocab_size * sizeof(T)); // lm_head
+        offset = topk_func->init_output_ptr(memory, this->num_heads, offset);
+
         offset = memory->allocate((void**)&d_best, offset, 2 * sizeof(int32_t));
         cudaMallocHost(&h_best, 2 * sizeof(int32_t));
         offset = memory->allocate((void**)&tmp_kvcache, offset, 64 * this->model->kv_caches->num_hidden_layers * 2 * this->model->kv_caches->dim * sizeof(T));
@@ -55,7 +73,7 @@ struct MedusaImplBaseW8A8 : Model {
         this->init_weight_ptr(this->model->memory);
         int64_t offset = this->model->init_output_ptr(this->model->memory, this->model->chunk_length, this->model->memory->model_offset);
         int64_t kv_cache_offset = this->init_output_ptr(this->model->memory, 1, offset);
-        this->model->init_kv_cache(kv_cache_offset);
+        this->model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset);
         return this->model->kv_caches->budget;
     }
 
@@ -86,18 +104,20 @@ struct MedusaImplBaseW8A8 : Model {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
     }
 
-    void draft(void* output) {
+    void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t*, int32_t*) {
         for (int i = 0; i < num_heads; i++) {
-            blocks[i]->prefill(1, this->last_token_hidden_state);
-            lm_heads[i]->prefill(1, blocks[i]->output, (T*)output + i * this->model->vocab_size);
+            blocks[i]->prefill(calc_stream, 1, this->last_token_hidden_state);
+            lm_heads[i]->prefill(calc_stream, 1, blocks[i]->output, this->logits + i * this->model->vocab_size);
         }
+        topk_func->prefill(calc_stream, num_heads, this->logits);
+        build_tree(calc_stream, this->tree_size, topk_func->topk_pos, this->tree_indices, this->draft_position_ids, tree_draft_ids, tree_position_ids, cache_length);
     }
 
-    int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) {
-        verify_kernel<<<1, 64, 0, calc_stream>>>(num_tokens, pred, gt, position_ids, cache_length, attn_mask, tree_parent, d_best);
-        cudaMemcpyAsync(h_best, d_best, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, calc_stream);
-        cudaStreamSynchronize(calc_stream);
-        fix_kv_cache(h_best[0], this->model->kv_caches->num_hidden_layers * 2, this->model->kv_caches->dim, pred, gt, cache_length, this->model->kv_caches->d_flat_caches, this->tmp_kvcache);
+    int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, int32_t* tree_parent) {
+        verify_draft(calc_stream, num_tokens, pred, gt, position_ids, cache_length, mask_2d, tree_parent, this->d_best);
+        cudaMemcpyAsync(this->h_best, this->d_best, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, calc_stream.stream);
+        cudaStreamSynchronize(calc_stream.stream);
+        fix_kv_cache(calc_stream, h_best[0], this->model->kv_caches->num_hidden_layers * 2, this->model->kv_caches->dim, pred, gt, cache_length, this->model->kv_caches->d_flat_caches, this->tmp_kvcache);
         this->last_token_hidden_state = this->model->norm->output + h_best[1] * this->model->hidden_size;
         return h_best[0];
     }

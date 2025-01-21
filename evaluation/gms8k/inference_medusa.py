@@ -3,7 +3,8 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.gms8k.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.medusa import LLM_with_medusa
+from llamacu.speculative.medusa import LLM_with_medusa
+from llamacu.speculative.medusa_choices import *
 
 
 def medusa_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators=[]):
@@ -113,7 +114,7 @@ if __name__ == "__main__":
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
         medusa_num_heads=args.medusa_num_heads,
-        medusa_choices=args.medusa_choices,
+        medusa_choices=eval(args.medusa_choices),
     )
     model.init_storage()
     model.load_from_hf()

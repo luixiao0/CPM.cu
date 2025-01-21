@@ -327,7 +327,7 @@ struct RMSNormQuant {
         cudaMemcpy((void*)weight, ptr, dim * sizeof(T), cudaMemcpyHostToDevice);
     }
 
-    void prefill(int32_t num_tokens, T* input, half* tgt=nullptr) {
+    void prefill(const Stream& stream, int32_t num_tokens, T* input, half* tgt=nullptr) {
         dim3 grid(num_tokens);
         dim3 block(std::min(dim, 1024));
         block.x = 32 * ((block.x + 31) / 32);
@@ -335,7 +335,7 @@ struct RMSNormQuant {
         // using T = typename FloatTypeConverter<scalar_t>::Type;
         if (use_per_token_quant) {
             // per-token
-            generalLayerNorm<T, half><<<grid, block, 0, calc_stream>>>(
+            generalLayerNorm<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, nullptr, output_scale,
@@ -348,7 +348,7 @@ struct RMSNormQuant {
         } else {
             // per-tensor
             // not support
-            generalLayerNorm<T, half><<<grid, block, 0, calc_stream>>>(
+            generalLayerNorm<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, output_scale, nullptr,
@@ -391,7 +391,7 @@ struct RMSNormQuantFuseSum {
         cudaMemcpy((void*)weight, ptr, dim * sizeof(T), cudaMemcpyHostToDevice);
     }
 
-    void prefill(int32_t num_tokens, T* input, half* tgt=nullptr) {
+    void prefill(const Stream& stream, int32_t num_tokens, T* input, half* tgt=nullptr) {
         dim3 grid(num_tokens);
         dim3 block(std::min(dim, 1024));
         block.x = 32 * ((block.x + 31) / 32);
@@ -399,7 +399,7 @@ struct RMSNormQuantFuseSum {
         // using T = typename FloatTypeConverter<scalar_t>::Type;
         if (use_per_token_quant) {
             // per-token
-            generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, calc_stream>>>(
+            generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, output_sum, nullptr, output_scale,
@@ -412,7 +412,7 @@ struct RMSNormQuantFuseSum {
         } else {
             // per-tensor
             // not support
-            generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, calc_stream>>>(
+            generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, nullptr, output_scale, nullptr,

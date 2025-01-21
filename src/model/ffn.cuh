@@ -7,10 +7,12 @@
 
 template <typename T>
 struct FFN {
+    T* output;
     virtual void init_weight_ptr(Memory* memory) = 0;
     virtual int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
-    virtual void prefill(int32_t num_tokens, T* input) = 0;
+    virtual void prefill(const Stream& stream, int32_t num_tokens, T* input, T* prev_output) = 0;
+    virtual void decode(const Stream& stream, int32_t num_tokens, T* input, T* prev_output) = 0;
 };
 
 template <typename T>
@@ -19,7 +21,7 @@ struct GatedFFN : FFN<T> {
     int intermediate_size;
     float rms_norm_eps;
 
-    RMSNorm<T> *ffn_norm;
+    Norm<T> *ffn_norm;
     Linear<T> *gate_proj, *up_proj;
     Linear<T> *down_proj;
 
@@ -48,7 +50,9 @@ struct GatedFFN : FFN<T> {
         int64_t gate_proj_end = this->gate_proj->init_output_ptr(memory, num_tokens, ffn_norm_end);
         int64_t up_proj_end = this->up_proj->init_output_ptr(memory, num_tokens, gate_proj_end);
         int64_t gated_up_end = memory->allocate((void**)&this->gated_up, up_proj_end, num_tokens * intermediate_size * sizeof(T));
-        return gated_up_end;
+        int64_t down_proj_end = this->down_proj->init_output_ptr(memory, num_tokens, gated_up_end);
+        this->output = this->down_proj->output;
+        return down_proj_end;
     }
 
     void load_to_storage(std::string name, void* ptr) {
@@ -65,13 +69,19 @@ struct GatedFFN : FFN<T> {
         }
     }
 
-    void prefill(int32_t num_tokens, T* input) {
-        this->ffn_norm->prefill(num_tokens, input);
-        // this->gate_proj->prefill(num_tokens, this->ffn_norm->output);
-        // this->up_proj->prefill(num_tokens, this->ffn_norm->output);
-        // gated_silu<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
-        linear<T>(num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
-        gated_silu_interleaved<T>(num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
-        this->down_proj->prefill(num_tokens, this->gated_up, input, true);
+    void prefill(const Stream& stream, int32_t num_tokens, T* input, T* prev_output) {
+        this->ffn_norm->prefill(stream, num_tokens, input, prev_output);
+
+        // this->gate_proj->prefill(stream, num_tokens, this->ffn_norm->output);
+        // this->up_proj->prefill(stream, num_tokens, this->ffn_norm->output);
+        // gated_silu<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
+        linear<T>(stream, num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
+        gated_silu_interleaved<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
+
+        this->down_proj->prefill(stream, num_tokens, this->gated_up);
+    }
+
+    void decode(const Stream& stream, int32_t num_tokens, T* input, T* prev_output) {
+        prefill(stream, num_tokens, input, prev_output);
     }
 };

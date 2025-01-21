@@ -1,6 +1,4 @@
 #pragma once
-#include "../../utils.cuh"
-#include "../memory.cuh"
 #include "../norm.cuh"
 #include "w8a8_attn.cuh"
 #include "w8a8_ffn.cuh"
@@ -46,12 +44,12 @@ struct W8A8Layer {
     }
 
     void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input, int32_t* position_ids, KVCache<T>* kv_cache, void* tgt=nullptr) {
-        this->attn->prefill(num_tokens, num_history_tokens, input, position_ids, kv_cache);
-        this->ffn->prefill(num_tokens, input);
+        this->attn->prefill(calc_stream, num_tokens, num_history_tokens, input, position_ids, kv_cache);
+        this->ffn->prefill(calc_stream, num_tokens, input);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache, void* tgt=nullptr) {
-        this->attn->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, kv_cache);
-        this->ffn->prefill(num_tokens, input);
+    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache, void* tgt=nullptr) {
+        this->attn->decode(calc_stream, num_tokens, padded_length, input, position_ids, cache_length, mask, kv_cache);
+        this->ffn->prefill(calc_stream, num_tokens, input);
     }
 };

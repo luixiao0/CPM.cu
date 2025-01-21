@@ -45,9 +45,10 @@ struct W8A8Linear{
         }
     }
 
-    void prefill(int32_t num_tokens, int8_t* input, half* input_scale, T* tgt=nullptr) {
+    void prefill(const Stream& stream, int32_t num_tokens, int8_t* input, half* input_scale, T* tgt=nullptr) {
         if (tgt == nullptr) tgt = this->output;
         w8a8_gemm_forward_cuda(
+            stream,
             input,
             weight,
             weight_scale,

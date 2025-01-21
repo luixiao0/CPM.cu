@@ -2,8 +2,7 @@
 
 bool initialized = false;
 
-cudaStream_t calc_stream;
-cublasHandle_t cublas_handle;
+Stream calc_stream;
 
 int graphCreated_padding_length = -1;
 int graphCreated_input_length = -1;
@@ -12,8 +11,8 @@ cudaGraphExec_t graphExec;
 
 void init_resources() {
   if (initialized) return;
-  cudaCheck(cudaStreamCreate(&calc_stream));
-  cublasCheck(cublasCreate(&cublas_handle));
-  cublasCheck(cublasSetStream(cublas_handle, calc_stream));
+  cudaCheck(cudaStreamCreate(&calc_stream.stream));
+  cublasCheck(cublasCreate(&calc_stream.cublas_handle));
+  cublasCheck(cublasSetStream(calc_stream.cublas_handle, calc_stream.stream));
   initialized = true;
 }

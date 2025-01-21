@@ -87,15 +87,15 @@ struct W8A8Attention {
         }
     }
 
-    void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input, int32_t* position_ids, KVCache<T>* kv_cache) {
+    void prefill(const Stream& stream, int32_t num_tokens, int32_t num_history_tokens, T* input, int32_t* position_ids, KVCache<T>* kv_cache) {
         T* k_cache = kv_cache->offset_k(num_history_tokens);
         T* v_cache = kv_cache->offset_v(num_history_tokens);
 
-        this->attn_norm->prefill(num_tokens, input);
-        this->q_proj->prefill(num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-        this->k_proj->prefill(num_tokens, this->attn_norm->output, this->attn_norm->output_scale, k_cache);
-        this->v_proj->prefill(num_tokens, this->attn_norm->output, this->attn_norm->output_scale, v_cache);
-        kv_cache->rotary_embedding->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
+        this->attn_norm->prefill(stream, num_tokens, input);
+        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, k_cache);
+        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, v_cache);
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -110,7 +110,7 @@ struct W8A8Attention {
             kv_cache->k_cache,
             kv_cache->v_cache,
             nullptr,
-            nullptr,
+            Mask(nullptr),
             this->attn_output,
             this->softmax_lse,
             this->softmax_lse_accum,
@@ -120,27 +120,28 @@ struct W8A8Attention {
             -1,
             -1,
             0,
-            calc_stream
+            stream.stream
         );
 
         // flash attention and put output to attn_norm->output
-        this->o_quant_invoker->invoke(this->attn_output, num_tokens);
-        this->o_proj->prefill(num_tokens, this->o_quant_invoker->output, this->o_quant_invoker->output_scale);
-        elementwise_add<T>(num_tokens, this->hidden_size, input, this->o_proj->output, input);
+        this->o_quant_invoker->invoke(stream, this->attn_output, num_tokens);
+        this->o_proj->prefill(stream, num_tokens, this->o_quant_invoker->output, this->o_quant_invoker->output_scale);
+        elementwise_add<T>(stream, num_tokens, this->hidden_size, input, this->o_proj->output, input);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, KVCache<T>* kv_cache) {
-        this->attn_norm->prefill(num_tokens, input);
+    void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
+        this->attn_norm->prefill(stream, num_tokens, input);
         T *q, *k, *v;
         if (num_tokens > 1) {
-            this->q_proj->prefill(num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-            this->k_proj->prefill(num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-            this->v_proj->prefill(num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+            this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+            this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+            this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
             q = this->q_proj->output;
             k = this->k_proj->output;
             v = this->v_proj->output;
         } else {
             w8a8_gemm_forward_cuda(
+                stream,
                 this->attn_norm->output,
                 this->q_proj->weight,
                 this->q_proj->weight_scale,
@@ -155,9 +156,9 @@ struct W8A8Attention {
             k = q + this->num_attention_heads * this->head_dim;
             v = k + this->num_key_value_heads * this->head_dim;
         }
-        kv_cache->rotary_embedding->prefill(num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
-        copy_to_kvcache(num_tokens, k, v, kv_cache, cache_length);
+        copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -172,7 +173,7 @@ struct W8A8Attention {
             kv_cache->k_cache,
             kv_cache->v_cache,
             cache_length,
-            mask_2d,
+            mask,
             this->attn_output,
             this->softmax_lse,
             this->softmax_lse_accum,
@@ -182,13 +183,13 @@ struct W8A8Attention {
             -1,
             -1,
             0,
-            calc_stream
+            stream.stream
         );
 
         // flash attention and put output to attn_norm->output
-        this->o_quant_invoker->invoke(this->attn_output, num_tokens);
-        this->o_proj->prefill(num_tokens, this->o_quant_invoker->output, this->o_quant_invoker->output_scale);
-        elementwise_add<T>(num_tokens, this->hidden_size, input, this->o_proj->output, input);
+        this->o_quant_invoker->invoke(stream, this->attn_output, num_tokens);
+        this->o_proj->prefill(stream, num_tokens, this->o_quant_invoker->output, this->o_quant_invoker->output_scale);
+        elementwise_add<T>(stream, num_tokens, this->hidden_size, input, this->o_proj->output, input);
     }
 };
 
