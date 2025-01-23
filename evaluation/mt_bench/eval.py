@@ -95,7 +95,7 @@ def get_model_answers(
         # torch.manual_seed(0)
         # conv = get_conversation_template("vicuna")
         conv = get_conversation_template(converse_template)
-        if "llama-2" in converse_template:
+        if "llama-2" in converse_template or "llama-3" in converse_template:
             sys_p = "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
             conv.system_message = sys_p
         conv.messages = []
@@ -177,7 +177,7 @@ def get_model_answers(
             # torch.manual_seed(i)
             # conv = get_conversation_template("vicuna")
             conv = get_conversation_template(converse_template)
-            if "llama-2" in converse_template:
+            if "llama-2" in converse_template or "llama-3" in converse_template:
                 sys_p = "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
                 conv.system_message = sys_p
             conv.messages = []
