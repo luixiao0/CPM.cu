@@ -4,7 +4,7 @@ Model_Path=/home/ydzhang/checkpoints/neuralmagic/Meta-Llama-3-8B-Instruct-quanti
 Meudsa_Path=/home/ydzhang/checkpoints/predibase/Meta-Llama-3-8B-Instruct-medusa-full
 Model_id="llama-3-8b-instruct"
 
-python3 evaluation/gms8k/inference_medusa_base_w8a8.py \
+python3 evaluation/gsm8k/inference_medusa_base_w8a8.py \
     --model-path $Model_Path \
     --medusa-path $Meudsa_Path \
     --cuda-graph \

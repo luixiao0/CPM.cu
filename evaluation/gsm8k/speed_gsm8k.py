@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from pathlib import Path
 
 
-def speed(jsonl_file, jsonl_file_base, checkpoint_path, task="gms8k", report=True):
+def speed(jsonl_file, jsonl_file_base, checkpoint_path, task="gsm8k", report=True):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
 
     data = []

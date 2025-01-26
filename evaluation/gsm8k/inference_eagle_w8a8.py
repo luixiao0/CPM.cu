@@ -1,34 +1,37 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.gms8k.eval import run_eval
+from evaluation.gsm8k.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.llama_w4a8_per_chn import W4A8PerChnLLM
+from llamacu.speculative.eagle_base_w8a8 import W8A8LLM_with_eagle
 
 
-def baseline_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators=[]):
+def w8a8_eagle_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators=[]):
     input_ids = input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids = model.generate(
+    output_ids, accept_length_list, model_step = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    step = new_token
-    accept_length_list = [1] * new_token
-    return output_ids, new_token, step, accept_length_list
+    return output_ids, new_token, model_step, accept_length_list
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--eagle-path",
         type=str,
         default=None,
     )
@@ -45,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bench-name",
         type=str,
-        default="gms8k",
+        default="gsm8k",
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
@@ -79,6 +82,21 @@ if __name__ == "__main__":
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
     )
+    parser.add_argument(
+        "--eagle-num-iter",
+        type=int,
+        default=6,
+    )
+    parser.add_argument(
+        "--eagle-topk-per-iter",
+        type=int,
+        default=10,
+    )
+    parser.add_argument(
+        "--eagle-tree-size",
+        type=int,
+        default=60,
+    )
 
     args = parser.parse_args()
 
@@ -92,12 +110,16 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A8PerChnLLM(
-        path=args.model_path,
+    model = W8A8LLM_with_eagle(
+        base_path=args.model_path,
+        eagle_path=args.eagle_path,
         memory_limit=args.memory_limit,
         chunk_length=max_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
+        num_iter=args.eagle_num_iter,
+        topk_per_iter=args.eagle_topk_per_iter,
+        tree_size=args.eagle_tree_size,
     )
     model.init_storage()
     model.load_from_hf()
@@ -118,10 +140,9 @@ if __name__ == "__main__":
         model=model,
         tokenizer=tokenizer,
         data_path=args.bench_path,
-        forward_func=baseline_forward,
+        forward_func=w8a8_eagle_forward,
         model_id=args.model_id,
         answer_file=answer_file,
         max_new_tokens=args.max_new_tokens,
         max_length=args.max_length,
     )
-

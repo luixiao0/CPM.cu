@@ -1,13 +1,13 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.gms8k.eval import run_eval
+from evaluation.gsm8k.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.eagle_base_w8a8 import W8A8LLM_with_eagle
+from llamacu.speculative.eagle_base_w4a8_per_chn import W4A8PerChnLLM_with_eagle
 
 
-def w8a8_eagle_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
-    input_ids = inputs.input_ids.int()
+def w4a8_per_chn_eagle_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators=[]):
+    input_ids = input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bench-name",
         type=str,
-        default="gms8k",
+        default="gsm8k",
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W8A8LLM_with_eagle(
+    model = W4A8PerChnLLM_with_eagle(
         base_path=args.model_path,
         eagle_path=args.eagle_path,
         memory_limit=args.memory_limit,
@@ -140,7 +140,7 @@ if __name__ == "__main__":
         model=model,
         tokenizer=tokenizer,
         data_path=args.bench_path,
-        forward_func=w8a8_eagle_forward,
+        forward_func=w4a8_per_chn_eagle_forward,
         model_id=args.model_id,
         answer_file=answer_file,
         max_new_tokens=args.max_new_tokens,

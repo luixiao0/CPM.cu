@@ -1,7 +1,7 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.gms8k.eval import run_eval
+from evaluation.gsm8k.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
 from llamacu.llama import LLM
 
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bench-name",
         type=str,
-        default="gms8k",
+        default="gsm8k",
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
