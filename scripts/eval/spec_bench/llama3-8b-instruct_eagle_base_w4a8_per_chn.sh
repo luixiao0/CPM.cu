@@ -9,7 +9,7 @@ python3 evaluation/spec_bench/inference_eagle_w4a8_per_chn.py \
     --cuda-graph \
     --model-id ${Model_id}_eagle_iter_3_tree_30 \
     --memory-limit 0.80 \
-    --bench-name "mt_bench" \
+    --bench-name "spec_bench" \
     --dtype "float16" \
     --chat-template "llama-3" \
     --eagle-num-iter 3 \

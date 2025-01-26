@@ -1,13 +1,13 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.mt_bench.eval import run_eval
+from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.medusa import LLM_with_medusa
+from llamacu.speculative.medusa_base_w4a8_per_chn import W4A8PerChnLLM_with_medusa
 from llamacu.speculative.medusa_choices import *
 
 
-def medusa_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def medusa_base_w4a8_per_chn_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bench-name",
         type=str,
-        default="mt_bench",
+        default="spec_bench",
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = LLM_with_medusa(
+    model = W4A8PerChnLLM_with_medusa(
         base_path=args.model_path,
         medusa_path=args.medusa_path,
         memory_limit=args.memory_limit,
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=medusa_forward,
+        forward_func=medusa_base_w4a8_per_chn_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

@@ -9,7 +9,7 @@ python3 evaluation/spec_bench/inference_medusa_base_w4a8_per_chn.py \
     --cuda-graph \
     --model-id ${Model_id}_medusa_base_w4a8_per_chn_tree_32 \
     --memory-limit 0.8 \
-    --bench-name "mt_bench" \
+    --bench-name "spec_bench" \
     --dtype "float16" \
     --chat-template "llama-3" \
     --medusa-num-heads 3 \

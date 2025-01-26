@@ -1,38 +1,34 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.mt_bench.eval import run_eval
+from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.medusa_base_w8a8 import W8A8LLM_with_medusa
-from llamacu.speculative.medusa_choices import *
+from llamacu.llama_w4a8_per_chn import W4A8PerChnLLM
 
 
-def medusa_base_w8a8_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def baseline_w4a8_per_chn_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, accept_length_list, model_step = model.generate(
+    output_ids = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    return output_ids, new_token, model_step, accept_length_list
+    step = new_token
+    accept_length_list = [1] * new_token
+    return output_ids, new_token, step, accept_length_list
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-path",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
-        "--medusa-path",
         type=str,
         default=None,
     )
@@ -49,7 +45,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bench-name",
         type=str,
-        default="mt_bench",
+        default="spec_bench",
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
@@ -99,16 +95,6 @@ if __name__ == "__main__":
         type=str,
         default="llama-2",
     )
-    parser.add_argument(
-        "--medusa-num-heads",
-        type=int,
-        default=4,
-    )
-    parser.add_argument(
-        "--medusa-choices",
-        type=str,
-        default="mc_sim_7b_63",
-    )
 
     args = parser.parse_args()
 
@@ -123,15 +109,12 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W8A8LLM_with_medusa(
-        base_path=args.model_path,
-        medusa_path=args.medusa_path,
+    model = W4A8PerChnLLM(
+        path=args.model_path,
         memory_limit=args.memory_limit,
         chunk_length=max_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
-        medusa_num_heads=args.medusa_num_heads,
-        medusa_choices=eval(args.medusa_choices),
     )
     model.init_storage()
     model.load_from_hf()
@@ -151,7 +134,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=medusa_base_w8a8_forward,
+        forward_func=baseline_w4a8_per_chn_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

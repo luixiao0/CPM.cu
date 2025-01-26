@@ -1,13 +1,12 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.mt_bench.eval import run_eval
+from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.medusa_base_w4a8_per_chn import W4A8PerChnLLM_with_medusa
-from llamacu.speculative.medusa_choices import *
+from llamacu.speculative.eagle_base_w8a8 import W8A8LLM_with_eagle
 
 
-def medusa_base_w4a8_per_chn_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def eagle_w8a8_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
@@ -32,7 +31,7 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--medusa-path",
+        "--eagle-path",
         type=str,
         default=None,
     )
@@ -49,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bench-name",
         type=str,
-        default="mt_bench",
+        default="spec_bench",
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
@@ -100,15 +99,21 @@ if __name__ == "__main__":
         default="llama-2",
     )
     parser.add_argument(
-        "--medusa-num-heads",
+        "--eagle-num-iter",
         type=int,
-        default=4,
+        default=6,
     )
     parser.add_argument(
-        "--medusa-choices",
-        type=str,
-        default="mc_sim_7b_63",
+        "--eagle-topk-per-iter",
+        type=int,
+        default=10,
     )
+    parser.add_argument(
+        "--eagle-tree-size",
+        type=int,
+        default=60,
+    )
+
 
     args = parser.parse_args()
 
@@ -123,15 +128,16 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A8PerChnLLM_with_medusa(
+    model = W8A8LLM_with_eagle(
         base_path=args.model_path,
-        medusa_path=args.medusa_path,
+        eagle_path=args.eagle_path,
         memory_limit=args.memory_limit,
         chunk_length=max_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
-        medusa_num_heads=args.medusa_num_heads,
-        medusa_choices=eval(args.medusa_choices),
+        num_iter=args.eagle_num_iter,
+        topk_per_iter=args.eagle_topk_per_iter,
+        tree_size=args.eagle_tree_size,
     )
     model.init_storage()
     model.load_from_hf()
@@ -151,7 +157,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=medusa_base_w4a8_per_chn_forward,
+        forward_func=eagle_w8a8_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

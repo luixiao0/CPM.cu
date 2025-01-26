@@ -21,6 +21,7 @@ def speed(jsonl_file, jsonl_file_base, checkpoint_path, task=None, report=True):
             else:
                 if json_obj["category"] == task:
                     data.append(json_obj)
+    print(len(data))
 
     speeds=[]
     accept_lengths_list = []

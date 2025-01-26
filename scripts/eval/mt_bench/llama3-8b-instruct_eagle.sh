@@ -3,7 +3,7 @@ Model_Path=/home/ydzhang/checkpoints/meta-llama/Meta-Llama-3-8B-Instruct
 Eagle_Path=/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-8B
 Model_id="llama-3-8b-instruct"
 
-python3 evaluation/mt_bench/inference_eagle.py \
+python3 evaluation/spec_bench/inference_eagle.py \
     --model-path $Model_Path \
     --eagle-path $Eagle_Path \
     --cuda-graph \
