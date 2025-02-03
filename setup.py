@@ -46,6 +46,8 @@ setup(
                 "src/utils.cu",
                 "src/qgemm/w8a8/w8a8_gemm_cuda.cu",
                 "src/qgemm/w4a8_per_chn/w4a8_per_chn_gemm_cuda.cu",
+                *glob.glob("src/qgemm/exllamav2/cuda/*cu"),
+                *glob.glob("src/qgemm/marlin/*cu"),
                 # *glob.glob("src/flash_attn/src/*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim64_fp16*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim128_fp16*.cu"),

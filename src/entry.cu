@@ -12,6 +12,9 @@
 #include "model/w4a8_per_chn/w4a8_per_chn_model.cuh"
 #include "model/w4a8_per_chn/medusa_base_w4a8_per_chn.cuh"
 #include "model/w4a8_per_chn/eagle_base_w4a8_per_chn.cuh"
+#include "model/w4a16/w4a16_model.cuh"
+#include "model/w4a16/medusa_base_w4a16.cuh"
+#include "model/w4a16/eagle_base_w4a16.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -254,6 +257,89 @@ void init_eagle_w4a8_per_chn_model(
     );
 }
 
+void init_w4a16_base_model(
+    int64_t memory_limit,
+    std::uintptr_t memory_pool,
+    int vocab_size,
+    int num_hidden_layers,
+    int hidden_size,
+    int intermediate_size,
+    int num_attention_heads,
+    int num_key_value_heads,
+    int head_dim,
+    float rms_norm_eps,
+    int torch_dtype,
+    int chunk_length,
+    int group_size,
+    int bits,
+    bool use_marlin
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    init_resources();
+
+    model = new W4A16ModelImpl<half>(
+        memory_limit,
+        reinterpret_cast<void*>(memory_pool),
+        vocab_size,
+        num_hidden_layers,
+        hidden_size,
+        intermediate_size,
+        num_attention_heads,
+        num_key_value_heads,
+        head_dim,
+        rms_norm_eps,
+        chunk_length,
+        group_size,
+        bits,
+        use_marlin
+    );
+
+}
+
+void init_medusa_w4a16_model(
+    int num_heads,
+    int num_layers,
+    int topk_per_head,
+    int tree_size,
+    std::uintptr_t tree_indices,
+    std::uintptr_t draft_position_ids,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new MedusaImplBaseW4A16<half>(
+        (W4A16ModelImpl<half>*)model,
+        num_heads,
+        num_layers,
+        topk_per_head,
+        tree_size,
+        reinterpret_cast<int32_t*>(tree_indices),
+        reinterpret_cast<int32_t*>(draft_position_ids)
+    );
+}
+
+void init_eagle_w4a16_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new EagleImplBaseW4A16<half>(
+        (W4A16ModelImpl<half>*)model,
+        num_layers,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
 int init_storage() {
     return model->init_storage();
 }
@@ -308,6 +394,9 @@ PYBIND11_MODULE(C, m) {
     m.def("init_w4a8_per_chn_base_model", &init_w4a8_per_chn_base_model, "Init W4A8 per channel base model");
     m.def("init_medusa_w4a8_per_chn_model", &init_medusa_w4a8_per_chn_model, "Init medusa W4A8 per channel model");
     m.def("init_eagle_w4a8_per_chn_model", &init_eagle_w4a8_per_chn_model, "Init eagle W4A8 per channel model");
+    m.def("init_w4a16_base_model", &init_w4a16_base_model, "Init W4A16 base model");
+    m.def("init_medusa_w4a16_model", &init_medusa_w4a16_model, "Init medusa W4A16 model");
+    m.def("init_eagle_w4a16_model", &init_eagle_w4a16_model, "Init eagle W4A16 model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");
