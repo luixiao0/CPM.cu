@@ -6,7 +6,7 @@
 namespace {
 template <typename T, typename T2>
 __global__ void rms_norm_kernel(int dim, const T2* input, const T2* weight, T2* output, float eps) {
-    __shared__ T2 s_input[2048];
+    // __shared__ T2 s_input[2048];
     __shared__ float shared_sum;
     __shared__ float warp_sum[16];
     int row = blockIdx.x;
@@ -14,7 +14,7 @@ __global__ void rms_norm_kernel(int dim, const T2* input, const T2* weight, T2* 
     float sum1 = 0.0f, sum2 = 0.0f;
     for (int i = col; i < dim; i += blockDim.x) {
         T2 val = input[row * dim + i];
-        s_input[i] = val;
+        // s_input[i] = val;
         float val1 = float(val.x);
         float val2 = float(val.y);
         sum1 += val1 * val1;
@@ -41,7 +41,7 @@ __global__ void rms_norm_kernel(int dim, const T2* input, const T2* weight, T2* 
     __syncthreads();
     sum = shared_sum;
     for (int i = col; i < dim; i += blockDim.x) {
-        T2 inp = s_input[i];
+        T2 inp = input[row * dim + i];
         T2 w = weight[i];
         output[row * dim + i] = T2(
             T(sum * float(inp.x) * float(w.x)),
@@ -52,7 +52,7 @@ __global__ void rms_norm_kernel(int dim, const T2* input, const T2* weight, T2* 
 
 template <typename T, typename T2>
 __global__ void add_and_rms_norm_kernel(int dim, T2* input, const T2* prev_output, const T2* weight, T2* output, float eps) {
-    __shared__ T2 s_input[2048];
+    // __shared__ T2 s_input[2048];
     __shared__ float shared_sum;
     __shared__ float warp_sum[16];
     int row = blockIdx.x;
@@ -62,7 +62,7 @@ __global__ void add_and_rms_norm_kernel(int dim, T2* input, const T2* prev_outpu
         T2 val = input[row * dim + i];
         T2 prev = prev_output[row * dim + i];
         val = val + prev;
-        s_input[i] = input[row * dim + i] = val;
+        input[row * dim + i] = val;
         float val1 = float(val.x);
         float val2 = float(val.y);
         sum1 += val1 * val1;
@@ -89,7 +89,7 @@ __global__ void add_and_rms_norm_kernel(int dim, T2* input, const T2* prev_outpu
     __syncthreads();
     sum = shared_sum;
     for (int i = col; i < dim; i += blockDim.x) {
-        T2 inp = s_input[i];
+        T2 inp = input[row * dim + i];
         T2 w = weight[i];
         output[row * dim + i] = T2(
             T(sum * float(inp.x) * float(w.x)),
