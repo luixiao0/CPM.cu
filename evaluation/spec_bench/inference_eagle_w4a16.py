@@ -3,7 +3,7 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.eagle_base_w4a16 import W4A16LLM_with_eagle
+from llamacu.speculative.eagle_base_w4a16_marlin import W4A16MarlinLLM_with_eagle
 
 
 def eagle_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A16LLM_with_eagle(
+    model = W4A16MarlinLLM_with_eagle(
         base_path=args.model_path,
         eagle_path=args.eagle_path,
         memory_limit=args.memory_limit,

@@ -1,17 +1,17 @@
 #pragma once
-#include "w4a16_attn.cuh"
-#include "w4a16_ffn.cuh"
+#include "w4a16_marlin_attn.cuh"
+#include "w4a16_marlin_ffn.cuh"
 #include "../layer.cuh"
 
 template <typename T>
-struct W4A16Layer {
-    W4A16Attention<T> *attn;
-    W4A16GatedFFN<T> *ffn;
+struct W4A16MarlinLayer {
+    W4A16MarlinAttention<T> *attn;
+    W4A16MarlinGatedFFN<T> *ffn;
     T* output;
 
-    W4A16Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int bits, bool use_marlin) {
-        this->attn = new W4A16Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, bits, use_marlin);
-        this->ffn = new W4A16GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps, group_size, bits, use_marlin);
+    W4A16MarlinLayer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int bits, bool use_marlin) {
+        this->attn = new W4A16MarlinAttention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, bits, use_marlin);
+        this->ffn = new W4A16MarlinGatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps, group_size, bits, use_marlin);
     }
 
     void init_weight_ptr(Memory* memory) {

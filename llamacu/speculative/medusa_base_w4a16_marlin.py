@@ -1,13 +1,13 @@
 from .. import C
 from .tree_drafter import pack_mask
-from .tree_drafter_w4a16 import W4A16LLM_with_tree_drafter
+from .tree_drafter_w4a16_marlin import W4A16MarlinLLM_with_tree_drafter
 
 import torch
 from transformers import PretrainedConfig
 from .medusa import MedusaConfig
 
 
-class W4A16LLM_with_medusa(W4A16LLM_with_tree_drafter):
+class W4A16MarlinLLM_with_medusa(W4A16MarlinLLM_with_tree_drafter):
     def __init__(self,
                  medusa_path,
                  base_path,

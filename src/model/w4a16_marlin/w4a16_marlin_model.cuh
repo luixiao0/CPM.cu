@@ -1,10 +1,10 @@
 #pragma once
 #include "../model.cuh"
-#include "w4a16_layer.cuh"
+#include "w4a16_marlin_layer.cuh"
 
 
 template <typename T>
-struct W4A16ModelImpl: Model {
+struct W4A16MarlinModelImpl: Model {
     Memory* memory;
 
     int vocab_size;
@@ -21,11 +21,11 @@ struct W4A16ModelImpl: Model {
     KVCacheManager<T>* kv_caches;
 
     Embedding<T>* embedding;
-    std::vector<W4A16Layer<T>*> layers;
+    std::vector<W4A16MarlinLayer<T>*> layers;
     RMSNorm<T>* norm;
     Linear<T>* lm_head;
 
-    W4A16ModelImpl(
+    W4A16MarlinModelImpl(
         int64_t memory_limit,
         void* memory_pool,
         int vocab_size,
@@ -58,7 +58,7 @@ struct W4A16ModelImpl: Model {
 
         embedding = new Embedding<T>(vocab_size, hidden_size);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new W4A16Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, bits, use_marlin));
+            layers.push_back(new W4A16MarlinLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, bits, use_marlin));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         lm_head = new Linear<T>(hidden_size, vocab_size);

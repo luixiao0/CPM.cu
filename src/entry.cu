@@ -12,9 +12,9 @@
 #include "model/w4a8_per_chn/w4a8_per_chn_model.cuh"
 #include "model/w4a8_per_chn/medusa_base_w4a8_per_chn.cuh"
 #include "model/w4a8_per_chn/eagle_base_w4a8_per_chn.cuh"
-#include "model/w4a16/w4a16_model.cuh"
-#include "model/w4a16/medusa_base_w4a16.cuh"
-#include "model/w4a16/eagle_base_w4a16.cuh"
+#include "model/w4a16_marlin/w4a16_marlin_model.cuh"
+#include "model/w4a16_marlin/medusa_base_w4a16_marlin.cuh"
+#include "model/w4a16_marlin/eagle_base_w4a16_marlin.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -257,7 +257,7 @@ void init_eagle_w4a8_per_chn_model(
     );
 }
 
-void init_w4a16_base_model(
+void init_w4a16_marlin_base_model(
     int64_t memory_limit,
     std::uintptr_t memory_pool,
     int vocab_size,
@@ -279,7 +279,7 @@ void init_w4a16_base_model(
     }
     init_resources();
 
-    model = new W4A16ModelImpl<half>(
+    model = new W4A16MarlinModelImpl<half>(
         memory_limit,
         reinterpret_cast<void*>(memory_pool),
         vocab_size,
@@ -298,7 +298,7 @@ void init_w4a16_base_model(
 
 }
 
-void init_medusa_w4a16_model(
+void init_medusa_w4a16_marlin_model(
     int num_heads,
     int num_layers,
     int topk_per_head,
@@ -310,8 +310,8 @@ void init_medusa_w4a16_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new MedusaImplBaseW4A16<half>(
-        (W4A16ModelImpl<half>*)model,
+    model = new MedusaImplBaseW4A16Marlin<half>(
+        (W4A16MarlinModelImpl<half>*)model,
         num_heads,
         num_layers,
         topk_per_head,
@@ -321,7 +321,7 @@ void init_medusa_w4a16_model(
     );
 }
 
-void init_eagle_w4a16_model(
+void init_eagle_w4a16_marlin_model(
     int num_layers,
     int num_iter,
     int topk_per_iter,
@@ -331,8 +331,8 @@ void init_eagle_w4a16_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new EagleImplBaseW4A16<half>(
-        (W4A16ModelImpl<half>*)model,
+    model = new EagleImplBaseW4A16Marlin<half>(
+        (W4A16MarlinModelImpl<half>*)model,
         num_layers,
         num_iter,
         topk_per_iter,
@@ -394,9 +394,9 @@ PYBIND11_MODULE(C, m) {
     m.def("init_w4a8_per_chn_base_model", &init_w4a8_per_chn_base_model, "Init W4A8 per channel base model");
     m.def("init_medusa_w4a8_per_chn_model", &init_medusa_w4a8_per_chn_model, "Init medusa W4A8 per channel model");
     m.def("init_eagle_w4a8_per_chn_model", &init_eagle_w4a8_per_chn_model, "Init eagle W4A8 per channel model");
-    m.def("init_w4a16_base_model", &init_w4a16_base_model, "Init W4A16 base model");
-    m.def("init_medusa_w4a16_model", &init_medusa_w4a16_model, "Init medusa W4A16 model");
-    m.def("init_eagle_w4a16_model", &init_eagle_w4a16_model, "Init eagle W4A16 model");
+    m.def("init_w4a16_marlin_base_model", &init_w4a16_marlin_base_model, "Init W4A16 base model");
+    m.def("init_medusa_w4a16_marlin_model", &init_medusa_w4a16_marlin_model, "Init medusa W4A16 model");
+    m.def("init_eagle_w4a16_marlin_model", &init_eagle_w4a16_marlin_model, "Init eagle W4A16 model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");

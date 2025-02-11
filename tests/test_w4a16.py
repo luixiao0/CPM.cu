@@ -4,7 +4,7 @@ import logging
 import torch
 import os
 from triton.testing import do_bench
-from llamacu.llama_w4a16 import W4A16LLM
+from llamacu.llama_w4a16_marlin import W4A16MarlinLLM
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -13,8 +13,8 @@ logging.basicConfig(
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
-# quantized_model_dir = "/home/ydzhang/checkpoints/MaziyarPanahi/Meta-Llama-3-8B-Instruct-GPTQ"
-quantized_model_dir = "/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-4bit-128g-pileval-mse_shrink0.6"
+quantized_model_dir = "/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-4bit-128g-pileval-mse"
+# quantized_model_dir = "/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-70B-Instruct-4bit-128g-pileval-mse"
 quantized_model_dir_marlin = "/data1/fanruikai/Llama-2-7B-Chat-GPTQ-Marlin"
 
 dtype = torch.float16
@@ -35,7 +35,7 @@ input_ids = torch.randint(0, 32000, (1, num_tokens,), dtype=torch.int32).cuda()
 
 position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1, num_tokens)
 
-llm = W4A16LLM(quantized_model_dir, dtype=dtype, chunk_length=chunk_length, memory_limit=0.3, cuda_graph=cuda_graph, group_size=128, use_marlin=use_marlin)
+llm = W4A16MarlinLLM(quantized_model_dir, dtype=dtype, chunk_length=chunk_length, memory_limit=0.3, cuda_graph=cuda_graph, group_size=128, use_marlin=use_marlin)
 llm.init_storage()
 llm.load_from_hf()
 

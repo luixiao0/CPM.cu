@@ -1,16 +1,16 @@
 #pragma once
-#include "w4a16_model.cuh"
+#include "w4a16_marlin_model.cuh"
 #include "../eagle.cuh"
 
 template<typename T>
-struct EagleImplBaseW4A16 : Model {
+struct EagleImplBaseW4A16Marlin : Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
 
-    W4A16ModelImpl<T>* model;
+    W4A16MarlinModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1;
@@ -32,8 +32,8 @@ struct EagleImplBaseW4A16 : Model {
 
     T* tmp_kvcache;
 
-    EagleImplBaseW4A16(
-        W4A16ModelImpl<T>* model,
+    EagleImplBaseW4A16Marlin(
+        W4A16MarlinModelImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,

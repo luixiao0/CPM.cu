@@ -7,7 +7,7 @@
 
 
 template <typename T>
-struct W4A16GatedFFN : FFN<T> {
+struct W4A16MarlinGatedFFN : FFN<T> {
     int hidden_size;
     int intermediate_size;
     float rms_norm_eps;
@@ -18,7 +18,7 @@ struct W4A16GatedFFN : FFN<T> {
 
     T* gated_up;
 
-    W4A16GatedFFN(int hidden_size, int intermediate_size, float rms_norm_eps, int group_size, int bits, bool use_marlin) {
+    W4A16MarlinGatedFFN(int hidden_size, int intermediate_size, float rms_norm_eps, int group_size, int bits, bool use_marlin) {
         this->hidden_size = hidden_size;
         this->intermediate_size = intermediate_size;
         this->rms_norm_eps = rms_norm_eps;

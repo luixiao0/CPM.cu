@@ -17,7 +17,7 @@ def dtype_to_int(dtype):
         raise ValueError(f"Unsupported dtype: {dtype}")
     return ret
 
-class W4A16LLM(torch.nn.Module):
+class W4A16MarlinLLM(torch.nn.Module):
     def __init__(self,
                  path: str, # hf model path
                  memory_limit: float = 0.8,
@@ -46,7 +46,7 @@ class W4A16LLM(torch.nn.Module):
         self.group_size = group_size
         self.bits = 4
         self.use_marlin = use_marlin
-        C.init_w4a16_base_model(
+        C.init_w4a16_marlin_base_model(
             self.memory_limit,
             self.memory_pool.data.data_ptr(),
             self.config.vocab_size,

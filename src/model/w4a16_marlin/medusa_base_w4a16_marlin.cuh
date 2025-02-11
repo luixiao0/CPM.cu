@@ -1,10 +1,10 @@
 #pragma once
-#include "w4a16_model.cuh"
+#include "w4a16_marlin_model.cuh"
 #include "../medusa.cuh"
 
 
 template<typename T>
-struct MedusaImplBaseW4A16 : Model {
+struct MedusaImplBaseW4A16Marlin : Model {
     int num_heads;
     int num_layers;
     int topk_per_head;
@@ -12,7 +12,7 @@ struct MedusaImplBaseW4A16 : Model {
     int32_t* tree_indices;
     int32_t* draft_position_ids;
 
-    W4A16ModelImpl<T>* model;
+    W4A16MarlinModelImpl<T>* model;
     std::vector<ResidualBlock<T>*> blocks;
     std::vector<Linear<T>*> lm_heads;
 
@@ -23,8 +23,8 @@ struct MedusaImplBaseW4A16 : Model {
     T* tmp_kvcache;
     functions::TopK<T>* topk_func;
 
-    MedusaImplBaseW4A16(
-        W4A16ModelImpl<T>* model,
+    MedusaImplBaseW4A16Marlin(
+        W4A16MarlinModelImpl<T>* model,
         int num_heads,
         int num_layers,
         int topk_per_head,

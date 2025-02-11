@@ -4,7 +4,7 @@
 
 
 template <typename T>
-struct W4A16Attention {
+struct W4A16MarlinAttention {
     int hidden_size;
     int num_attention_heads;
     int num_key_value_heads;
@@ -19,7 +19,7 @@ struct W4A16Attention {
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
 
-    W4A16Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int bits, bool use_marlin) {
+    W4A16MarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int bits, bool use_marlin) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
