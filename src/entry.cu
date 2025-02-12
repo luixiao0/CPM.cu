@@ -18,6 +18,7 @@
 #include "model/w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "model/w4a16_gptq_marlin/medusa_base_w4a16_gptq_marlin.cuh"
 #include "model/w4a16_gptq_marlin/eagle_base_w4a16_gptq_marlin.cuh"
+#include "model/w4a8_per_group/w4a8_per_group_model.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -421,6 +422,40 @@ void init_eagle_w4a16_gptq_marlin_model(
     );
 }
 
+
+void init_w4a8_per_group_base_model(
+    int64_t memory_limit,
+    std::uintptr_t memory_pool,
+    int vocab_size,
+    int num_hidden_layers,
+    int hidden_size,
+    int intermediate_size,
+    int num_attention_heads,
+    int num_key_value_heads,
+    int head_dim,
+    float rms_norm_eps,
+    int torch_dtype,
+    int chunk_length
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    init_resources();
+
+    model = new W4A8PerGroupModelImpl<half>(
+        memory_limit,
+        reinterpret_cast<void*>(memory_pool),
+        vocab_size,
+        num_hidden_layers,
+        hidden_size,
+        intermediate_size,
+        num_attention_heads,
+        num_key_value_heads,
+        head_dim,
+        rms_norm_eps,
+        chunk_length
+    );
+}
 int init_storage() {
     return model->init_storage();
 }
@@ -481,6 +516,7 @@ PYBIND11_MODULE(C, m) {
     m.def("init_w4a16_gptq_marlin_base_model", &init_w4a16_gptq_marlin_base_model, "Init W4A16 base model");
     m.def("init_medusa_w4a16_gptq_marlin_model", &init_medusa_w4a16_gptq_marlin_model, "Init medusa W4A16 model");
     m.def("init_eagle_w4a16_gptq_marlin_model", &init_eagle_w4a16_gptq_marlin_model, "Init eagle W4A16 model");
+    m.def("init_w4a8_per_group_base_model", &init_w4a8_per_group_base_model, "Init W4A8 per group base model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");
