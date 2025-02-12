@@ -293,8 +293,8 @@ def run_eval(
         # if cnt == 2:
         #     break
         # cnt += 1
-    print("#Mean accepted tokens: ", np.mean(accept_lengths_tree))
-    print("#Accuracy: ", sum(result) / len(result))
-    print("#Generate latency: ", total_time / total_new_tokens)
+        print("#Mean accepted tokens: ", np.mean(accept_lengths_tree))
+        print("#Accuracy: ", sum(result) / len(result))
+        print("#Generate latency: ", total_time / total_new_tokens)
     
 

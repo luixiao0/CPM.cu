@@ -1,9 +1,9 @@
 export CUDA_VISIBLE_DEVICES=1
 Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-4bit-128g-pileval-mse_shrink0.4
 Meudsa_Path=/home/ydzhang/checkpoints/predibase/Meta-Llama-3-8B-Instruct-medusa-full
-Model_id="llama-3-8b-instruct-w4a16"
+Model_id="llama-3-8b-instruct-w4a16-marlin"
 
-python3 evaluation/spec_bench/inference_medusa_w4a16.py \
+python3 evaluation/spec_bench/inference_medusa_w4a16_marlin.py \
     --model-path $Model_Path \
     --medusa-path $Meudsa_Path \
     --cuda-graph \
