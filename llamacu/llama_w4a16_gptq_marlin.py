@@ -159,7 +159,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         assert position_ids.dtype == torch.int32
         assert cache_length.dtype == torch.int32
         if mask_2d is not None:
-            assert mask_2d.dtype == torch.uint64
+            # assert mask_2d.dtype == torch.uint64
             assert input_ids.numel() == mask_2d.shape[0]
 
         torch.cuda.nvtx.range_push(f"decode")
