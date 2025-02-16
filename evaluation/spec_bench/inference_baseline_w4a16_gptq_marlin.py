@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
-    if "llama-3" in args.model_id or "llama_3" in args.model_id:
+    if "llama-3" in args.model_id.lower() or "llama_3" in args.model_id.lower() or "llama3" in args.model_id.lower():
         teminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
     else:
         teminators = [tokenizer.eos_token_id]
