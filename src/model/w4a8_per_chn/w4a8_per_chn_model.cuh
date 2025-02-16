@@ -78,9 +78,9 @@ struct W4A8PerChnModelImpl: Model {
             layer_end = layers[i]->init_output_ptr(memory, num_tokens, embedding_end);
         }
         // norm and lm_head are not used in prefill
-        int64_t norm_end = norm->init_output_ptr(memory, num_tokens, offset);
+        int64_t norm_end = norm->init_output_ptr(memory, num_tokens, layer_end);
         int64_t lm_head_end = lm_head->init_output_ptr(memory, 64, norm_end);
-        return std::max(layer_end, lm_head_end);
+        return lm_head_end;
     }
 
     int init_storage() {

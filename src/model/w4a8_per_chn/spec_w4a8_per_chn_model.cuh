@@ -1,12 +1,12 @@
 #pragma once
-#include "w4a16_gptq_marlin_model.cuh"
+#include "w4a8_per_chn_model.cuh"
 #include "../eagle.cuh"
 #include "../drafter.cuh"
-#include "w4a16_gptq_marlin_layer.cuh"
+#include "w4a8_per_chn_layer.cuh"
 
 
 template <typename T>
-struct SpecW4A16GPTQMarlinModelImpl: Model {
+struct SpecW4A8PerChnModelImpl: Model {
 
     int vocab_size;
     int num_hidden_layers;
@@ -18,11 +18,11 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
     float rms_norm_eps;
 
 
-    W4A16GPTQMarlinModelImpl<T>* model;
+    W4A8PerChnModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
 
     Embedding<T>* embedding;
-    std::vector<W4A16GPTQMarlinLayer<T>*> layers;
+    std::vector<W4A8PerChnLayer<T>*> layers;
     RMSNorm<T>* norm;
     Linear<T>* lm_head;
 
@@ -48,8 +48,8 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
     cudaGraph_t draft_graph;
     cudaGraphExec_t draft_graphExec;
 
-    SpecW4A16GPTQMarlinModelImpl(
-        W4A16GPTQMarlinModelImpl<T>* model,
+    SpecW4A8PerChnModelImpl(
+        W4A8PerChnModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,
         int draft_hidden_size,
@@ -79,7 +79,7 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
 
         embedding = new Embedding<T>(vocab_size, hidden_size);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new W4A16GPTQMarlinLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps));
+            layers.push_back(new W4A8PerChnLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         lm_head = new Linear<T>(hidden_size, vocab_size);
@@ -172,13 +172,12 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
     }
 
     void draft_prefill_embed(int32_t num_tokens, int32_t num_history_tokens, T* embed, int32_t* position_ids) {
-        T* layer_output = nullptr;
+        // T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
-            layer_output = this->layers[i]->output;
+            this->layers[i]->prefill(num_tokens, num_history_tokens, embed, position_ids, this->kv_caches->caches[i]);
         }
         // TODO : remove norm and lm_head prefill
-        this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
+        this->norm->prefill(calc_stream, num_tokens, embed, nullptr);
         this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size);
     }
 
@@ -189,12 +188,10 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
 
     void draft_decode_embed(int32_t num_tokens, int32_t padded_length, T* embed, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         Mask mask(mask_2d, num_tokens, num_tokens);
-        T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
-            layer_output = this->layers[i]->output;
+            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
         }
-        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
+        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, nullptr);
         this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*) output);
     }
 
