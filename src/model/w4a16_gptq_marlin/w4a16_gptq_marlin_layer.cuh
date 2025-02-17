@@ -27,9 +27,9 @@ struct W4A16GPTQMarlinLayer {
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        int64_t a_tmp_offset = memory->allocate((void**)&this->a_tmp, offset, num_tokens * intermediate_size * sizeof(T));
+        int64_t a_tmp_offset = memory->allocate((void**)&this->a_tmp, offset, 2* num_tokens * intermediate_size * sizeof(T));
         int reduce_max_m = marlin::determine_reduce_max_m(num_tokens, marlin::max_par);
-        int reduce_n = intermediate_size;
+        int reduce_n = 2*intermediate_size;
         int64_t c_tmp_offset = memory->allocate((void**)&this->c_tmp, a_tmp_offset, reduce_max_m * reduce_n * sizeof(float));
 
         int64_t attn_end = this->attn->init_output_ptr(memory, num_tokens, c_tmp_offset);

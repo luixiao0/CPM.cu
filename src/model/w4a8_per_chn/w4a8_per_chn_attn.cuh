@@ -136,31 +136,42 @@ struct W4A8PerChnAttention {
     void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(stream, num_tokens, input);
         T *q, *k, *v;
-        // if (num_tokens > 1) {
-        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, this->attn_norm->output_sum);
-        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, this->attn_norm->output_sum);
-        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, this->attn_norm->output_sum);
+        if (num_tokens > 1) {
+            w4a8_per_chn_gemm_forward_cuda(
+                stream, 
+                this->attn_norm->output,
+                this->q_proj->weight,
+                this->q_proj->s1_scales, 
+                this->attn_norm->output_scale,
+                this->q_proj->s1_szeros,
+                this->attn_norm->output_sum,
+                this->v_proj->output,
+                num_tokens,
+                this->hidden_size,
+                num_tokens,
+                (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim
+            );
+            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj->output, this->q_proj->output);
+        } else {
+            w4a8_per_chn_gemm_forward_cuda(
+                stream, 
+                this->attn_norm->output,
+                this->q_proj->weight,
+                this->q_proj->s1_scales, 
+                this->attn_norm->output_scale,
+                this->q_proj->s1_szeros,
+                this->attn_norm->output_sum,
+                this->q_proj->output,
+                num_tokens,
+                this->hidden_size,
+                num_tokens,
+                (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim
+            );
+        }
+        
         q = this->q_proj->output;
-        k = this->k_proj->output;
-        v = this->v_proj->output;
-        // } else {
-        //     w4a8_per_chn_gemm_forward_cuda(
-        //         stream, 
-        //         this->attn_norm->output,
-        //         this->q_proj->weight,
-        //         this->q_proj->s1_scales, 
-        //         this->attn_norm->output_scale,
-        //         this->q_proj->s1_szeros,
-        //         this->attn_norm->output_sum,
-        //         this->q_proj->output,
-        //         num_tokens,
-        //         this->hidden_size,
-        //         num_tokens,
-        //         (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim
-        //     );
-        //     q = this->q_proj->output;
-        //     k = q + this->num_attention_heads * this->head_dim;
-        //     v = k + this->num_key_value_heads * this->head_dim;
+        k = q + num_tokens * this->num_attention_heads * this->head_dim;
+        v = k + num_tokens * this->num_key_value_heads * this->head_dim;
         // }
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 

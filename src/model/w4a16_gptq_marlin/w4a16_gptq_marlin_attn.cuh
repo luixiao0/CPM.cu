@@ -12,12 +12,15 @@ struct W4A16GPTQMarlinAttention {
     float rms_norm_eps;
 
     Norm<T> *attn_norm;
-    W4A16GPTQMarlinLinear<T> *q_proj, *k_proj, *v_proj;
+    W4A16GPTQMarlinLinear<T> *qkv_proj;
     W4A16GPTQMarlinLinear<T> *o_proj;
     T* output;
 
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
+
+    T* q_proj_output, *v_proj_output, *k_proj_output; 
+    T* permute_qkv_output;
 
     W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
         this->hidden_size = hidden_size;
@@ -27,44 +30,41 @@ struct W4A16GPTQMarlinAttention {
         this->rms_norm_eps = rms_norm_eps;
 
         this->attn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        this->q_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, num_attention_heads * head_dim);
-        this->k_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, num_key_value_heads * head_dim);
-        this->v_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, num_key_value_heads * head_dim);
+
+        this->qkv_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, (num_attention_heads + 2*num_key_value_heads) * head_dim);
+        
         this->o_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, num_attention_heads * head_dim);
     }
 
     void init_weight_ptr(Memory* memory) {
         this->attn_norm->init_weight_ptr(memory);
-        this->q_proj->init_weight_ptr(memory);
-        this->k_proj->init_weight_ptr(memory);
-        this->v_proj->init_weight_ptr(memory);
+        this->qkv_proj->init_weight_ptr(memory);
         this->o_proj->init_weight_ptr(memory);
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         int64_t attn_norm_end = this->attn_norm->init_output_ptr(memory, num_tokens, offset);
-        int64_t q_proj_end = this->q_proj->init_output_ptr(memory, num_tokens, attn_norm_end);
-        int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
-        int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
+        int64_t qkv_proj_end = this->qkv_proj->init_output_ptr(memory, num_tokens, attn_norm_end);
+
+        this->q_proj_output = this->qkv_proj->output;
+        this->k_proj_output = this->qkv_proj->output + num_tokens * this->num_attention_heads * this->head_dim;
+        this->v_proj_output = this->qkv_proj->output + num_tokens * (this->num_attention_heads+this->num_key_value_heads) * this->head_dim;
+        int64_t qkv_permute_end = memory->allocate((void**)&this->permute_qkv_output, qkv_proj_end, num_tokens * (this->num_attention_heads + 2*this->num_key_value_heads) * this->head_dim * sizeof(T));
         
         memory->allocate((void**)&this->attn_output, offset);
-        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, qkv_permute_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
 
-        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, v_proj_end);
+        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, qkv_permute_end);
         this->output = this->o_proj->output;
 
         return std::max(oaccum_end, o_proj_end);
     }
 
     void load_to_storage(std::string name, void* ptr) {
-        if (name.find("q_proj") != std::string::npos) {
-            this->q_proj->load_to_storage(name, ptr);
-        } else if (name.find("k_proj") != std::string::npos) {
-            this->k_proj->load_to_storage(name, ptr);
-        } else if (name.find("v_proj") != std::string::npos) {
-            this->v_proj->load_to_storage(name, ptr);
+        if (name.find("qkv_proj") != std::string::npos) {
+            this->qkv_proj->load_to_storage(name, ptr);
         } else if (name.find("o_proj") != std::string::npos) {
             this->o_proj->load_to_storage(name, ptr);
         } else if (name.find("input_layernorm") != std::string::npos) {
@@ -79,10 +79,13 @@ struct W4A16GPTQMarlinAttention {
         T* v_cache = kv_cache->offset_v(num_history_tokens);
 
         this->attn_norm->prefill(stream, num_tokens, input, prev_output);
-        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
-        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp, k_cache);
-        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp, v_cache);
-        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
+        this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
+        permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->qkv_proj->output, this->permute_qkv_output);
+        cudaMemcpy(k_cache, this->permute_qkv_output + num_tokens*this->num_attention_heads*this->head_dim, num_tokens*this->num_key_value_heads*this->head_dim*sizeof(T), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(v_cache, this->permute_qkv_output + num_tokens*( this->num_attention_heads + this->num_key_value_heads)*this->head_dim, num_tokens*this->num_key_value_heads*this->head_dim*sizeof(T), cudaMemcpyDeviceToDevice);
+        
+
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->permute_qkv_output, k_cache, position_ids);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -93,7 +96,7 @@ struct W4A16GPTQMarlinAttention {
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,
-            this->q_proj->output,
+            this->permute_qkv_output,
             kv_cache->k_cache,
             kv_cache->v_cache,
             nullptr,
@@ -117,22 +120,21 @@ struct W4A16GPTQMarlinAttention {
     void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache, T* a_tmp, float* c_tmp) {
         this->attn_norm->prefill(stream, num_tokens, input, prev_output);
         T *q, *k, *v;
-        // int merge_dim_out = (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim;
-        // if (num_tokens > 1) {
-        //     linear<T>(stream, num_tokens, this->hidden_size, merge_dim_out, this->attn_norm->output, this->q_proj->weight, this->v_proj->output);
-        //     permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj->output, this->q_proj->output);
-        // } else {
-        //     linear<T>(stream, num_tokens, this->hidden_size, merge_dim_out, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
-        // }
-        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
-        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
-        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
-        q = this->q_proj->output;
-        k = this->k_proj->output;
-        v = this->v_proj->output;
-        // q = this->q_proj->output;
-        // k = q + num_tokens * this->num_attention_heads * this->head_dim;
-        // v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        
+        if (num_tokens > 1) {
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp, this->v_proj_output);
+            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj_output, this->q_proj_output);
+            q = this->q_proj_output;
+            k = q + num_tokens * this->num_attention_heads * this->head_dim;
+            v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        } else {
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
+            q = this->qkv_proj->output;
+            k = q + num_tokens * this->num_attention_heads * this->head_dim;
+            v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        }
+        
+        
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);

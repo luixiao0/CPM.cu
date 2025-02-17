@@ -86,26 +86,23 @@ struct W4A8PerChnGatedFFN{
         // if (output == nullptr) {
         //     output = this->gated_up;
         // }
-        // w4a8_per_chn_gemm_forward_cuda(
-        //     stream,
-        //     this->ffn_norm->output,
-        //     this->gate_proj->weight,
-        //     this->gate_proj->s1_scales,
-        //     this->ffn_norm->output_scale,
-        //     this->gate_proj->s1_szeros,
-        //     this->ffn_norm->output_sum,
-        //     (half*)this->gate_proj->output,
-        //     num_tokens,
-        //     hidden_size,
-        //     num_tokens,
-        //     intermediate_size*2
-        // );
-        this->gate_proj->prefill(stream, num_tokens, this->ffn_norm->output, this->ffn_norm->output_scale, this->ffn_norm->output_sum);
-        this->up_proj->prefill(stream, num_tokens, this->ffn_norm->output, this->ffn_norm->output_scale, this->ffn_norm->output_sum);
-        // gated_silu_interleaved<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
-        gated_silu<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->up_proj->output);
+        w4a8_per_chn_gemm_forward_cuda(
+            stream,
+            this->ffn_norm->output,
+            this->gate_proj->weight,
+            this->gate_proj->s1_scales,
+            this->ffn_norm->output_scale,
+            this->gate_proj->s1_szeros,
+            this->ffn_norm->output_sum,
+            (half*)this->gate_proj->output,
+            num_tokens,
+            hidden_size,
+            num_tokens,
+            intermediate_size*2
+        );
+        gated_silu_interleaved<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
 
-        this->down_quant_invoker->invoke(stream, this->up_proj->output, num_tokens);
+        this->down_quant_invoker->invoke(stream, this->gated_up, num_tokens);
         this->down_proj->prefill(stream, num_tokens, this->down_quant_invoker->output, this->down_quant_invoker->output_scale, this->down_quant_invoker->output_sum);
         elementwise_add<T>(stream, num_tokens, this->hidden_size, input, this->down_proj->output, input);
     }
