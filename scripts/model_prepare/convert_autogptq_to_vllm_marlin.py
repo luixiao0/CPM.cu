@@ -5,7 +5,7 @@ from typing import List
 from vllm import _custom_ops as ops
 
 model_path = '/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-4bit-128g-pileval-mse/gptq_model-4bit-128g.safetensors'
-output_path = '/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-4bit-128g-pileval-mse-gptq_marlin/model_gptq_marlin.safetensors'
+output_path = '/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-4bit-128g-pileval-mse-merge/model_gptq_marlin.safetensors'
 autogptq_weigths = load_file(model_path)
 
 gptq_convert_dict = {
@@ -50,9 +50,15 @@ for gptq_key in autogptq_weigths:
     elif "layers" in gptq_key:
         abstract_key = re.sub(r'(\d+)', '{}', gptq_key)
         layer_num = re.search(r'\d+', gptq_key).group(0)
-        if abstract_key in gptq_convert_dict:
+        if "q_proj" in abstract_key:
             if abstract_key.endswith('qweight'):
-                x = autogptq_weigths[gptq_key].clone().cuda()
+                k_key = gptq_key.replace('q_proj', 'k_proj')
+                v_key = gptq_key.replace('q_proj', 'v_proj')
+                
+                q_weight = autogptq_weigths[gptq_key].clone().cuda()
+                k_weight = autogptq_weigths[k_key].clone().cuda()
+                v_weight = autogptq_weigths[v_key].clone().cuda()
+                x = torch.cat([q_weight, k_weight, v_weight], dim=-1)
                 shape_0 = x.shape[0]*8
                 shape_1 = x.shape[1]
                 x.data = ops.gptq_marlin_repack(x.data.contiguous(),
@@ -60,18 +66,96 @@ for gptq_key in autogptq_weigths:
                         size_k=shape_0,
                         size_n=shape_1,
                         num_bits=4)
-                vllm_checkpoints[gptq_key] = x.cpu()
+            
+                vllm_checkpoints[gptq_key.replace("q_proj", "qkv_proj")] = x.cpu()
 
+                processed_keys.add(gptq_key)
+                processed_keys.add(k_key)
+                processed_keys.add(v_key)
 
                 for q_keys in gptq_convert_dict[abstract_key]:
                     if q_keys.endswith("scales"):
+                        k_q_keys = q_keys.replace("q_proj", "k_proj")
+                        v_q_keys = q_keys.replace("q_proj", "v_proj")   
+
+                        scales_x_q = autogptq_weigths[q_keys.format(layer_num)].clone().cuda()
+                        scales_x_k = autogptq_weigths[k_q_keys.format(layer_num)].clone().cuda()
+                        scales_x_v = autogptq_weigths[v_q_keys.format(layer_num)].clone().cuda()
+                        scales_x = torch.cat([scales_x_q, scales_x_k, scales_x_v], dim=-1)
+                        scales_x.data = marlin_permute_scales(scales_x.data.contiguous(),
+                                size_k=shape_0,
+                                size_n=shape_1,
+                                group_size=128)
+                        vllm_checkpoints[q_keys.format(layer_num).replace("q_proj", "qkv_proj")] = scales_x.cpu()
+                    
+                    processed_keys.add(q_keys.format(layer_num))
+                    processed_keys.add(q_keys.replace("q_proj", "k_proj").format(layer_num))
+                    processed_keys.add(q_keys.replace("q_proj", "v_proj").format(layer_num))
+        elif "gate_proj" in abstract_key:
+            if abstract_key.endswith('qweight'):
+                up_key = gptq_key.replace('gate_proj', 'up_proj')
+                
+                gate_weight = autogptq_weigths[gptq_key].clone().cuda()
+                up_weight = autogptq_weigths[up_key].clone().cuda()
+
+                x = torch.cat([gate_weight, up_weight], dim=-1)
+                shape_0 = x.shape[0]*8
+                shape_1 = x.shape[1]
+                x.data = ops.gptq_marlin_repack(x.data.contiguous(),
+                        perm=torch.Tensor([]).to( device="cuda", dtype=torch.int32),
+                        size_k=shape_0,
+                        size_n=shape_1,
+                        num_bits=4)
+            
+                vllm_checkpoints[gptq_key.replace("gate_proj", "gate_up_proj")] = x.cpu()
+
+                processed_keys.add(gptq_key)
+                processed_keys.add(up_key)
+
+                for q_keys in gptq_convert_dict[abstract_key]:
+                    if q_keys.endswith("scales"):
+                        up_q_keys = q_keys.replace("gate_proj", "up_proj")
+
+                        scales_x_gate = autogptq_weigths[q_keys.format(layer_num)].clone().cuda()
+                        scales_x_up = autogptq_weigths[up_q_keys.format(layer_num)].clone().cuda()
+                        scales_x = torch.cat([scales_x_gate, scales_x_up], dim=-1)
+                        scales_x.data = marlin_permute_scales(scales_x.data.contiguous(),
+                                size_k=shape_0,
+                                size_n=shape_1,
+                                group_size=128)
+                        vllm_checkpoints[q_keys.format(layer_num).replace("gate_proj", "gate_up_proj")] = scales_x.cpu()
+                    
+                    processed_keys.add(q_keys.format(layer_num))
+                    processed_keys.add(q_keys.replace("gate_proj", "up_proj").format(layer_num))
+
+        elif "down_proj" in abstract_key or "o_proj" in abstract_key:
+            if abstract_key.endswith('qweight'):
+                x = autogptq_weigths[gptq_key].clone().cuda()
+
+                shape_0 = x.shape[0]*8
+                shape_1 = x.shape[1]
+                x.data = ops.gptq_marlin_repack(x.data.contiguous(),
+                        perm=torch.Tensor([]).to( device="cuda", dtype=torch.int32),
+                        size_k=shape_0,
+                        size_n=shape_1,
+                        num_bits=4)
+            
+                vllm_checkpoints[gptq_key] = x.cpu()
+
+                processed_keys.add(gptq_key)
+
+                for q_keys in gptq_convert_dict[abstract_key]:
+                    if q_keys.endswith("scales"):
+
                         scales_x = autogptq_weigths[q_keys.format(layer_num)].clone().cuda()
                         scales_x.data = marlin_permute_scales(scales_x.data.contiguous(),
                                 size_k=shape_0,
                                 size_n=shape_1,
                                 group_size=128)
                         vllm_checkpoints[q_keys.format(layer_num)] = scales_x.cpu()
+                    
                     processed_keys.add(q_keys.format(layer_num))
+
         elif "post_attention_layernorm" in gptq_key or "input_layernorm" in gptq_key:
             vllm_checkpoints[gptq_key] = autogptq_weigths[gptq_key].clone()
     else:  
