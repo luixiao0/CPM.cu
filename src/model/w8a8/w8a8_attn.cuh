@@ -133,12 +133,19 @@ struct W8A8Attention {
         this->attn_norm->prefill(stream, num_tokens, input);
         T *q, *k, *v;
         if (num_tokens > 1) {
-            this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-            this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-            this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-            q = this->q_proj->output;
-            k = this->k_proj->output;
-            v = this->v_proj->output;
+            w8a8_gemm_forward_cuda(
+                stream,
+                this->attn_norm->output,
+                this->q_proj->weight,
+                this->q_proj->weight_scale,
+                this->attn_norm->output_scale,
+                this->v_proj->output,
+                num_tokens,
+                this->hidden_size,
+                num_tokens,
+                (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim
+            );
+            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj->output, this->q_proj->output);
         } else {
             w8a8_gemm_forward_cuda(
                 stream,
@@ -152,10 +159,10 @@ struct W8A8Attention {
                 num_tokens,
                 (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim
             );
-            q = this->q_proj->output;
-            k = q + this->num_attention_heads * this->head_dim;
-            v = k + this->num_key_value_heads * this->head_dim;
         }
+        q = this->q_proj->output;
+        k = q + num_tokens * this->num_attention_heads * this->head_dim;
+        v = k + num_tokens * this->num_key_value_heads * this->head_dim;
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
