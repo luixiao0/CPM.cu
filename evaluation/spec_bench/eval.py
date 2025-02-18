@@ -117,9 +117,9 @@ def get_model_answers_fschat(
             inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
             input_ids = inputs.input_ids
             # try:
-            torch.cuda.synchronize()
-            start_time = time.time()
-            output_ids, new_token, step, accept_length_tree = forward_func(
+            # torch.cuda.synchronize()
+            # start_time = time.time()
+            output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
                 inputs,
                 model,
                 tokenizer,
@@ -128,8 +128,8 @@ def get_model_answers_fschat(
                 teminators,
                 **kwargs,
             )
-            torch.cuda.synchronize()
-            total_time = time.time() - start_time
+            # torch.cuda.synchronize()
+            # total_time = time.time() - start_time
             # be consistent with the template's stop_token_ids
             if conv.stop_token_ids:
                 stop_token_ids_index = [
@@ -164,7 +164,7 @@ def get_model_answers_fschat(
             turns.append(output)
             steps.append(int(step))
             new_tokens.append(int(new_token))
-            wall_time.append(total_time)
+            wall_time.append(decode_time)
             conv.messages[-1][-1] = output
         
         print(f"warmup {wm_i} done")
@@ -200,9 +200,9 @@ def get_model_answers_fschat(
                 inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
                 input_ids = inputs.input_ids
                 # try:
-                torch.cuda.synchronize()
-                start_time = time.time()
-                output_ids, new_token, step, accept_length_tree = forward_func(
+                # torch.cuda.synchronize()
+                # start_time = time.time()
+                output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
                     inputs,
                     model,
                     tokenizer,
@@ -211,8 +211,8 @@ def get_model_answers_fschat(
                     teminators,
                     **kwargs,
                 )
-                torch.cuda.synchronize()
-                total_time = time.time() - start_time
+                # torch.cuda.synchronize()
+                # total_time = time.time() - start_time
                 accept_lengths_tree.extend(accept_length_tree)
 
                 if conv.stop_token_ids:
@@ -247,8 +247,8 @@ def get_model_answers_fschat(
                 turns.append(output)
                 steps.append(int(step))
                 new_tokens.append(int(new_token))
-                wall_time.append(total_time)
-                generate_speed.append(int(new_token) / total_time)
+                wall_time.append(decode_time)
+                generate_speed.append(int(new_token) / decode_time)
                 cur_accept_lengths_tree.extend(accept_length_tree)
                 conv.messages[-1][-1] = output
             # torch.cuda.empty_cache()
@@ -316,9 +316,9 @@ def get_model_answers_hf(
             inputs = tokenizer([prompt],add_special_tokens=False, return_tensors="pt").to("cuda")
             input_ids = inputs.input_ids
             # try:
-            torch.cuda.synchronize()
-            start_time = time.time()
-            output_ids, new_token, step, accept_length_tree = forward_func(
+            # torch.cuda.synchronize()
+            # start_time = time.time()
+            output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
                 inputs,
                 model,
                 tokenizer,
@@ -327,8 +327,8 @@ def get_model_answers_hf(
                 teminators,
                 **kwargs,
             )
-            torch.cuda.synchronize()
-            total_time = time.time() - start_time
+            # torch.cuda.synchronize()
+            # total_time = time.time() - start_time
             # be consistent with the template's stop_token_ids
             if len(teminators)>0:
                 stop_token_ids_index = [
@@ -359,7 +359,7 @@ def get_model_answers_hf(
             turns.append(output)
             steps.append(int(step))
             new_tokens.append(int(new_token))
-            wall_time.append(total_time)
+            wall_time.append(decode_time)
             messages.append({
                 "role": "assistant",
                 "content": output
@@ -400,9 +400,9 @@ def get_model_answers_hf(
                 inputs = tokenizer([prompt],add_special_tokens=False, return_tensors="pt").to("cuda")
                 input_ids = inputs.input_ids
                 # try:
-                torch.cuda.synchronize()
-                start_time = time.time()
-                output_ids, new_token, step, accept_length_tree = forward_func(
+                # torch.cuda.synchronize()
+                # start_time = time.time()
+                output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
                     inputs,
                     model,
                     tokenizer,
@@ -411,8 +411,8 @@ def get_model_answers_hf(
                     teminators,
                     **kwargs,
                 )
-                torch.cuda.synchronize()
-                total_time = time.time() - start_time
+                # torch.cuda.synchronize()
+                # total_time = time.time() - start_time
                 accept_lengths_tree.extend(accept_length_tree)
 
                 if len(teminators)>0:
@@ -443,8 +443,8 @@ def get_model_answers_hf(
                 turns.append(output)
                 steps.append(int(step))
                 new_tokens.append(int(new_token))
-                wall_time.append(total_time)
-                generate_speed.append(int(new_token) / total_time)
+                wall_time.append(decode_time)
+                generate_speed.append(int(new_token) / decode_time)
                 cur_accept_lengths_tree.extend(accept_length_tree)
                 messages.append({
                     "role": "assistant",

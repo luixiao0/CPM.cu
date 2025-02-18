@@ -6,6 +6,7 @@ import os, json, glob
 from ..llama_w4a8_per_chn import W4A8PerChnLLM
 
 import torch
+import time
 
 def pack_draft_mask(mask_2d):
     '''
@@ -179,27 +180,29 @@ class W4A8PerChnLLM_with_W4A16FMspec(W4A8PerChnLLM):
         i = 0
         model_step = 0
         terminal = False
+        torch.cuda.synchronize()
+        start_time = time.time()
         while i < generation_length-1 and not terminal:
             self.cache_length[0] = prefix_length + i
             self.draft_position_ids[0] = prefix_length + i
 
-            torch.cuda.nvtx.range_push(f"draft")
+            # torch.cuda.nvtx.range_push(f"draft")
             self.cache_length += 1
             C.draft(self.draft_ids.data_ptr(), self.draft_position_ids.data_ptr(), self.cache_length.data_ptr(), self.draft_attn_mask.data_ptr(), self.draft_parent.data_ptr())
             self.cache_length -= 1
-            torch.cuda.nvtx.range_pop()
+            # torch.cuda.nvtx.range_pop()
 
             
             logits = self.decode(self.draft_ids, self.draft_position_ids, self.cache_length, mask_2d=self.draft_attn_mask)
             self.draft_gt_ids.copy_(logits.argmax(dim=-1))
 
-            torch.cuda.nvtx.range_push(f"verify")
+            # torch.cuda.nvtx.range_push(f"verify")
             accept_length = C.verify_and_fix(
                 self.draft_ids.numel(), self.draft_ids.data_ptr(), self.draft_gt_ids.data_ptr(),
                 self.draft_position_ids.data_ptr(), self.cache_length.data_ptr(),
                 self.draft_attn_mask.data_ptr(), self.draft_parent.data_ptr()
             )
-            torch.cuda.nvtx.range_pop()
+            # torch.cuda.nvtx.range_pop()
 
             model_step += 1
             accept_lengths.append(accept_length)
@@ -210,6 +213,7 @@ class W4A8PerChnLLM_with_W4A16FMspec(W4A8PerChnLLM):
             tokens[1+i:1+i+append_length].copy_(self.draft_gt_ids[:append_length])
             self.draft_ids[0] = self.draft_gt_ids[accept_length - 1]
             i += accept_length
-
+        torch.cuda.synchronize()
+        decode_time = time.time() - start_time
         tokens = tokens[:1+i].tolist()
-        return tokens, accept_lengths, model_step
+        return tokens, accept_lengths, model_step, decode_time

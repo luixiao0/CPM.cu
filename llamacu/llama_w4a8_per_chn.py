@@ -5,6 +5,7 @@ import torch
 from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from safetensors.torch import load_file
+import time
 
 dtype_map = {
     torch.float16: 0,
@@ -140,13 +141,13 @@ class W4A8PerChnLLM(torch.nn.Module):
     def prefill(self, input_ids, position_ids):
         assert input_ids.dtype == torch.int32
         for i in range(0, input_ids.numel(), self.chunk_length):
-            torch.cuda.nvtx.range_push(f"chunk from {i}")
+            # torch.cuda.nvtx.range_push(f"chunk from {i}")
             C.prefill(
                 min(input_ids.numel() - i, self.chunk_length), i,
                 input_ids.view(-1)[i:].data_ptr(), position_ids.view(-1)[i:].data_ptr(),
                 self.logits.data_ptr()
             )
-            torch.cuda.nvtx.range_pop()
+            # torch.cuda.nvtx.range_pop()
         return self.logits[:1].clone()
 
     def decode(self, input_ids, position_ids, cache_length, mask_2d = None):
@@ -157,7 +158,7 @@ class W4A8PerChnLLM(torch.nn.Module):
             # assert mask_2d.dtype == torch.uint64
             assert input_ids.numel() == mask_2d.shape[0]
 
-        torch.cuda.nvtx.range_push(f"decode")
+        # torch.cuda.nvtx.range_push(f"decode")
         cache_length += input_ids.numel() # temparary add for convinience in flash_attn
         padded_length = (cache_length[0].item() + 128 - 1) // 128 * 128
         C.decode(
@@ -168,7 +169,7 @@ class W4A8PerChnLLM(torch.nn.Module):
             self.cuda_graph
         )
         cache_length -= input_ids.numel()
-        torch.cuda.nvtx.range_pop()
+        # torch.cuda.nvtx.range_pop()
         return self.logits[:input_ids.numel()].clone()
 
     def generate(self, input_ids, generation_length=100, teminators=[]):
@@ -184,6 +185,8 @@ class W4A8PerChnLLM(torch.nn.Module):
             self.input_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.position_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
+        torch.cuda.synchronize()
+        start_time = time.time()
         for i in range(generation_length-1):
             self.input_ids[0] = token
             self.position_ids[0] = prefix_length + i
@@ -194,4 +197,6 @@ class W4A8PerChnLLM(torch.nn.Module):
             tokens.append(token)
             if token in teminators:
                 break
-        return tokens
+        torch.cuda.synchronize()
+        decode_time = time.time() - start_time
+        return tokens, decode_time

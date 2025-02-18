@@ -13,14 +13,14 @@ def eagle_w8a8_forward(inputs, model, tokenizer, max_new_tokens, max_length, tem
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, accept_length_list, model_step = model.generate(
+    output_ids, accept_length_list, model_step, decode_time = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    return output_ids, new_token, model_step, accept_length_list
+    return output_ids, new_token, model_step, accept_length_list, decode_time
 
 
 if __name__ == "__main__":
