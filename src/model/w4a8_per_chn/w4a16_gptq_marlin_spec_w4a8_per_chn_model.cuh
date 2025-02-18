@@ -37,6 +37,7 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
     int32_t *draft_tmp;
     int32_t *h_best, *d_best;    
     int num_iter;
+    int num_prev, num_history_tokens;
 
     // draft mask always nullptr
     uint64_t* draft_mask_2d;   
@@ -229,8 +230,16 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
 
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->model->prefill(num_tokens, num_history_tokens, input, position_ids, output);
-        this->draft_prefill(num_tokens, num_history_tokens, input, position_ids);
+        // this->draft_prefill(num_tokens, num_history_tokens, input, position_ids);
+        if (num_history_tokens > 0) {
+            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids);
+        }
         
+        cudaMemcpy(this->draft_input, input, num_tokens * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->draft_position_ids, position_ids, num_tokens * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        this->num_prev = num_tokens;
+        this->num_history_tokens = num_history_tokens;
+        this->is_first_draft = true;
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
@@ -238,6 +247,10 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
     }
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t*, int32_t*) {
+        if (this->is_first_draft) {
+            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids);
+        }
+
         cudaMemcpy(this->host_draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
 
         cudaMemcpy(this->draft_input, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
@@ -249,7 +262,7 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
         {
             this->draft_decode_with_graph_control(1, this->draft_padded_length, (void*) this->draft_logits);
             // update input_ids
-            log_softmax(calc_stream, 1, this->vocab_size, this->draft_logits);
+            // log_softmax(calc_stream, 1, this->vocab_size, this->draft_logits);
             this->topk_func->prefill(calc_stream, 1, this->draft_logits);
             cudaMemcpy(this->draft_input, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             // update draft tmp
@@ -270,6 +283,7 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
 
         cudaMemcpy(tree_draft_ids + 1, this->draft_tmp, num_iter*sizeof(int32_t), cudaMemcpyDeviceToDevice);
         make_arange(calc_stream, this->num_iter, cache_length, tree_position_ids+1);
+        this->is_first_draft = false;
     }
 
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { 
