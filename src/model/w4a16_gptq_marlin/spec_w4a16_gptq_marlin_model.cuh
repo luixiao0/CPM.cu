@@ -172,7 +172,7 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
         }
     }
 
-    void draft_prefill_embed(int32_t num_tokens, int32_t num_history_tokens, T* embed, int32_t* position_ids) {
+    void draft_prefill_embed(int32_t num_tokens, int32_t num_history_tokens, T* embed, int32_t* position_ids, void* output) {
         T* layer_output = nullptr;
         for (int i = 0; i < num_hidden_layers; i++) {
             this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
@@ -180,12 +180,12 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
         }
         // TODO : remove norm and lm_head prefill
         this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
-        this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size);
+        this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*) output);
     }
 
-    void draft_prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids) {
+    void draft_prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->embedding->prefill(calc_stream, num_tokens, input);
-        this->draft_prefill_embed(num_tokens, num_history_tokens, this->embedding->output, position_ids);
+        this->draft_prefill_embed(num_tokens, num_history_tokens, this->embedding->output, position_ids, output);
     }
 
     void draft_decode_embed(int32_t num_tokens, int32_t padded_length, T* embed, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
@@ -196,7 +196,7 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
             layer_output = this->layers[i]->output;
         }
         this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
-        this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*) output);
+        this->lm_head->prefill(calc_stream, num_tokens, this->norm->output + (num_tokens - 1) * hidden_size, (T*) output);
     }
 
     void draft_decode(int32_t num_tokens, int32_t padded_length, void* output) {
@@ -230,9 +230,8 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
 
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->model->prefill(num_tokens, num_history_tokens, input, position_ids, output);
-        // this->draft_prefill(num_tokens, num_history_tokens, input, position_ids);
         if (num_history_tokens > 0) {
-            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids);
+            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, this->draft_logits);
         }
         
         cudaMemcpy(this->draft_input, input, num_tokens * sizeof(int32_t), cudaMemcpyDeviceToDevice);
@@ -248,26 +247,28 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t*, int32_t*) {
         if (this->is_first_draft) {
-            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids);
-        }
+            // append tree draft ids to draft input
+            cudaMemcpy(this->draft_input+this->num_prev, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->draft_position_ids+this->num_prev, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            this->num_prev += 1;
+            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, this->draft_logits);
 
-        cudaMemcpy(this->host_draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
-
-        cudaMemcpy(this->draft_input, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-        cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-        cudaMemcpy(this->draft_position_ids, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-        this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;;
-        
-        // iter 0
-        {
-            this->draft_decode_with_graph_control(1, this->draft_padded_length, (void*) this->draft_logits);
-            // update input_ids
-            // log_softmax(calc_stream, 1, this->vocab_size, this->draft_logits);
-            this->topk_func->prefill(calc_stream, 1, this->draft_logits);
-            cudaMemcpy(this->draft_input, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            // update draft tmp
-            cudaMemcpy(this->draft_tmp, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->host_draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+            cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            add(calc_stream, 1, this->draft_cache_length, 1);
+            cudaMemcpy(this->draft_position_ids, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
+        } else if (this->num_prev == 2){
+            this->draft_decode(this->num_prev, this->draft_padded_length, this->draft_logits);
+            add(calc_stream, 1, this->draft_position_ids, 1);
+        } else {
+            // num_prev == 1
+            this->draft_decode_with_graph_control(this->num_prev, this->draft_padded_length, this->draft_logits);
         }
+        this->topk_func->prefill(calc_stream, 1, this->draft_logits);
+        cudaMemcpy(this->draft_input, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->draft_tmp, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+
 
         for (int d = 1; d < this->num_iter; ++d){
             add(calc_stream, 1, this->draft_cache_length, 1);
@@ -282,7 +283,7 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
         }
 
         cudaMemcpy(tree_draft_ids + 1, this->draft_tmp, num_iter*sizeof(int32_t), cudaMemcpyDeviceToDevice);
-        make_arange(calc_stream, this->num_iter, cache_length, tree_position_ids+1);
+        make_arange(calc_stream, this->num_iter+1, cache_length, tree_position_ids);
         this->is_first_draft = false;
     }
 
@@ -293,15 +294,23 @@ struct SpecW4A16GPTQMarlinModelImpl: Model {
         
         if (h_best[0]==(num_iter+1)) {
             // full accept   
-            cudaMemcpy(this->draft_input, pred + num_iter, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            this->num_prev = 2;
+            cudaMemcpy(this->draft_input, gt + (num_iter-1), 2*sizeof(int32_t), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            add(calc_stream, 1, this->draft_cache_length, this->h_best[0]);
-            cudaMemcpy(this->draft_position_ids, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            add(calc_stream, 1, this->draft_position_ids, num_iter);
-
+            add(calc_stream, 1, this->draft_cache_length, this->h_best[0]+1);
+            make_arange(calc_stream, 2, cache_length, this->draft_position_ids);
+            add(calc_stream, 2, this->draft_position_ids, num_iter);
             cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
-            this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;;
-            this->draft_decode_with_graph_control(1, this->draft_padded_length, (void*) this->draft_logits);
+            this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
+        } else {
+            this->num_prev = 1;
+            cudaMemcpy(this->draft_input, gt + (this->h_best[0]-1), sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            add(calc_stream, 1, this->draft_cache_length, this->h_best[0]+1);
+            cudaMemcpy(this->draft_position_ids, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            add(calc_stream, 1, this->draft_position_ids, this->h_best[0]);
+            cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+            this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
         }
 
         return h_best[0];
