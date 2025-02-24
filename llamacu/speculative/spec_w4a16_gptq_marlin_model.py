@@ -143,9 +143,7 @@ class W4A16GPTQMarlinLLM_with_spec(W4A16GPTQMarlinLLM):
             self.draft_position_ids[0] = prefix_length + i
 
             # torch.cuda.nvtx.range_push(f"draft")
-            self.cache_length += 1
             C.draft(self.draft_ids.data_ptr(), self.draft_position_ids.data_ptr(), self.cache_length.data_ptr(), self.draft_attn_mask.data_ptr(), self.draft_parent.data_ptr())
-            self.cache_length -= 1
             # torch.cuda.nvtx.range_pop()
 
             

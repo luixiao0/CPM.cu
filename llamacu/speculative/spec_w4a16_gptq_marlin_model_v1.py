@@ -3,7 +3,7 @@ from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from safetensors.torch import load_file
 
-from ..llama import LLM
+from ..llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
 
 import torch
 import time
@@ -22,9 +22,8 @@ def pack_draft_mask(mask_2d):
     return mask_2d_packed
 
 
-class LLM_with_spec(LLM):
+class W4A16GPTQMarlinLLM_with_specV1(W4A16GPTQMarlinLLM):
     def __init__(self,
-                 drafter_type,
                  drafter_path: str,
                  base_path: str,
                  draft_num: int,
@@ -32,7 +31,7 @@ class LLM_with_spec(LLM):
                   **kwargs):
         super().__init__(base_path, **kwargs)
         
-        self.drafter_type = drafter_type
+        self.drafter_type = 'draft'
         self.drafter_path = drafter_path
         self.drafter_tokenizer = AutoTokenizer.from_pretrained(drafter_path)
         self.drafter_config = AutoConfig.from_pretrained(drafter_path)
@@ -53,7 +52,7 @@ class LLM_with_spec(LLM):
         # self.logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         self.draft_cuda_graph = draft_cuda_graph
         
-        C.init_spec_model(
+        C.init_spec_w4a16_gptq_marlin_v1_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,
@@ -75,16 +74,18 @@ class LLM_with_spec(LLM):
                 else:
                     dtype = self.dtype
 
-            if 'gate_up_proj' in name:
-                self._load(name.replace("gate_up_proj", "gate_proj"), param[:param.shape[0]//2], dtype, cls=cls)
-                self._load(name.replace("gate_up_proj", "up_proj"), param[param.shape[0]//2:], cls=cls)
-            elif 'qkv_proj' in name:
-                self._load(name.replace("qkv_proj", "q_proj"), param[:self.config.num_attention_heads * self.config.head_dim], cls=cls)
-                self._load(name.replace("qkv_proj", "k_proj"), param[self.config.num_attention_heads * self.config.head_dim:(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim], cls=cls)
-                self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:], cls=cls)
-            else:
-                param = param.contiguous().to(dtype)
-                C.load_model(f"{cls}.{name}", param.data_ptr())
+            # if 'gate_up_proj' in name:
+            #     self._load(name.replace("gate_up_proj", "gate_proj"), param[:param.shape[0]//2], dtype, cls=cls)
+            #     self._load(name.replace("gate_up_proj", "up_proj"), param[param.shape[0]//2:], cls=cls)
+            # elif 'qkv_proj' in name:
+            #     self._load(name.replace("qkv_proj", "q_proj"), param[:self.config.num_attention_heads * self.config.head_dim], cls=cls)
+            #     self._load(name.replace("qkv_proj", "k_proj"), param[self.config.num_attention_heads * self.config.head_dim:(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim], cls=cls)
+            #     self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:], cls=cls)
+            # else:
+            param = param.contiguous()
+            if param.dtype not in [torch.int8, torch.int16, torch.int32]:
+                param = param.to(dtype)
+            C.load_model(f"{cls}.{name}", param.data_ptr())
 
             if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
                 self._load("lm_head", param, cls)
