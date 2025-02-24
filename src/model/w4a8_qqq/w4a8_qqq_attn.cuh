@@ -1,0 +1,194 @@
+#pragma once
+#include "../norm.cuh"
+#include "../attn.cuh"
+#include "quant_sfloat.cuh"
+#include "w4a8_qqq_linear.cuh"
+
+template <typename T>
+struct W4A8QQQAttention {
+    int hidden_size;
+    int num_attention_heads;
+    int num_key_value_heads;
+    int head_dim;
+    float rms_norm_eps;
+
+    Norm<T> *attn_norm;
+    QuantizerScalefloat<T> * qkv_quantizer;
+    W4A8QQQLinear<T> *q_proj, *k_proj, *v_proj;
+    QuantizerScalefloat<T> * o_quantizer;
+    W4A8QQQLinear<T> *o_proj;
+    T* output;
+
+    T* attn_output;
+    float *softmax_lse, *softmax_lse_accum, *oaccum;
+
+    W4A8QQQAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
+        this->hidden_size = hidden_size;
+        this->num_attention_heads = num_attention_heads;
+        this->num_key_value_heads = num_key_value_heads;
+        this->head_dim = head_dim;
+        this->rms_norm_eps = rms_norm_eps;
+
+        this->attn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
+        this->qkv_quantizer = new QuantizerScalefloat<T>(hidden_size);
+        this->q_proj = new W4A8QQQLinear<T>(hidden_size, num_attention_heads * head_dim);
+        this->k_proj = new W4A8QQQLinear<T>(hidden_size, num_key_value_heads * head_dim);
+        this->v_proj = new W4A8QQQLinear<T>(hidden_size, num_key_value_heads * head_dim);
+        this->o_quantizer = new QuantizerScalefloat<T>(num_attention_heads * head_dim);
+        this->o_proj = new W4A8QQQLinear<T>(hidden_size, num_attention_heads * head_dim);
+    }
+
+    void init_weight_ptr(Memory* memory) {
+        this->attn_norm->init_weight_ptr(memory);
+        this->q_proj->init_weight_ptr(memory);
+        this->k_proj->init_weight_ptr(memory);
+        this->v_proj->init_weight_ptr(memory);
+        this->o_proj->init_weight_ptr(memory);
+
+        this->q_proj->init_scale_ptr(memory);
+        this->k_proj->init_scale_ptr(memory);
+        this->v_proj->init_scale_ptr(memory);
+        this->o_proj->init_scale_ptr(memory);
+
+        this->q_proj->init_workspace_ptr(memory);
+        this->k_proj->init_workspace_ptr(memory);
+        this->v_proj->init_workspace_ptr(memory);
+        this->o_proj->init_workspace_ptr(memory);
+
+    }
+
+    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        int64_t attn_norm_end = this->attn_norm->init_output_ptr(memory, num_tokens, offset);
+
+        int64_t qkv_quantizer_offset = this->qkv_quantizer->init_output_ptr(memory, num_tokens, attn_norm_end);
+        int64_t q_proj_end = this->q_proj->init_output_ptr(memory, num_tokens, qkv_quantizer_offset);
+        int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
+        int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
+
+        int64_t q_proj_tmp_end = this->q_proj->init_tmp_ptr(memory, num_tokens, v_proj_end);
+        int64_t k_proj_tmp_end = this->k_proj->init_tmp_ptr(memory, num_tokens, q_proj_tmp_end);
+        int64_t v_proj_tmp_end = this->v_proj->init_tmp_ptr(memory, num_tokens, k_proj_tmp_end);
+        
+        memory->allocate((void**)&this->attn_output, offset);
+        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_tmp_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
+
+        int64_t o_quantizer_offset = this->o_quantizer->init_output_ptr(memory, num_tokens, oaccum_end);
+        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, o_quantizer_offset);
+        this->output = this->o_proj->output;
+
+        int64_t o_proj_tmp_end = this->o_proj->init_tmp_ptr(memory, num_tokens, o_proj_end);
+        return o_proj_tmp_end;
+    }
+
+
+    void load_to_storage(std::string name, void* ptr) {
+        if (name.find("q_proj") != std::string::npos) {
+            this->q_proj->load_to_storage(name, ptr);
+        } else if (name.find("k_proj") != std::string::npos) {
+            this->k_proj->load_to_storage(name, ptr);
+        } else if (name.find("v_proj") != std::string::npos) {
+            this->v_proj->load_to_storage(name, ptr);
+        } else if (name.find("o_proj") != std::string::npos) {
+            this->o_proj->load_to_storage(name, ptr);
+        } else if (name.find("input_layernorm") != std::string::npos) {
+            this->attn_norm->load_to_storage(name, ptr);
+        } else {
+            throw std::invalid_argument("Unsupported name " + name);
+        }
+    }
+
+    void prefill(const Stream& stream, int32_t num_tokens, int32_t num_history_tokens, T* input, T* prev_output, int32_t* position_ids, KVCache<T>* kv_cache) {
+        T* k_cache = kv_cache->offset_k(num_history_tokens);
+        T* v_cache = kv_cache->offset_v(num_history_tokens);
+
+        this->attn_norm->prefill(stream, num_tokens, input, prev_output);
+        
+        this->qkv_quantizer->invoke(stream, this->attn_norm->output, num_tokens);
+        
+        this->q_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale);
+        this->k_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale, k_cache);
+        this->v_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale, v_cache);
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
+
+        mha_fwd_kvcache(
+            TypeTraits<T>::type_code()==1,
+            1,
+            num_tokens,
+            num_history_tokens+num_tokens,
+            num_tokens,
+            this->num_attention_heads,
+            this->num_key_value_heads,
+            this->head_dim,
+            this->q_proj->output,
+            kv_cache->k_cache,
+            kv_cache->v_cache,
+            nullptr,
+            Mask(nullptr),
+            this->attn_output,
+            this->softmax_lse,
+            this->softmax_lse_accum,
+            this->oaccum,
+            rsqrtf(float(this->head_dim)),
+            true,
+            -1,
+            -1,
+            0,
+            stream.stream
+        );
+
+        // flash attention and put output to attn_norm->output
+        this->o_quantizer->invoke(stream, this->attn_output, num_tokens);
+        this->o_proj->prefill(stream, num_tokens, this->o_quantizer->output, this->o_quantizer->output_scale);
+    }
+
+    void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
+        this->attn_norm->prefill(stream, num_tokens, input, prev_output);
+        T *q, *k, *v;
+        this->qkv_quantizer->invoke(stream, this->attn_norm->output, num_tokens);
+        
+        this->q_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale);
+        this->k_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale);
+        this->v_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale);
+        q = this->q_proj->output;
+        k = this->k_proj->output;
+        v = this->v_proj->output;
+        // k = q + num_tokens * this->num_attention_heads * this->head_dim;
+        // v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
+
+        copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
+
+        mha_fwd_kvcache(
+            TypeTraits<T>::type_code()==1,
+            1,
+            num_tokens,
+            padded_length,
+            num_tokens,
+            this->num_attention_heads,
+            this->num_key_value_heads,
+            this->head_dim,
+            q,
+            kv_cache->k_cache,
+            kv_cache->v_cache,
+            cache_length,
+            mask,
+            this->attn_output,
+            this->softmax_lse,
+            this->softmax_lse_accum,
+            this->oaccum,
+            rsqrtf(float(this->head_dim)),
+            true,
+            -1,
+            -1,
+            0,
+            stream.stream
+        );
+
+        // flash attention and put output to attn_norm->output
+        this->o_quantizer->invoke(stream, this->attn_output, num_tokens);
+        this->o_proj->prefill(stream, num_tokens, this->o_quantizer->output, this->o_quantizer->output_scale);
+    }
+};
+
