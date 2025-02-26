@@ -58,10 +58,7 @@ class W4A8QQQLLM(torch.nn.Module):
         )
 
         self.logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
-        # self.logits = torch.empty((chunk_length, self.config.vocab_size), dtype=self.dtype, device="cuda")
-        # self.logits = torch.empty((chunk_length, self.config.hidden_size), dtype=torch.int8, device="cuda")
-        # self.logits = torch.empty((chunk_length, self.config.hidden_size), dtype=torch.int8, device="cuda")
-        # self.logits = torch.empty((chunk_length, 1), dtype=torch.float32, device="cuda")
+
 
     def init_storage(self):
         self.max_total_length = C.init_storage()
@@ -157,7 +154,6 @@ class W4A8QQQLLM(torch.nn.Module):
             )
             torch.cuda.nvtx.range_pop()
         return self.logits[:1].clone()
-        # return self.logits[:input_ids.numel()].clone()
 
     def decode(self, input_ids, position_ids, cache_length, mask_2d = None):
         assert input_ids.dtype == torch.int32

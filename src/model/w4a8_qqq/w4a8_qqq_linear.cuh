@@ -54,21 +54,17 @@ struct W4A8QQQLinear{
             bias = (T*)memory->allocate_for_model(dim_out * sizeof(T));
         }
 
-        // this->init_scale_ptr(memory);
-        // this->init_workspace_ptr(memory);
+        this->init_scale_ptr(memory);
+        this->init_workspace_ptr(memory);
         
     }
     
 
-    int64_t init_tmp_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        int64_t c_tmp_offset = memory->allocate((void**)&this->c_tmp, offset, dim_out * 64 * sizeof(int32_t));
-        return c_tmp_offset;
-    }
-
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         int64_t output_offset =  memory->allocate((void**)&this->output, offset, num_tokens * dim_out * sizeof(T));
         // int64_t tmp_offset = this->init_tmp_ptr(memory, num_tokens, output_offset);
-        return output_offset;
+        int64_t c_tmp_offset = memory->allocate((void**)&this->c_tmp, output_offset, this->max_par * this->dim_out * 64 * sizeof(int32_t));
+        return c_tmp_offset;
     }
 
     void load_to_storage(std::string name, void* ptr) {

@@ -9,7 +9,6 @@ struct W4A8QQQLayer {
     W4A8QQQFFN<T> *ffn;
     T* output;
     
-    // marlin for gptq marlin
     int intermediate_size;
 
     W4A8QQQLayer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
