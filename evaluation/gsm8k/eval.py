@@ -222,17 +222,14 @@ def run_eval(
             input_ids = tokenizer.encode(input_str, return_tensors="pt").to("cuda").view(1, -1)
 
         prompt_len = input_ids.shape[-1]
-        torch.cuda.synchronize()
-        start_time = time.time()
-        output_ids, new_token, step, accept_length_tree = forward_func(
+        
+        output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
             input_ids,
             model,
             tokenizer,
             max_new_tokens,
             max_length,
         )
-        torch.cuda.synchronize()
-        cur_time = time.time() - start_time
         print(f"warmup {wm_i} done")
     
     # cnt = 0
@@ -253,17 +250,13 @@ def run_eval(
         else:
             input_ids = tokenizer.encode(input_str, return_tensors="pt").to("cuda").view(1, -1)
 
-        torch.cuda.synchronize()
-        start_time = time.time()
-        output_ids, new_token, step, accept_length_tree = forward_func(
+        output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
             input_ids,
             model,
             tokenizer,
             max_new_tokens,
             max_length,
         )
-        torch.cuda.synchronize()
-        cur_time = time.time() - start_time
         accept_lengths_tree.extend(accept_length_tree)
 
         output_str = tokenizer.decode(output_ids, skip_special_tokens=True)
@@ -279,9 +272,9 @@ def run_eval(
                 "model_output": output_str,
                 "steps": step,
                 "new_tokens": int(new_token),
-                "wall_time": cur_time,
+                "wall_time": decode_time,
                 "accept_lengths": cur_accept_lengths_tree,
-                "generate_speed": int(new_token) / cur_time,
+                "generate_speed": int(new_token) / decode_time,
                 "correct": is_cor,
                 "tstamp": time.time(),
             }
@@ -289,7 +282,7 @@ def run_eval(
 
         result.append(is_cor)
         total_new_tokens += new_token
-        total_time += cur_time
+        total_time += decode_time
         # if cnt == 2:
         #     break
         # cnt += 1
