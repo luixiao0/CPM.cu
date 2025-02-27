@@ -1,6 +1,7 @@
 #pragma once
 #include "../norm.cuh"
 #include "../attn.cuh"
+#include "normq_sfloat.cuh"
 #include "quant_sfloat.cuh"
 #include "w4a8_qqq_linear.cuh"
 
@@ -12,8 +13,7 @@ struct W4A8QQQAttention {
     int head_dim;
     float rms_norm_eps;
 
-    Norm<T> *attn_norm;
-    QuantizerScalefloat<T> * qkv_quantizer;
+    RMSNormQuantSfloat<T> *attn_norm_quant;
     W4A8QQQLinear<T> *qkv_proj;
     QuantizerScalefloat<T> * o_quantizer;
     W4A8QQQLinear<T> *o_proj;
@@ -32,24 +32,22 @@ struct W4A8QQQAttention {
         this->head_dim = head_dim;
         this->rms_norm_eps = rms_norm_eps;
 
-        this->attn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        this->qkv_quantizer = new QuantizerScalefloat<T>(hidden_size);
+        this->attn_norm_quant = new RMSNormQuantSfloat<T>(hidden_size, rms_norm_eps);
         this->qkv_proj = new W4A8QQQLinear<T>(hidden_size, (num_attention_heads + 2*num_key_value_heads) * head_dim);
         this->o_quantizer = new QuantizerScalefloat<T>(num_attention_heads * head_dim);
         this->o_proj = new W4A8QQQLinear<T>(hidden_size, num_attention_heads * head_dim);
     }
 
     void init_weight_ptr(Memory* memory) {
-        this->attn_norm->init_weight_ptr(memory);
+        this->attn_norm_quant->init_weight_ptr(memory);
         this->qkv_proj->init_weight_ptr(memory);
         this->o_proj->init_weight_ptr(memory);
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        int64_t attn_norm_end = this->attn_norm->init_output_ptr(memory, num_tokens, offset);
 
-        int64_t qkv_quantizer_offset = this->qkv_quantizer->init_output_ptr(memory, num_tokens, attn_norm_end);
-        int64_t qkv_proj_end = this->qkv_proj->init_output_ptr(memory, num_tokens, qkv_quantizer_offset);
+        int64_t attn_norm_quant_end = this->attn_norm_quant->init_output_ptr(memory, num_tokens, offset);
+        int64_t qkv_proj_end = this->qkv_proj->init_output_ptr(memory, num_tokens, attn_norm_quant_end);
         this->q_proj_output = this->qkv_proj->output;
         this->k_proj_output = this->qkv_proj->output + num_tokens * this->num_attention_heads * this->head_dim;
         this->v_proj_output = this->qkv_proj->output + num_tokens * (this->num_attention_heads+this->num_key_value_heads) * this->head_dim;
@@ -73,7 +71,7 @@ struct W4A8QQQAttention {
         } else if (name.find("o_proj") != std::string::npos) {
             this->o_proj->load_to_storage(name, ptr);
         } else if (name.find("input_layernorm") != std::string::npos) {
-            this->attn_norm->load_to_storage(name, ptr);
+            this->attn_norm_quant->load_to_storage(name, ptr);
         } else {
             throw std::invalid_argument("Unsupported name " + name);
         }
@@ -83,11 +81,9 @@ struct W4A8QQQAttention {
         T* k_cache = kv_cache->offset_k(num_history_tokens);
         T* v_cache = kv_cache->offset_v(num_history_tokens);
 
-        this->attn_norm->prefill(stream, num_tokens, input, prev_output);
+        this->attn_norm_quant->prefill(stream, num_tokens, input, prev_output);
         
-        this->qkv_quantizer->invoke(stream, this->attn_norm->output, num_tokens);
-        
-        this->qkv_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale);
+        this->qkv_proj->prefill(stream, num_tokens, this->attn_norm_quant->output, this->attn_norm_quant->output_scale);
 
         permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->qkv_proj->output, this->permute_qkv_output);
         cudaMemcpy(k_cache, this->permute_qkv_output + num_tokens*this->num_attention_heads*this->head_dim, num_tokens*this->num_key_value_heads*this->head_dim*sizeof(T), cudaMemcpyDeviceToDevice);
@@ -128,18 +124,16 @@ struct W4A8QQQAttention {
     }
 
     void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
-        this->attn_norm->prefill(stream, num_tokens, input, prev_output);
+        this->attn_norm_quant->prefill(stream, num_tokens, input, prev_output);
         T *q, *k, *v;
-        this->qkv_quantizer->invoke(stream, this->attn_norm->output, num_tokens);
-        
         if (num_tokens > 1){
-            this->qkv_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale, this->v_proj_output);
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm_quant->output, this->attn_norm_quant->output_scale, this->v_proj_output);
             permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj_output, this->q_proj_output);
             q = this->q_proj_output;
             k = q + num_tokens * this->num_attention_heads * this->head_dim;
             v = k + num_tokens * this->num_key_value_heads * this->head_dim;
         } else {
-            this->qkv_proj->prefill(stream, num_tokens, this->qkv_quantizer->output, this->qkv_quantizer->output_scale);
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm_quant->output, this->attn_norm_quant->output_scale);
             q = this->qkv_proj->output;
             k = q + num_tokens * this->num_attention_heads * this->head_dim;
             v = k + num_tokens * this->num_key_value_heads * this->head_dim;
