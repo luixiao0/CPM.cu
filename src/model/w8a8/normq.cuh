@@ -521,7 +521,7 @@ struct RMSNormQuant {
         // using T = typename FloatTypeConverter<scalar_t>::Type;
         if (use_per_token_quant) {
             // per-token
-            generalRMSNorm<T, half><<<grid, block, 0, stream.stream>>>(
+            generalLayerNorm<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, nullptr, output_scale,
@@ -534,7 +534,7 @@ struct RMSNormQuant {
         } else {
             // per-tensor
             // not support
-            generalRMSNorm<T, half><<<grid, block, 0, stream.stream>>>(
+            generalLayerNorm<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, output_scale, nullptr,
@@ -585,7 +585,7 @@ struct RMSNormQuantFuseSum {
         // using T = typename FloatTypeConverter<scalar_t>::Type;
         if (use_per_token_quant) {
             // per-token
-            generalRMSNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
+            generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, output_sum, nullptr, output_scale,
@@ -598,7 +598,7 @@ struct RMSNormQuantFuseSum {
         } else {
             // per-tensor
             // not support
-            generalRMSNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
+            generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,
             nullptr, eps, num_tokens, dim, nullptr, output_scale, nullptr,
