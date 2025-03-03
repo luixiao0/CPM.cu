@@ -428,6 +428,7 @@ def get_model_answers_hf(
                         **kwargs,
                     )
                     cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
+                    cur_cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
                 else:
                     output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
                         inputs,
@@ -473,7 +474,6 @@ def get_model_answers_hf(
                 wall_time.append(decode_time)
                 generate_speed.append(int(new_token) / decode_time)
                 cur_accept_lengths_tree.extend(accept_length_tree)
-                cur_cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
                 messages.append({
                     "role": "assistant",
                     "content": output

@@ -61,6 +61,12 @@ if __name__ == "__main__":
         help="The maximum length of the model input length.",
     )
     parser.add_argument(
+        "--chunk-length",
+        type=int,
+        default=1024,
+        help="The chunk length of the model prefill.",
+    )
+    parser.add_argument(
         "--max-new-tokens",
         type=int,
         default=256,
@@ -95,7 +101,7 @@ if __name__ == "__main__":
     model = W4A16GPTQMarlinLLM(
         path=args.model_path,
         memory_limit=args.memory_limit,
-        chunk_length=max_length,
+        chunk_length=args.chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
     )
@@ -122,6 +128,6 @@ if __name__ == "__main__":
         model_id=args.model_id,
         answer_file=answer_file,
         max_new_tokens=args.max_new_tokens,
-        max_length=args.max_length,
+        max_length=max_length,
     )
 
