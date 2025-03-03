@@ -290,6 +290,8 @@ def get_model_answers_hf(
     print('CUDA VISIBLE DEVICES:', cuda_visible_devices)
 
     question = questions[0]
+    
+    is_cascade = kwargs.pop('is_cascade', False)
 
     # warmup
     for wm_i in range(3):
@@ -318,15 +320,26 @@ def get_model_answers_hf(
             # try:
             # torch.cuda.synchronize()
             # start_time = time.time()
-            output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
-                inputs,
-                model,
-                tokenizer,
-                max_new_tokens,
-                max_length,
-                teminators,
-                **kwargs,
-            )
+            if is_cascade:
+                output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree = forward_func(
+                    inputs,
+                    model,
+                    tokenizer,
+                    max_new_tokens,
+                    max_length,
+                    teminators,
+                    **kwargs,
+                )
+            else:
+                output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
+                    inputs,
+                    model,
+                    tokenizer,
+                    max_new_tokens,
+                    max_length,
+                    teminators,
+                    **kwargs,
+                )
             # torch.cuda.synchronize()
             # total_time = time.time() - start_time
             # be consistent with the template's stop_token_ids
@@ -371,11 +384,13 @@ def get_model_answers_hf(
     print('Warmup done')
 
     accept_lengths_tree = []
+    cascade_accept_lengths_tree = []
     for question in tqdm(questions):
 
         choices = []
         for i in range(num_choices):
             cur_accept_lengths_tree = []
+            cur_cascade_accept_lengths_tree = []
             torch.manual_seed(i)
             messages = [
                 {"role": "system",
@@ -402,15 +417,27 @@ def get_model_answers_hf(
                 # try:
                 # torch.cuda.synchronize()
                 # start_time = time.time()
-                output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
-                    inputs,
-                    model,
-                    tokenizer,
-                    max_new_tokens,
-                    max_length,
-                    teminators,
-                    **kwargs,
-                )
+                if is_cascade:
+                    output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree = forward_func(
+                        inputs,
+                        model,
+                        tokenizer,
+                        max_new_tokens,
+                        max_length,
+                        teminators,
+                        **kwargs,
+                    )
+                    cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
+                else:
+                    output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
+                        inputs,
+                        model,
+                        tokenizer,
+                        max_new_tokens,
+                        max_length,
+                        teminators,
+                        **kwargs,
+                    )
                 # torch.cuda.synchronize()
                 # total_time = time.time() - start_time
                 accept_lengths_tree.extend(accept_length_tree)
@@ -446,13 +473,18 @@ def get_model_answers_hf(
                 wall_time.append(decode_time)
                 generate_speed.append(int(new_token) / decode_time)
                 cur_accept_lengths_tree.extend(accept_length_tree)
+                cur_cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
                 messages.append({
                     "role": "assistant",
                     "content": output
                 })
             # torch.cuda.empty_cache()
-            choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
-                            "accept_lengths": cur_accept_lengths_tree, "generate_speed": generate_speed})
+            if is_cascade:
+                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
+                                "accept_lengths": cur_accept_lengths_tree, "cascade_accept_lengths": cur_cascade_accept_lengths_tree, "generate_speed": generate_speed})
+            else:
+                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
+                                "accept_lengths": cur_accept_lengths_tree, "generate_speed": generate_speed})
 
         # Dump answers
         os.makedirs(os.path.dirname(answer_file), exist_ok=True)
@@ -467,6 +499,8 @@ def get_model_answers_hf(
             }
             fout.write(json.dumps(ans_json) + "\n")
     print("#Mean accepted tokens: ", np.mean(accept_lengths_tree))
+    if is_cascade:
+        print("#Mean cascade accepted tokens: ", np.mean(cascade_accept_lengths_tree))
 
 
 def reorg_answer_file(answer_file):
