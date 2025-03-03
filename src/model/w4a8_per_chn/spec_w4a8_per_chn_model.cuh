@@ -243,18 +243,19 @@ struct SpecW4A8PerChnModelImpl: Model {
     }
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t*, int32_t*) {
-                if (this->is_first_draft) {
+        if (this->is_first_draft) {
             // append tree draft ids to draft input
             cudaMemcpy(this->draft_input+this->num_prev, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->draft_position_ids+this->num_prev, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             this->num_prev += 1;
             this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, this->draft_logits);
 
-            cudaMemcpy(this->host_draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+            
             cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             add(calc_stream, 1, this->draft_cache_length, 1);
             cudaMemcpy(this->draft_position_ids, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
+            cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+            // this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
         } else if (this->num_prev == 2){
             this->draft_decode(this->num_prev, this->draft_padded_length, this->draft_logits);
             add(calc_stream, 1, this->draft_position_ids, 1);
