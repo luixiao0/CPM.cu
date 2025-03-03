@@ -23,6 +23,7 @@
 #include "model/w4a16_gptq_marlin/eagle_base_w4a16_gptq_marlin.cuh"
 #include "model/w4a16_gptq_marlin/spec_w4a16_gptq_marlin_model.cuh"
 #include "model/w4a16_gptq_marlin/spec_w4a16_gptq_marlin_v1.cuh"
+#include "model/w4a16_gptq_marlin/cascade_eagle_spec_w4a16_gptq_marlin.cuh"
 #include "model/w4a8_per_group/w4a8_per_group_model.cuh"
 #include "model/w4a8_qqq/w4a8_qqq_model.cuh"
 
@@ -634,6 +635,47 @@ void init_w4a8_per_group_base_model(
     );
 }
 
+void init_cascade_eagle_spec_w4a16_gptq_marlin_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_num_layers,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagleSpecW4A16GPTQMarlinModelImpl<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_num_layers,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
+
 
 void init_w4a8_qqq_base_model(
     int64_t memory_limit,
@@ -736,6 +778,7 @@ PYBIND11_MODULE(C, m) {
     m.def("init_eagle_w4a16_gptq_marlin_model", &init_eagle_w4a16_gptq_marlin_model, "Init eagle W4A16 model");
     m.def("init_spec_w4a16_gptq_marlin_model", &init_spec_w4a16_gptq_marlin_model, "Init spec W4A16 model");
     m.def("init_spec_w4a16_gptq_marlin_v1_model", &init_spec_w4a16_gptq_marlin_v1_model, "Init spec w4a16 v1");
+    m.def("init_cascade_eagle_spec_w4a16_gptq_marlin_model", &init_cascade_eagle_spec_w4a16_gptq_marlin_model, "init cascade eagle spec model");
     m.def("init_w4a8_per_group_base_model", &init_w4a8_per_group_base_model, "Init W4A8 per group base model");
     m.def("init_w4a8_qqq_base_model", &init_w4a8_qqq_base_model, "Init W4A8 per group base model");
     m.def("init_storage", &init_storage, "Init storage");
