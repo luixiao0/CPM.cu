@@ -25,7 +25,7 @@ struct W4A8QQQAttention {
     T* q_proj_output, *v_proj_output, *k_proj_output; 
     T* permute_qkv_output;
 
-    W4A8QQQAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
+    W4A8QQQAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
@@ -33,9 +33,9 @@ struct W4A8QQQAttention {
         this->rms_norm_eps = rms_norm_eps;
 
         this->attn_norm_quant = new RMSNormQuantSfloat<T>(hidden_size, rms_norm_eps);
-        this->qkv_proj = new W4A8QQQLinear<T>(hidden_size, (num_attention_heads + 2*num_key_value_heads) * head_dim);
+        this->qkv_proj = new W4A8QQQLinear<T>(hidden_size, (num_attention_heads + 2*num_key_value_heads) * head_dim, group_size);
         this->o_quantizer = new QuantizerScalefloat<T>(num_attention_heads * head_dim);
-        this->o_proj = new W4A8QQQLinear<T>(hidden_size, num_attention_heads * head_dim);
+        this->o_proj = new W4A8QQQLinear<T>(hidden_size, num_attention_heads * head_dim, group_size);
     }
 
     void init_weight_ptr(Memory* memory) {

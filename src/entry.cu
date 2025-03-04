@@ -699,6 +699,7 @@ void init_w4a8_qqq_base_model(
     int num_key_value_heads,
     int head_dim,
     float rms_norm_eps,
+    int group_size,
     int torch_dtype,
     int chunk_length
 ) {
@@ -718,6 +719,7 @@ void init_w4a8_qqq_base_model(
         num_key_value_heads,
         head_dim,
         rms_norm_eps,
+        group_size,
         chunk_length
     );
 

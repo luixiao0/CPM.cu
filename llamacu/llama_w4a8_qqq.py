@@ -42,6 +42,8 @@ class W4A8QQQLLM(torch.nn.Module):
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
 
+        self.group_size = self.config.quantization_config['group_size']
+
         C.init_w4a8_qqq_base_model(
             self.memory_limit,
             self.memory_pool.data.data_ptr(),
@@ -53,6 +55,7 @@ class W4A8QQQLLM(torch.nn.Module):
             self.config.num_key_value_heads,
             self.config.head_dim,
             self.config.rms_norm_eps,
+            self.group_size,
             self.dtype_int,
             self.chunk_length,
         )

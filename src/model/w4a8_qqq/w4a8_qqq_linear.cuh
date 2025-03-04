@@ -18,7 +18,7 @@ struct W4A8QQQLinear{
     half* s_group;
     int32_t* workspace;
     T* bias;
-    int group_size=-1;
+    int group_size;
     int actual_size_n;
     
      // corresponding to gemm kernel
@@ -30,12 +30,14 @@ struct W4A8QQQLinear{
     // tmp
     int32_t* c_tmp;
 
-    W4A8QQQLinear(int dim_in, int dim_out) {
+    W4A8QQQLinear(int dim_in, int dim_out, int group_size) {
         this->dim_in = dim_in;
         this->dim_out = dim_out;
 
-        // TODO: adapt to group128
-        this->s_group = nullptr;
+        this->group_size = group_size;
+        if (this->group_size == -1) {
+            this->s_group = nullptr;
+        }
     }
 
     void init_scale_ptr(Memory* memory) {
@@ -52,6 +54,10 @@ struct W4A8QQQLinear{
         B = (int32_t*)memory->allocate_for_model(w_size*sizeof(int32_t));
         if constexpr (has_bias) {
             bias = (T*)memory->allocate_for_model(dim_out * sizeof(T));
+        }
+        if (this->group_size > 0) {
+            int s_group_size = this->dim_in / this->group_size * this->dim_out;
+            s_group = (half*)memory->allocate_for_model(s_group_size * sizeof(half));
         }
 
         this->init_scale_ptr(memory);
@@ -73,6 +79,12 @@ struct W4A8QQQLinear{
         } else if (name.find(".B") != std::string::npos) {
             const int w_size = this->dim_in * this->dim_out / this->pack_factor_4bit;
             cudaMemcpy((void*)B, ptr, w_size*sizeof(int32_t), cudaMemcpyHostToDevice);
+        } else if (name.find("s_group") != std::string::npos) {
+            if (this->group_size == -1) {
+                return;
+            }
+            int s_group_size = this->dim_in / this->group_size * this->dim_out;
+            cudaMemcpy((void*)s_group, ptr, s_group_size*sizeof(half), cudaMemcpyHostToDevice);
         } else if (name.find("bias") != std::string::npos) {
             cudaMemcpy((void*)bias, ptr, dim_out * sizeof(T), cudaMemcpyHostToDevice);
         } else {

@@ -37,6 +37,7 @@ struct W4A8QQQModelImpl: Model {
         int num_key_value_heads,
         int head_dim,
         float rms_norm_eps,
+        int group_size,
         int chunk_length
     ) {
         this->vocab_size = vocab_size;
@@ -56,7 +57,7 @@ struct W4A8QQQModelImpl: Model {
 
         embedding = new Embedding<T>(vocab_size, hidden_size);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new W4A8QQQLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps));
+            layers.push_back(new W4A8QQQLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         lm_head = new Linear<T>(hidden_size, vocab_size);
