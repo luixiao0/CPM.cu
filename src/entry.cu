@@ -26,6 +26,7 @@
 #include "model/w4a16_gptq_marlin/cascade_eagle_spec_w4a16_gptq_marlin.cuh"
 #include "model/w4a8_per_group/w4a8_per_group_model.cuh"
 #include "model/w4a8_qqq/w4a8_qqq_model.cuh"
+#include "model/w4a8_qqq/eagle_base_w4a8_qqq.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -712,6 +713,25 @@ void init_w4a8_qqq_base_model(
 
 }
 
+void init_eagle_w4a8_qqq_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new W4A8QQQEagleImpl<half>(
+        (W4A8QQQModelImpl<half>*)model,
+        num_layers,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
 int init_storage() {
     return model->init_storage();
 }
@@ -781,6 +801,7 @@ PYBIND11_MODULE(C, m) {
     m.def("init_cascade_eagle_spec_w4a16_gptq_marlin_model", &init_cascade_eagle_spec_w4a16_gptq_marlin_model, "init cascade eagle spec model");
     m.def("init_w4a8_per_group_base_model", &init_w4a8_per_group_base_model, "Init W4A8 per group base model");
     m.def("init_w4a8_qqq_base_model", &init_w4a8_qqq_base_model, "Init W4A8 per group base model");
+    m.def("init_eagle_w4a8_qqq_model", &init_eagle_w4a8_qqq_model, "Init W4A8 per group base model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");
