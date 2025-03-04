@@ -59,6 +59,7 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
         int draft_num_key_value_heads,
         int draft_head_dim,
         float draft_rms_norm_eps,
+        int draft_group_size,
         int num_iter,
         bool draft_cuda_graph
     ) {
@@ -80,7 +81,7 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
 
         embedding = new Embedding<T>(vocab_size, hidden_size);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new W4A16GPTQMarlinLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps));
+            layers.push_back(new W4A16GPTQMarlinLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, draft_group_size));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         lm_head = new Linear<T>(hidden_size, vocab_size);

@@ -87,6 +87,8 @@ class CascadeEagleSpecW4A16GPTQMarlin(W4A16GPTQMarlinLLM):
         self.draft_cuda_graph = draft_cuda_graph
 
         self.draft_model_start = draft_model_start
+
+        self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
         C.init_cascade_eagle_spec_w4a16_gptq_marlin_model(
             self.drafter_config.vocab_size,
@@ -97,6 +99,7 @@ class CascadeEagleSpecW4A16GPTQMarlin(W4A16GPTQMarlinLLM):
             self.drafter_config.num_key_value_heads,
             self.drafter_config.head_dim,
             self.drafter_config.rms_norm_eps,
+            self.draft_group_size,
             self.min_draft_length,
             self.draft_cuda_graph,
             self.eagle_config.eagle_num_layers,

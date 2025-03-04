@@ -30,11 +30,11 @@ struct W4A16GPTQMarlinLinear {
     bool use_fp32_reduce; // be true is better
     
     int num_groups;
-    const int group_size = 128;
+    int group_size;
     bool has_act_order;
 
 
-    W4A16GPTQMarlinLinear(int dim_in, int dim_out)
+    W4A16GPTQMarlinLinear(int dim_in, int dim_out, int group_size)
                     :weight_scalar_dtype(static_cast<uint8_t>(0), 
                               static_cast<uint8_t>(4), 
                               false, 
@@ -51,7 +51,16 @@ struct W4A16GPTQMarlinLinear {
 
         this->is_k_full = true;
         this->use_fp32_reduce = true;
-        this->num_groups = (dim_in) / group_size;
+        this->group_size = group_size;
+        if (this->group_size == 128){
+            this->num_groups = (dim_in) / group_size;
+        } else if (this->group_size == -1){
+            this->num_groups = 1;
+        } else {
+            throw std::invalid_argument("Unsupported group size");
+        }
+            
+        // this->num_groups = (dim_in) / group_size;
         this->has_act_order = false;
         
     }
@@ -59,7 +68,7 @@ struct W4A16GPTQMarlinLinear {
     void init_weight_ptr(Memory* memory) {
         const int w_size = this->dim_in * this->dim_out / 8;
         weight = (int32_t*)memory->allocate_for_model(w_size*sizeof(int32_t));
-        const int s_size = this->dim_in * this->dim_out / this->group_size;
+        const int s_size = this->num_groups * this->dim_out ;
         scales = (T*)memory->allocate_for_model(s_size * sizeof(T));
 
         const int workspace_size = (this->dim_out / 64)*16;
@@ -78,7 +87,7 @@ struct W4A16GPTQMarlinLinear {
 
     void load_to_storage(std::string name, void* ptr) {
         if (name.find("scales") != std::string::npos) {
-            const int s_size = this->dim_in * this->dim_out / this->group_size;
+            const int s_size = this->num_groups * this->dim_out;
             cudaMemcpy((void*)scales, ptr, s_size*sizeof(T), cudaMemcpyHostToDevice);
         } else if (name.find("qweight") != std::string::npos) {
             const int w_size = this->dim_in * this->dim_out / 8;

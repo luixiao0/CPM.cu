@@ -87,6 +87,7 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImpl: Model {
         int draft_num_key_value_heads,
         int draft_head_dim,
         float draft_rms_norm_eps,
+        int draft_group_size,
         // int num_iter,
         int min_draft_length,
         bool draft_cuda_graph,
@@ -109,6 +110,7 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImpl: Model {
             draft_num_key_value_heads,
             draft_head_dim,
             draft_rms_norm_eps,
+            draft_group_size,
             this->model->chunk_length
         );
 

@@ -51,6 +51,8 @@ class W4A16GPTQMarlinLLM_with_spec(W4A16GPTQMarlinLLM):
         # self.draft_prefill_logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         # self.logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         self.draft_cuda_graph = draft_cuda_graph
+
+        self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
         C.init_spec_w4a16_gptq_marlin_model(
             self.drafter_config.vocab_size,
@@ -61,6 +63,7 @@ class W4A16GPTQMarlinLLM_with_spec(W4A16GPTQMarlinLLM):
             self.drafter_config.num_key_value_heads,
             self.drafter_config.head_dim,
             self.drafter_config.rms_norm_eps,
+            self.draft_group_size,
             self.draft_num,
             self.draft_cuda_graph,
             self.dtype_int,

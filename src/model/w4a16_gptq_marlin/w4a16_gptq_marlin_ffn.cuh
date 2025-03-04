@@ -18,14 +18,14 @@ struct W4A16GPTQMarlinGatedFFN {
     T* output;
     T* gated_up;
 
-    W4A16GPTQMarlinGatedFFN(int hidden_size, int intermediate_size, float rms_norm_eps) {
+    W4A16GPTQMarlinGatedFFN(int hidden_size, int intermediate_size, float rms_norm_eps, int group_size) {
         this->hidden_size = hidden_size;
         this->intermediate_size = intermediate_size;
         this->rms_norm_eps = rms_norm_eps;
 
         this->ffn_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        this->gate_up_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, intermediate_size*2);
-        this->down_proj = new W4A16GPTQMarlinLinear<T>(intermediate_size, hidden_size);
+        this->gate_up_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, intermediate_size*2, group_size);
+        this->down_proj = new W4A16GPTQMarlinLinear<T>(intermediate_size, hidden_size, group_size);
     }
 
     void init_weight_ptr(Memory* memory) {

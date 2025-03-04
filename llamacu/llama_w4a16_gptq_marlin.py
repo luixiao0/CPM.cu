@@ -41,6 +41,9 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         self.chunk_length = chunk_length
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
+        
+        self.group_size = self.config.quantization_config['group_size']
+        print("group size", self.group_size)
 
         C.init_w4a16_gptq_marlin_base_model(
             self.memory_limit,
@@ -53,6 +56,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             self.config.num_key_value_heads,
             self.config.head_dim,
             self.config.rms_norm_eps,
+            self.group_size,
             self.dtype_int,
             self.chunk_length,
         )

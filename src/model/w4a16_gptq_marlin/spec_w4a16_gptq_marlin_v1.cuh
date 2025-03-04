@@ -45,6 +45,7 @@ struct SpecW4A16GPTQMarlinModelImplV1: Model {
         int draft_num_key_value_heads,
         int draft_head_dim,
         float draft_rms_norm_eps,
+        int draft_group_size,
         int num_iter,
         bool draft_cuda_graph
     ) {
@@ -60,6 +61,7 @@ struct SpecW4A16GPTQMarlinModelImplV1: Model {
             draft_num_key_value_heads,
             draft_head_dim,
             draft_rms_norm_eps,
+            draft_group_size,
             this->model->chunk_length
         );
 
@@ -176,11 +178,12 @@ struct SpecW4A16GPTQMarlinModelImplV1: Model {
             this->num_prev += 1;
             this->draft_model->prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, (void*)this->draft_logits);
 
-            cudaMemcpy(this->host_draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+            
             cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             add(calc_stream, 1, this->draft_cache_length, 1);
             cudaMemcpy(this->draft_position_ids, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
+            cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+            // this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
             this->topk_func->prefill(calc_stream, 1, this->draft_logits);
         } else if (this->num_prev == 2){
             // this->draft_decode(this->num_prev, this->draft_padded_length, this->draft_logits);

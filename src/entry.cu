@@ -346,6 +346,7 @@ void init_w4a16_gptq_marlin_spec_w4a8_per_chn_model(
     int draft_num_key_value_heads,
     int draft_head_dim,
     float draft_rms_norm_eps,
+    int draft_group_size,
     int num_iter,
     bool draft_cuda_graph,
     int torch_dtype
@@ -365,6 +366,7 @@ void init_w4a16_gptq_marlin_spec_w4a8_per_chn_model(
         draft_num_key_value_heads,
         draft_head_dim,
         draft_rms_norm_eps,
+        draft_group_size,
         num_iter, 
         draft_cuda_graph
     );
@@ -466,6 +468,7 @@ void init_w4a16_gptq_marlin_base_model(
     int num_key_value_heads,
     int head_dim,
     float rms_norm_eps,
+    int group_size,
     int torch_dtype,
     int chunk_length
 ) {
@@ -485,6 +488,7 @@ void init_w4a16_gptq_marlin_base_model(
         num_key_value_heads,
         head_dim,
         rms_norm_eps,
+        group_size,
         chunk_length
     );
 
@@ -541,6 +545,7 @@ void init_spec_w4a16_gptq_marlin_model(
     int draft_num_key_value_heads,
     int draft_head_dim,
     float draft_rms_norm_eps,
+    int draft_group_size,
     int num_iter,
     bool draft_cuda_graph,
     int torch_dtype
@@ -560,6 +565,7 @@ void init_spec_w4a16_gptq_marlin_model(
         draft_num_key_value_heads,
         draft_head_dim,
         draft_rms_norm_eps,
+        draft_group_size,
         num_iter, 
         draft_cuda_graph
     );
@@ -575,6 +581,7 @@ void init_spec_w4a16_gptq_marlin_v1_model(
     int draft_num_key_value_heads,
     int draft_head_dim,
     float draft_rms_norm_eps,
+    int draft_group_size,
     int num_iter,
     bool draft_cuda_graph,
     int torch_dtype
@@ -594,6 +601,7 @@ void init_spec_w4a16_gptq_marlin_v1_model(
         draft_num_key_value_heads,
         draft_head_dim,
         draft_rms_norm_eps,
+        draft_group_size,
         num_iter, 
         draft_cuda_graph
     );
@@ -645,6 +653,7 @@ void init_cascade_eagle_spec_w4a16_gptq_marlin_model(
     int draft_num_key_value_heads,
     int draft_head_dim,
     float draft_rms_norm_eps,
+    int draft_group_size,
     int min_draft_length,
     bool draft_cuda_graph,
     int ea_num_layers,
@@ -667,6 +676,7 @@ void init_cascade_eagle_spec_w4a16_gptq_marlin_model(
         draft_num_key_value_heads,
         draft_head_dim,
         draft_rms_norm_eps,
+        draft_group_size,
         min_draft_length,
         draft_cuda_graph,
         ea_num_layers,
