@@ -13,12 +13,15 @@ struct W4A8PerGroupAttention {
     float rms_norm_eps;
 
     RMSNormQuant<T, true> *attn_norm;
-    W4A8PerGroupLinear<T> *q_proj, *k_proj, *v_proj;
+    W4A8PerGroupLinear<T> *qkv_proj;
     Quantizer<T, true> *o_quant_invoker;
     W4A8PerGroupLinear<T> *o_proj;
 
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
+
+    T* q_proj_output, *v_proj_output, *k_proj_output; 
+    T* permute_qkv_output;
 
     W4A8PerGroupAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
         this->hidden_size = hidden_size;
@@ -28,31 +31,39 @@ struct W4A8PerGroupAttention {
         this->rms_norm_eps = rms_norm_eps;
 
         this->attn_norm = new RMSNormQuant<T, true>(hidden_size, rms_norm_eps);
-        this->q_proj = new W4A8PerGroupLinear<T>(hidden_size, num_attention_heads * head_dim);
-        this->k_proj = new W4A8PerGroupLinear<T>(hidden_size, num_key_value_heads * head_dim);
-        this->v_proj = new W4A8PerGroupLinear<T>(hidden_size, num_key_value_heads * head_dim);
+        this->qkv_proj = new W4A8PerGroupLinear<T>(hidden_size, (num_attention_heads + num_key_value_heads*2)* head_dim);
         this->o_quant_invoker = new Quantizer<T, true>(hidden_size);
         this->o_proj = new W4A8PerGroupLinear<T>(hidden_size, num_attention_heads * head_dim);
     }
 
     void init_weight_ptr(Memory* memory) {
         this->attn_norm->init_weight_ptr(memory);
-        this->q_proj->init_weight_ptr(memory);
-        this->k_proj->init_weight_ptr(memory);
-        this->v_proj->init_weight_ptr(memory);
+        this->qkv_proj->init_weight_ptr(memory);
         this->o_proj->init_weight_ptr(memory);
+
+        this->qkv_proj->init_s1_scales_ptr(memory);
+        this->o_proj->init_s1_scales_ptr(memory);
+
+        this->qkv_proj->init_s2_scales_ptr(memory);
+        this->o_proj->init_s2_scales_ptr(memory);
+
+        this->qkv_proj->init_s2_zeros_ptr(memory);
+        this->o_proj->init_s2_zeros_ptr(memory);
+    
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         int64_t attn_norm_output_offset = this->attn_norm->init_output_ptr(memory, num_tokens, offset);
         int64_t attn_norm_output_scale_offset = this->attn_norm->init_output_scale_ptr(memory, num_tokens, attn_norm_output_offset);
 
-        int64_t q_proj_end = this->q_proj->init_output_ptr(memory, num_tokens, attn_norm_output_scale_offset);
-        int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
-        int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
+        int64_t qkv_proj_end = this->qkv_proj->init_output_ptr(memory, num_tokens, attn_norm_output_scale_offset);
+        this->q_proj_output = this->qkv_proj->output;
+        this->k_proj_output = this->qkv_proj->output + num_tokens * this->num_attention_heads * this->head_dim;
+        this->v_proj_output = this->qkv_proj->output + num_tokens * (this->num_attention_heads+this->num_key_value_heads) * this->head_dim;
+        int64_t qkv_permute_end = memory->allocate((void**)&this->permute_qkv_output, qkv_proj_end, num_tokens * (this->num_attention_heads + 2*this->num_key_value_heads) * this->head_dim * sizeof(T));
         
         memory->allocate((void**)&this->attn_output, offset);
-        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, qkv_permute_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
 
@@ -64,12 +75,8 @@ struct W4A8PerGroupAttention {
     }
 
     void load_to_storage(std::string name, void* ptr) {
-        if (name.find("q_proj") != std::string::npos) {
-            this->q_proj->load_to_storage(name, ptr);
-        } else if (name.find("k_proj") != std::string::npos) {
-            this->k_proj->load_to_storage(name, ptr);
-        } else if (name.find("v_proj") != std::string::npos) {
-            this->v_proj->load_to_storage(name, ptr);
+        if (name.find("qkv_proj") != std::string::npos) {
+            this->qkv_proj->load_to_storage(name, ptr);
         } else if (name.find("o_proj") != std::string::npos) {
             this->o_proj->load_to_storage(name, ptr);
         } else if (name.find("input_layernorm") != std::string::npos) {
@@ -84,10 +91,13 @@ struct W4A8PerGroupAttention {
         T* v_cache = kv_cache->offset_v(num_history_tokens);
 
         this->attn_norm->prefill(stream, num_tokens, input);
-        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, k_cache);
-        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, v_cache);
-        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
+
+        this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+        permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->qkv_proj->output, this->permute_qkv_output);
+        cudaMemcpy(k_cache, this->permute_qkv_output + num_tokens*this->num_attention_heads*this->head_dim, num_tokens*this->num_key_value_heads*this->head_dim*sizeof(T), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(v_cache, this->permute_qkv_output + num_tokens*( this->num_attention_heads + this->num_key_value_heads)*this->head_dim, num_tokens*this->num_key_value_heads*this->head_dim*sizeof(T), cudaMemcpyDeviceToDevice);
+
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->permute_qkv_output, k_cache, position_ids);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -98,7 +108,7 @@ struct W4A8PerGroupAttention {
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,
-            this->q_proj->output,
+            this->permute_qkv_output,
             kv_cache->k_cache,
             kv_cache->v_cache,
             nullptr,
@@ -124,12 +134,19 @@ struct W4A8PerGroupAttention {
     void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(stream, num_tokens, input);
         T *q, *k, *v;
-        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
-        q = this->q_proj->output;
-        k = this->k_proj->output;
-        v = this->v_proj->output;
+
+        if (num_tokens > 1){
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj_output, this->q_proj_output);
+            q = this->q_proj_output;
+            k = q + num_tokens * this->num_attention_heads * this->head_dim;
+            v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        } else {
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+            q = this->qkv_proj->output;
+            k = q + num_tokens * this->num_attention_heads * this->head_dim;
+            v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        }
 
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 

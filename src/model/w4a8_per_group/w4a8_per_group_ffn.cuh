@@ -12,7 +12,7 @@ struct W4A8PerGroupGatedFFN{
     float rms_norm_eps;
 
     RMSNormQuant<T, true> *ffn_norm;
-    W4A8PerGroupLinear<T> *gate_proj, *up_proj;
+    W4A8PerGroupLinear<T> *gate_up_proj;
     Quantizer<T, true> *down_quant_invoker;
     W4A8PerGroupLinear<T> *down_proj;
 
@@ -28,8 +28,7 @@ struct W4A8PerGroupGatedFFN{
         this->rms_norm_eps = rms_norm_eps;
 
         this->ffn_norm = new RMSNormQuant<T, true>(hidden_size, rms_norm_eps);
-        this->gate_proj = new W4A8PerGroupLinear<T>(hidden_size, intermediate_size);
-        this->up_proj = new W4A8PerGroupLinear<T>(hidden_size, intermediate_size);
+        this->gate_up_proj = new W4A8PerGroupLinear<T>(hidden_size, intermediate_size*2);
         this->down_quant_invoker = new Quantizer<T, true>(intermediate_size);
         this->down_proj = new W4A8PerGroupLinear<T>(intermediate_size, hidden_size);
 
@@ -37,17 +36,24 @@ struct W4A8PerGroupGatedFFN{
 
     void init_weight_ptr(Memory* memory) {
         this->ffn_norm->init_weight_ptr(memory);
-        this->gate_proj->init_weight_ptr(memory);
-        this->up_proj->init_weight_ptr(memory);
+        this->gate_up_proj->init_weight_ptr(memory);
         this->down_proj->init_weight_ptr(memory);
+
+        this->gate_up_proj->init_s1_scales_ptr(memory);
+        this->down_proj->init_s1_scales_ptr(memory);
+
+        this->gate_up_proj->init_s2_scales_ptr(memory);
+        this->down_proj->init_s2_scales_ptr(memory);
+
+        this->gate_up_proj->init_s2_zeros_ptr(memory);
+        this->down_proj->init_s2_zeros_ptr(memory);
     }
     
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         int64_t ffn_norm_output_offset = this->ffn_norm->init_output_ptr(memory, num_tokens, offset);
         int64_t ffn_norm_output_scale_offset = this->ffn_norm->init_output_scale_ptr(memory, num_tokens, ffn_norm_output_offset);
 
-        int64_t gate_proj_end = this->gate_proj->init_output_ptr(memory, num_tokens, ffn_norm_output_scale_offset);
-        int64_t up_proj_end = this->up_proj->init_output_ptr(memory, num_tokens, gate_proj_end);
+        int64_t up_proj_end = this->gate_up_proj->init_output_ptr(memory, num_tokens, ffn_norm_output_scale_offset);
         int64_t gated_up_end = memory->allocate((void**)&this->gated_up, up_proj_end, num_tokens * intermediate_size * sizeof(T));
 
         int64_t invoke_output_offset = this->down_quant_invoker->init_output_ptr(memory, num_tokens, gated_up_end);
@@ -58,10 +64,8 @@ struct W4A8PerGroupGatedFFN{
     }
 
     void load_to_storage(std::string name, void* ptr) {
-        if (name.find("gate_proj") != std::string::npos) {
-            this->gate_proj->load_to_storage(name, ptr);
-        } else if (name.find("up_proj") != std::string::npos) {
-            this->up_proj->load_to_storage(name, ptr);
+        if (name.find("gate_up_proj") != std::string::npos) {
+            this->gate_up_proj->load_to_storage(name, ptr);
         } else if (name.find("down_proj") != std::string::npos) {
             this->down_proj->load_to_storage(name, ptr);
         } else if (name.find("post_attention_layernorm") != std::string::npos) {
@@ -73,14 +77,12 @@ struct W4A8PerGroupGatedFFN{
 
     void prefill(const Stream& stream, int32_t num_tokens, T* input, void* output=nullptr) {
         this->ffn_norm->prefill(stream, num_tokens, input);
-        // if (output == nullptr) {
-        //     output = this->gated_up;
-        // }
-        this->gate_proj->prefill(stream, num_tokens, this->ffn_norm->output, this->ffn_norm->output_scale);
-        this->up_proj->prefill(stream, num_tokens, this->ffn_norm->output, this->ffn_norm->output_scale);
-        gated_silu<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->up_proj->output);
 
-        this->down_quant_invoker->invoke(stream, this->up_proj->output, num_tokens);
+        this->gate_up_proj->prefill(stream, num_tokens, this->ffn_norm->output, this->ffn_norm->output_scale);
+
+        gated_silu_interleaved<T>(stream, num_tokens, this->intermediate_size, this->gate_up_proj->output, this->gated_up);
+
+        this->down_quant_invoker->invoke(stream, this->gated_up, num_tokens);
         this->down_proj->prefill(stream, num_tokens, this->down_quant_invoker->output, this->down_quant_invoker->output_scale);
         elementwise_add<T>(stream, num_tokens, this->hidden_size, input, this->down_proj->output, input);
     }

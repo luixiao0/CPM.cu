@@ -23,15 +23,23 @@ struct W4A8PerGroupLinear{
 
     void init_weight_ptr(Memory* memory) {
         weight = (int8_t*)memory->allocate_for_model(dim_in * dim_out * sizeof(int8_t)/2);
-        s1_scales = (half2*)memory->allocate_for_model(dim_out * sizeof(half));
-        int s2_size = (dim_in / group_size) * dim_out;
-        s2_scales = (int8_t*)memory->allocate_for_model(s2_size * sizeof(int8_t));
-        int s2_zeros_size = (dim_in / group_size) * dim_out;
-        s2_zeros = (int8_t*)memory->allocate_for_model(s2_zeros_size * sizeof(int8_t));
-
         if constexpr (has_bias) {
             bias = (T*)memory->allocate_for_model(dim_out * sizeof(T));
         }
+    }
+    
+    void init_s1_scales_ptr(Memory* memory) {
+        s1_scales = (half2*)memory->allocate_for_model(dim_out * sizeof(half));
+    }
+
+    void init_s2_scales_ptr(Memory* memory) {
+        int s2_size = (dim_in / group_size) * dim_out;
+        s2_scales = (int8_t*)memory->allocate_for_model(s2_size * sizeof(int8_t));
+    }
+
+    void init_s2_zeros_ptr(Memory* memory) {
+        int s2_zeros_size = (dim_in / group_size) * dim_out;
+        s2_zeros = (int8_t*)memory->allocate_for_model(s2_zeros_size * sizeof(int8_t));
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {

@@ -69,18 +69,18 @@ class W4A8PerGroupLLM(torch.nn.Module):
                 dtype = self.dtype
                 assert dtype == torch.float16
 
-        if 'gate_up_proj' in name:
-            self._load(name.replace("gate_up_proj", "gate_proj"), param[:param.shape[0]//2], dtype)
-            self._load(name.replace("gate_up_proj", "up_proj"), param[param.shape[0]//2:])
-        elif 'qkv_proj' in name:
-            self._load(name.replace("qkv_proj", "q_proj"), param[:self.config.num_attention_heads * self.config.head_dim])
-            self._load(name.replace("qkv_proj", "k_proj"), param[self.config.num_attention_heads * self.config.head_dim:(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim])
-            self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:])
-        else:
-            param = param.contiguous()
-            if param.dtype not in [torch.int8, torch.int16, torch.int32]:
-                param = param.to(dtype)
-            C.load_model(name, param.data_ptr())
+        # if 'gate_up_proj' in name:
+        #     self._load(name.replace("gate_up_proj", "gate_proj"), param[:param.shape[0]//2], dtype)
+        #     self._load(name.replace("gate_up_proj", "up_proj"), param[param.shape[0]//2:])
+        # elif 'qkv_proj' in name:
+        #     self._load(name.replace("qkv_proj", "q_proj"), param[:self.config.num_attention_heads * self.config.head_dim])
+        #     self._load(name.replace("qkv_proj", "k_proj"), param[self.config.num_attention_heads * self.config.head_dim:(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim])
+        #     self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:])
+        # else:
+        param = param.contiguous()
+        if param.dtype not in [torch.int8, torch.int16, torch.int32]:
+            param = param.to(dtype)
+        C.load_model(name, param.data_ptr())
 
         if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
             self._load("lm_head", param)
