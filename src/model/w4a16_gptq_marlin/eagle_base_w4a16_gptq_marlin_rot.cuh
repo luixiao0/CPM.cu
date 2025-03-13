@@ -1,26 +1,26 @@
 #pragma once
-#include "w4a8_per_chn_model.cuh"
+#include "w4a16_gptq_marlin_model.cuh"
 #include "../eagle.cuh"
 
 template<typename T>
-struct W4A8PerChnEagleImpl: Model {
+struct EagleImplBaseW4A16GPTQMarlinRot : Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
 
-    W4A8PerChnModelImpl<T>* model;
+    W4A16GPTQMarlinModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
 
     // new embedding
     Embedding<T>* embedding;
-    
+
     std::vector<Layer<T>*> layers;
-    Linear<T>* rms_norm_rotation; // for w4a8 rotation which multiplies with rms_norm weight
+    Linear<T>* rms_norm_rotation;
     Linear<T, true, true> *fc1;
     Linear<T> *fc2;
-    Linear<T>* lm_head; // use original lm_head which is different from w4a8 rotation lm_head
+    Linear<T>* lm_head; 
     functions::TopK<T>* topk_func;
     functions::TopK<T>* topk_func_2;
 
@@ -38,8 +38,8 @@ struct W4A8PerChnEagleImpl: Model {
 
     T* tmp_kvcache;
 
-    W4A8PerChnEagleImpl(
-        W4A8PerChnModelImpl<T>* model,
+    EagleImplBaseW4A16GPTQMarlinRot(
+        W4A16GPTQMarlinModelImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,
@@ -51,7 +51,7 @@ struct W4A8PerChnEagleImpl: Model {
         this->topk_per_iter = topk_per_iter;
         this->tree_size = tree_size;
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
-
+        
         embedding = new Embedding<T>(model->vocab_size, model->hidden_size);
 
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);

@@ -11,8 +11,8 @@
 #include "model/w8a8/medusa_base_w8a8.cuh"
 #include "model/w8a8/eagle_base_w8a8.cuh"
 #include "model/w4a8_per_chn/w4a8_per_chn_model.cuh"
-#include "model/w4a8_per_chn/medusa_base_w4a8_per_chn.cuh"
-#include "model/w4a8_per_chn/eagle_base_w4a8_per_chn.cuh"
+#include "model/w4a8_per_chn/medusa_base_w4a8_per_chn_rot.cuh"
+#include "model/w4a8_per_chn/eagle_base_w4a8_per_chn_rot.cuh"
 #include "model/w4a8_per_chn/spec_w4a8_per_chn_model.cuh"
 #include "model/w4a8_per_chn/w4a16_gptq_marlin_spec_w4a8_per_chn_model.cuh"
 #include "model/w4a16_marlin/w4a16_marlin_model.cuh"
@@ -21,12 +21,16 @@
 #include "model/w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "model/w4a16_gptq_marlin/medusa_base_w4a16_gptq_marlin.cuh"
 #include "model/w4a16_gptq_marlin/eagle_base_w4a16_gptq_marlin.cuh"
+#include "model/w4a16_gptq_marlin/eagle_base_w4a16_gptq_marlin_rot.cuh"
 #include "model/w4a16_gptq_marlin/spec_w4a16_gptq_marlin_model.cuh"
 #include "model/w4a16_gptq_marlin/spec_w4a16_gptq_marlin_v1.cuh"
 #include "model/w4a16_gptq_marlin/cascade_eagle_spec_w4a16_gptq_marlin.cuh"
+#include "model/w4a16_gptq_marlin/cascade_eagle_rot_spec_w4a16_gptq_marlin.cuh"
+#include "model/w4a16_gptq_marlin/cascade_eagle_rot_w4a8_qqq_spec_w4a16_gptq_marlin.cuh"
 #include "model/w4a8_per_group/w4a8_per_group_model.cuh"
+#include "model/w4a8_per_group/eagle_base_w4a8_per_group_rot.cuh"
 #include "model/w4a8_qqq/w4a8_qqq_model.cuh"
-#include "model/w4a8_qqq/eagle_base_w4a8_qqq.cuh"
+#include "model/w4a8_qqq/eagle_base_w4a8_qqq_rot.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -261,7 +265,7 @@ void init_w4a8_per_chn_base_model(
     );
 }
 
-void init_medusa_w4a8_per_chn_model(
+void init_medusa_w4a8_per_chn_rot_model(
     int num_heads,
     int num_layers,
     int topk_per_head,
@@ -273,7 +277,7 @@ void init_medusa_w4a8_per_chn_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new MedusaImplBaseW4A8PerChn<half>(
+    model = new MedusaImplBaseW4A8PerChnRot<half>(
         (W4A8PerChnModelImpl<half>*)model,
         num_heads,
         num_layers,
@@ -284,7 +288,7 @@ void init_medusa_w4a8_per_chn_model(
     );
 }
 
-void init_eagle_w4a8_per_chn_model(
+void init_eagle_w4a8_per_chn_rot_model(
     int num_layers,
     int num_iter,
     int topk_per_iter,
@@ -294,7 +298,7 @@ void init_eagle_w4a8_per_chn_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new W4A8PerChnEagleImpl<half>(
+    model = new EagleImplBaseW4A8PerChnRot<half>(
         (W4A8PerChnModelImpl<half>*)model,
         num_layers,
         num_iter,
@@ -536,6 +540,25 @@ void init_eagle_w4a16_gptq_marlin_model(
     );
 }
 
+void init_eagle_w4a16_gptq_marlin_rot_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new EagleImplBaseW4A16GPTQMarlinRot<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        num_layers,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
 void init_spec_w4a16_gptq_marlin_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
@@ -644,6 +667,25 @@ void init_w4a8_per_group_base_model(
     );
 }
 
+void init_eagle_w4a8_per_group_rot_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new EagleImplBaseW4A8PerGroupRot<half>(
+        (W4A8PerGroupModelImpl<half>*)model,
+        num_layers,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
 void init_cascade_eagle_spec_w4a16_gptq_marlin_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
@@ -687,6 +729,91 @@ void init_cascade_eagle_spec_w4a16_gptq_marlin_model(
     );
 }
 
+void init_cascade_eagle_rot_spec_w4a16_gptq_marlin_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_num_layers,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagleRotSpecW4A16GPTQMarlinModelImpl<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_num_layers,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
+
+void init_cascade_eagle_rot_w4a8_qqq_spec_w4a16_gptq_marlin_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_num_layers,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagleRotW4A8QQQSpecW4A16GPTQMarlinModelImpl<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_num_layers,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
 
 void init_w4a8_qqq_base_model(
     int64_t memory_limit,
@@ -725,7 +852,7 @@ void init_w4a8_qqq_base_model(
 
 }
 
-void init_eagle_w4a8_qqq_model(
+void init_eagle_w4a8_qqq_rot_model(
     int num_layers,
     int num_iter,
     int topk_per_iter,
@@ -735,7 +862,7 @@ void init_eagle_w4a8_qqq_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new W4A8QQQEagleImpl<half>(
+    model = new  EagleImplBaseW4A8QQQRot<half>(
         (W4A8QQQModelImpl<half>*)model,
         num_layers,
         num_iter,
@@ -797,23 +924,27 @@ PYBIND11_MODULE(C, m) {
     m.def("init_medusa_w8a8_model", &init_medusa_w8a8_model, "Init medusa W8A8 model");
     m.def("init_eagle_w8a8_model", &init_eagle_w8a8_model, "Init eagle W8A8 model");
     m.def("init_w4a8_per_chn_base_model", &init_w4a8_per_chn_base_model, "Init W4A8 per channel base model");
-    m.def("init_medusa_w4a8_per_chn_model", &init_medusa_w4a8_per_chn_model, "Init medusa W4A8 per channel model");
-    m.def("init_eagle_w4a8_per_chn_model", &init_eagle_w4a8_per_chn_model, "Init eagle W4A8 per channel model");
+    m.def("init_medusa_w4a8_per_chn_rot_model", &init_medusa_w4a8_per_chn_rot_model, "Init medusa W4A8 per channel model");
+    m.def("init_eagle_w4a8_per_chn_rot_model", &init_eagle_w4a8_per_chn_rot_model, "Init eagle W4A8 per channel model");
     m.def("init_spec_w4a8_per_chn_model", &init_spec_w4a8_per_chn_model, "init spec W4A8 per channel model");
     //init_w4a16_gptq_marlin_spec_w4a8_per_chn_model
     m.def("init_w4a16_gptq_marlin_spec_w4a8_per_chn_model", &init_w4a16_gptq_marlin_spec_w4a8_per_chn_model, "init w4a16 spec W4A8 per channel model");
     m.def("init_w4a16_marlin_base_model", &init_w4a16_marlin_base_model, "Init W4A16 base model");
     m.def("init_medusa_w4a16_marlin_model", &init_medusa_w4a16_marlin_model, "Init medusa W4A16 model");
     m.def("init_eagle_w4a16_marlin_model", &init_eagle_w4a16_marlin_model, "Init eagle W4A16 model");
+    m.def("init_eagle_w4a16_gptq_marlin_rot_model", &init_eagle_w4a16_gptq_marlin_rot_model, "Init eagle W4A16 model");
     m.def("init_w4a16_gptq_marlin_base_model", &init_w4a16_gptq_marlin_base_model, "Init W4A16 base model");
     m.def("init_medusa_w4a16_gptq_marlin_model", &init_medusa_w4a16_gptq_marlin_model, "Init medusa W4A16 model");
     m.def("init_eagle_w4a16_gptq_marlin_model", &init_eagle_w4a16_gptq_marlin_model, "Init eagle W4A16 model");
     m.def("init_spec_w4a16_gptq_marlin_model", &init_spec_w4a16_gptq_marlin_model, "Init spec W4A16 model");
     m.def("init_spec_w4a16_gptq_marlin_v1_model", &init_spec_w4a16_gptq_marlin_v1_model, "Init spec w4a16 v1");
     m.def("init_cascade_eagle_spec_w4a16_gptq_marlin_model", &init_cascade_eagle_spec_w4a16_gptq_marlin_model, "init cascade eagle spec model");
+    m.def("init_cascade_eagle_rot_spec_w4a16_gptq_marlin_model", &init_cascade_eagle_rot_spec_w4a16_gptq_marlin_model, "init cascade eagle rot spec model");
+    m.def("init_cascade_eagle_rot_w4a8_qqq_spec_w4a16_gptq_marlin_model", &init_cascade_eagle_rot_w4a8_qqq_spec_w4a16_gptq_marlin_model, "init cascade eagle rot w4a8 qqq spec model");
     m.def("init_w4a8_per_group_base_model", &init_w4a8_per_group_base_model, "Init W4A8 per group base model");
+    m.def("init_eagle_w4a8_per_group_rot_model", &init_eagle_w4a8_per_group_rot_model, "Init W4A8 per group base model");
     m.def("init_w4a8_qqq_base_model", &init_w4a8_qqq_base_model, "Init W4A8 per group base model");
-    m.def("init_eagle_w4a8_qqq_model", &init_eagle_w4a8_qqq_model, "Init W4A8 per group base model");
+    m.def("init_eagle_w4a8_qqq_rot_model", &init_eagle_w4a8_qqq_rot_model, "Init W4A8 per group base model");
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
     m.def("prefill", &prefill, "Prefill");

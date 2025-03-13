@@ -1,16 +1,16 @@
 #pragma once
-#include "w4a8_qqq_model.cuh"
+#include "w4a8_per_chn_model.cuh"
 #include "../eagle.cuh"
 
 template<typename T>
-struct W4A8QQQEagleImpl: Model {
+struct EagleImplBaseW4A8PerChnRot: Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
 
-    W4A8QQQModelImpl<T>* model;
+    W4A8PerChnModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
 
     // new embedding
@@ -38,8 +38,8 @@ struct W4A8QQQEagleImpl: Model {
 
     T* tmp_kvcache;
 
-    W4A8QQQEagleImpl(
-        W4A8QQQModelImpl<T>* model,
+    EagleImplBaseW4A8PerChnRot(
+        W4A8PerChnModelImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,

@@ -4,7 +4,7 @@
 
 
 template<typename T>
-struct MedusaImplBaseW4A8PerChn : Model {
+struct MedusaImplBaseW4A8PerChnRot : Model {
     int num_heads;
     int num_layers;
     int topk_per_head;
@@ -24,7 +24,7 @@ struct MedusaImplBaseW4A8PerChn : Model {
     T* tmp_kvcache;
     functions::TopK<T>* topk_func;
 
-    MedusaImplBaseW4A8PerChn(
+    MedusaImplBaseW4A8PerChnRot(
         W4A8PerChnModelImpl<T>* model,
         int num_heads,
         int num_layers,

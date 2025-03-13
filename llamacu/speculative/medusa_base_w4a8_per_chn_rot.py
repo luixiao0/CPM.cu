@@ -7,7 +7,7 @@ from transformers import PretrainedConfig
 from .medusa import MedusaConfig
 
 
-class W4A8PerChnLLM_with_medusa(W4A8PerChnLLM_with_tree_drafter):
+class W4A8PerChnLLM_with_medusa_rot(W4A8PerChnLLM_with_tree_drafter):
     def __init__(self,
                  medusa_path,
                  base_path,
@@ -29,7 +29,7 @@ class W4A8PerChnLLM_with_medusa(W4A8PerChnLLM_with_tree_drafter):
 
         self.medusa_position_ids = medusa_buffers["medusa_position_ids"].to(torch.int32)
         self.medusa_tree_indices = (medusa_buffers["tree_indices"][1:] - 1).to(torch.int32)
-        C.init_medusa_w4a8_per_chn_model(
+        C.init_medusa_w4a8_per_chn_rot_model(
             self.medusa_config.medusa_num_heads,
             self.medusa_config.medusa_num_layers,
             medusa_topk,
