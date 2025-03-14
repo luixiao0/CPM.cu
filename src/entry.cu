@@ -28,9 +28,12 @@
 // spec model
 #include "model/spec_model.cuh"
 #include "model/spec_quant/w4a16_gm_spec_w4a16_gm_v0.cuh"
-#include "model/spec_quant/w4a16_gm_spec_w4a16_gm.cuh"
 #include "model/spec_quant/w4a8_per_chn_spec_w4a8_per_chn_v0.cuh"
 #include "model/spec_quant/w4a16_gm_spec_w4a8_per_chn_v0.cuh"
+#include "model/spec_quant/w4a16_gm_spec_w4a16_gm.cuh"
+#include "model/spec_quant/w4a8_qqq_spec_w4a8_qqq.cuh"
+#include "model/spec_quant/w4a8_qqq_spec_w4a16_gm.cuh"
+#include "model/spec_quant/w4a16_gm_spec_w4a8_qqq.cuh"
 
 // cascade
 #include "model/cascade_spec_quant/csc_ea_w4a16_gm_spec_w4a16_gm.cuh"
@@ -541,41 +544,6 @@ void init_w4a16_gm_spec_w4a16_gm_v0_model(
     );
     // });
 }
-void init_w4a16_gm_spec_w4a16_gm_model(
-    int draft_vocab_size,
-    int draft_num_hidden_layers,
-    int draft_hidden_size,
-    int draft_intermediate_size,
-    int draft_num_attention_heads,
-    int draft_num_key_value_heads,
-    int draft_head_dim,
-    float draft_rms_norm_eps,
-    int draft_group_size,
-    int num_iter,
-    bool draft_cuda_graph,
-    int torch_dtype
-) {
-    // TODO: different type 
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for spec model");
-    }
-    // DTYPE_SWITCH(torch_dtype, [&] {
-    model = new W4A16GMSpecW4A16GMImpl<half>(
-        (W4A16GPTQMarlinModelImpl<half>*)model,
-        draft_vocab_size,
-        draft_num_hidden_layers,
-        draft_hidden_size,
-        draft_intermediate_size,
-        draft_num_attention_heads,
-        draft_num_key_value_heads,
-        draft_head_dim,
-        draft_rms_norm_eps,
-        draft_group_size,
-        num_iter, 
-        draft_cuda_graph
-    );
-    // });
-}
 
 
 void init_w4a8_per_chn_spec_w4a8_per_chn_v0_model(
@@ -647,6 +615,152 @@ void init_w4a16_gm_spec_w4a8_per_chn_v0_model(
     );
     // });
 }
+
+void init_w4a16_gm_spec_w4a16_gm_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int num_iter,
+    bool draft_cuda_graph,
+    int torch_dtype
+) {
+    // TODO: different type 
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for spec model");
+    }
+    // DTYPE_SWITCH(torch_dtype, [&] {
+    model = new W4A16GMSpecW4A16GMImpl<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        num_iter, 
+        draft_cuda_graph
+    );
+    // });
+}
+
+
+void init_w4a8_qqq_spec_w4a16_gm_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int num_iter,
+    bool draft_cuda_graph,
+    int torch_dtype
+) {
+    // TODO: different type 
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for spec model");
+    }
+    // DTYPE_SWITCH(torch_dtype, [&] {
+    model = new W4A8QQQSpecW4A16GMImpl<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        num_iter, 
+        draft_cuda_graph
+    );
+    // });
+}
+
+void init_w4a8_qqq_spec_w4a8_qqq_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int num_iter,
+    bool draft_cuda_graph,
+    int torch_dtype
+) {
+    // TODO: different type 
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for spec model");
+    }
+    // DTYPE_SWITCH(torch_dtype, [&] {
+    model = new W4A8QQQSpecW4A8QQQImpl<half>(
+        (W4A8QQQModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        num_iter, 
+        draft_cuda_graph
+    );
+    // });
+}
+
+void init_w4a16_gm_spec_w4a8_qqq_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int num_iter,
+    bool draft_cuda_graph,
+    int torch_dtype
+) {
+    // TODO: different type 
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for spec model");
+    }
+    // DTYPE_SWITCH(torch_dtype, [&] {
+    model = new W4A16GMSpecW4A8QQQImpl<half>(
+        (W4A8QQQModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        num_iter, 
+        draft_cuda_graph
+    );
+    // });
+}
+
 
 // cascade model
 void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model(
@@ -951,9 +1065,12 @@ PYBIND11_MODULE(C, m) {
     // spec bind
     m.def("init_spec_model", &init_spec_model, "Init spec model");
     m.def("init_w4a16_gm_spec_w4a16_gm_v0_model", &init_w4a16_gm_spec_w4a16_gm_v0_model, "Init w4a16 spec model");
-    m.def("init_w4a16_gm_spec_w4a16_gm_model", &init_w4a16_gm_spec_w4a16_gm_model, "Init w4a16 spec v1 model");
     m.def("init_w4a8_per_chn_spec_w4a8_per_chn_v0_model", &init_w4a8_per_chn_spec_w4a8_per_chn_v0_model, "init w4a8 spec model");
     m.def("init_w4a16_gm_spec_w4a8_per_chn_v0_model", &init_w4a16_gm_spec_w4a8_per_chn_v0_model, "init w4a16 spec W4A8 per channel model");
+    m.def("init_w4a16_gm_spec_w4a16_gm_model", &init_w4a16_gm_spec_w4a16_gm_model, "Init w4a16 spec v1 model");
+    m.def("init_w4a8_qqq_spec_w4a16_gm_model", &init_w4a8_qqq_spec_w4a16_gm_model, "init W4A8 QQQ spec w4a16 gm model");
+    m.def("init_w4a8_qqq_spec_w4a8_qqq_model", &init_w4a8_qqq_spec_w4a8_qqq_model, "init W4A8 QQQ spec W4A8 QQQ model");
+    m.def("init_w4a16_gm_spec_w4a8_qqq_model", &init_w4a16_gm_spec_w4a8_qqq_model, "init W4A16 GM spec W4A8 QQQ model");
 
 
     // cascade bind

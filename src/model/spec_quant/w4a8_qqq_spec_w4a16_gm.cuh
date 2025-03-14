@@ -1,14 +1,15 @@
 #pragma once
+#include "../w4a8_qqq/w4a8_qqq_model.cuh"
 #include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle.cuh"
 #include "../drafter.cuh"
 
 
 template <typename T>
-struct W4A16GMSpecW4A16GMImpl: Model {
+struct W4A8QQQSpecW4A16GMImpl: Model {
 
 
-    W4A16GPTQMarlinModelImpl<T>* draft_model;
+    W4A8QQQModelImpl<T>* draft_model;
     W4A16GPTQMarlinModelImpl<T>* model;
 
     // draft args
@@ -34,7 +35,7 @@ struct W4A16GMSpecW4A16GMImpl: Model {
     cudaGraph_t draft_graph;
     cudaGraphExec_t draft_graphExec;
 
-    W4A16GMSpecW4A16GMImpl(
+    W4A8QQQSpecW4A16GMImpl(
         W4A16GPTQMarlinModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,
@@ -49,7 +50,7 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         bool draft_cuda_graph
     ) {
         this->model = model;
-        this->draft_model = new W4A16GPTQMarlinModelImpl<T>(
+        this->draft_model = new W4A8QQQModelImpl<T>(
             0,
             nullptr,
             draft_vocab_size,
