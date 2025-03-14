@@ -1,12 +1,12 @@
 #pragma once
-#include "w4a8_per_chn_model.cuh"
+#include "../w4a8_per_chn/w4a8_per_chn_model.cuh"
 #include "../eagle.cuh"
 #include "../drafter.cuh"
 #include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
-struct W4A16GMSpecW4A8PCModelImpl: Model {
+struct W4A16GMSpecW4A8PerChnImpl: Model {
 
     int vocab_size;
     int num_hidden_layers;
@@ -49,7 +49,7 @@ struct W4A16GMSpecW4A8PCModelImpl: Model {
     cudaGraph_t draft_graph;
     cudaGraphExec_t draft_graphExec;
 
-    W4A16GMSpecW4A8PCModelImpl(
+    W4A16GMSpecW4A8PerChnImpl(
         W4A8PerChnModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,

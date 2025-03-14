@@ -3,7 +3,7 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.medusa_base_w4a8_per_chn import W4A8PerChnLLM_with_medusa
+from llamacu.speculative.medusa_base_w4a8_per_chn_rot import W4A8PerChnLLM_with_medusa_rot
 from llamacu.speculative.medusa_choices import *
 
 
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A8PerChnLLM_with_medusa(
+    model = W4A8PerChnLLM_with_medusa_rot(
         base_path=args.model_path,
         medusa_path=args.medusa_path,
         memory_limit=args.memory_limit,

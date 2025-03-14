@@ -22,7 +22,7 @@ def pack_draft_mask(mask_2d):
     return mask_2d_packed
 
 
-class W4A16GPTQMarlinLLM_with_spec(W4A16GPTQMarlinLLM):
+class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
     def __init__(self,
                  drafter_path: str,
                  base_path: str,
@@ -54,7 +54,7 @@ class W4A16GPTQMarlinLLM_with_spec(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_spec_w4a16_gptq_marlin_model(
+        C.init_w4a16_gm_spec_w4a16_gm_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,

@@ -3,7 +3,7 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.spec_w4a16_gptq_marlin_model import W4A16GPTQMarlinLLM_with_spec
+from llamacu.speculative.spec_w4a16_gm_for_w4a16_gm_model import W4A16GMSpecW4A16GM
 
 
 def spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A16GPTQMarlinLLM_with_spec(
+    model = W4A16GMSpecW4A16GM(
         base_path=args.model_path,
         drafter_path=args.draft_path,
         memory_limit=args.memory_limit,

@@ -3,10 +3,10 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.eagle_base_w4a8_per_chn import W4A8PerChnLLM_with_eagle
+from llamacu.speculative.eagle_base_w4a8_qqq_rot import W4A8QQQLLM_with_eagle_rot
 
 
-def eagle_w4a8_per_chn_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def eagle_w4a8_qqq_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A8PerChnLLM_with_eagle(
+    model = W4A8QQQLLM_with_eagle_rot(
         base_path=args.model_path,
         eagle_path=args.eagle_path,
         memory_limit=args.memory_limit,
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=eagle_w4a8_per_chn_forward,
+        forward_func=eagle_w4a8_qqq_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

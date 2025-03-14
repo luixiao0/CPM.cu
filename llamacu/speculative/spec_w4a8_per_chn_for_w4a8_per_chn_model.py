@@ -22,7 +22,7 @@ def pack_draft_mask(mask_2d):
     return mask_2d_packed
 
 
-class W4A8PerChnLLM_with_spec(W4A8PerChnLLM):
+class W4A8PerChnSpecW4A8PerChn(W4A8PerChnLLM):
     def __init__(self,
                  drafter_path: str,
                  base_path: str,
@@ -52,7 +52,7 @@ class W4A8PerChnLLM_with_spec(W4A8PerChnLLM):
         # self.logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         self.draft_cuda_graph = draft_cuda_graph
         
-        C.init_spec_w4a8_per_chn_model(
+        C.init_w4a8_per_chn_spec_w4a8_per_chn_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,

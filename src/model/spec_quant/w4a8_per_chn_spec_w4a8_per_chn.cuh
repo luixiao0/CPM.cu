@@ -1,12 +1,12 @@
 #pragma once
-#include "w4a8_per_chn_model.cuh"
+#include "../w4a8_per_chn/w4a8_per_chn_model.cuh"
 #include "../eagle.cuh"
 #include "../drafter.cuh"
-#include "w4a8_per_chn_layer.cuh"
+#include "../w4a8_per_chn/w4a8_per_chn_layer.cuh"
 
 
 template <typename T>
-struct SpecW4A8PerChnModelImpl: Model {
+struct W4A8PerChnSpecW4A8PerChnImpl: Model {
 
     int vocab_size;
     int num_hidden_layers;
@@ -49,7 +49,7 @@ struct SpecW4A8PerChnModelImpl: Model {
     cudaGraph_t draft_graph;
     cudaGraphExec_t draft_graphExec;
 
-    SpecW4A8PerChnModelImpl(
+    W4A8PerChnSpecW4A8PerChnImpl(
         W4A8PerChnModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,

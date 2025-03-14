@@ -1,26 +1,20 @@
 #pragma once
-#include "w4a8_qqq_model.cuh"
+#include "../w8a8/w8a8_model.cuh"
 #include "../eagle.cuh"
 
 template<typename T>
-struct EagleImplBaseW4A8QQQRot: Model {
+struct EagleImplBaseW8A8 : Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
 
-    W4A8QQQModelImpl<T>* model;
+    W8A8ModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
-
-    // new embedding
-    Embedding<T>* embedding;
-    
     std::vector<Layer<T>*> layers;
-    Linear<T>* rms_norm_rotation; // for w4a8 rotation which multiplies with rms_norm weight
     Linear<T, true, true> *fc1;
     Linear<T> *fc2;
-    Linear<T>* lm_head; // use original lm_head which is different from w4a8 rotation lm_head
     functions::TopK<T>* topk_func;
     functions::TopK<T>* topk_func_2;
 
@@ -38,8 +32,8 @@ struct EagleImplBaseW4A8QQQRot: Model {
 
     T* tmp_kvcache;
 
-    EagleImplBaseW4A8QQQRot(
-        W4A8QQQModelImpl<T>* model,
+    EagleImplBaseW8A8(
+        W8A8ModelImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,
@@ -52,44 +46,35 @@ struct EagleImplBaseW4A8QQQRot: Model {
         this->tree_size = tree_size;
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
 
-        embedding = new Embedding<T>(model->vocab_size, model->hidden_size);
-
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);
-        rms_norm_rotation = new Linear<T>(model->hidden_size, model->hidden_size);
         fc1 = new Linear<T, true, true>(this->model->hidden_size, this->model->hidden_size);
         fc2 = new Linear<T>(this->model->hidden_size, this->model->hidden_size);
         for (int i = 0; i < num_layers; i++) {
             layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps));
         }
-        lm_head = new Linear<T>(this->model->hidden_size, this->model->vocab_size);
 
         topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
         topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1); // TODO current topk do not support k > 32
     }
 
     void init_weight_ptr(Memory* memory) {
-        embedding->init_weight_ptr(memory);
-        rms_norm_rotation->init_weight_ptr(memory);
         fc1->init_weight_ptr(memory);
         fc2->init_weight_ptr(memory);
         for (int i = 0; i < num_layers; i++) {
             layers[i]->init_weight_ptr(memory);
         }
-        lm_head->init_weight_ptr(memory);
         layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
         kv_caches->rotary_embedding = this->model->kv_caches->rotary_embedding;
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        offset = embedding->init_output_ptr(memory, num_tokens, offset);
-        offset = rms_norm_rotation->init_output_ptr(memory, num_tokens, offset);
         offset = fc1->init_output_ptr(memory, num_tokens, offset);
         offset = fc2->init_output_ptr(memory, num_tokens, offset);
         int64_t layer_end = 0;
         for (int i = 0; i < num_layers; i++) {
             layer_end = layers[i]->init_output_ptr(memory, num_tokens, offset);
         }
-        offset = lm_head->init_output_ptr(memory, 64, layer_end);
+        offset = layer_end;
         offset = memory->allocate((void**)&eagle_logits, offset, this->topk_per_iter * this->model->vocab_size * sizeof(T));
         offset = memory->allocate((void**)&eagle_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&tmp_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
@@ -125,16 +110,10 @@ struct EagleImplBaseW4A8QQQRot: Model {
 
     void load_to_storage(std::string name, void* ptr) {
         if (name.substr(0, 5) == "eagle") {
-            if (name.substr(0, 23) == "eagle.rms_norm_rotation") {
-                rms_norm_rotation->load_to_storage(name, ptr);
-            } else if (name.substr(0, 18) == "eagle.embed_tokens") {
-                embedding->load_to_storage(name, ptr);
-            } else if (name.substr(0, 9) == "eagle.fc1") {
+            if (name.substr(0, 9) == "eagle.fc1") {
                 fc1->load_to_storage(name, ptr);
             } else if (name.substr(0, 9) == "eagle.fc2") {
                 fc2->load_to_storage(name, ptr);
-            } else if (name.substr(0, 13) == "eagle.lm_head") {
-                lm_head->load_to_storage(name, ptr);
             } else {
                 std::regex layer_regex("eagle\\.layers\\.(\\d+)\\.(.*)");
                 std::smatch matches;
@@ -151,10 +130,9 @@ struct EagleImplBaseW4A8QQQRot: Model {
     }
 
     void eagle_prefill(int num_history_tokens) {
-        cudaMemcpy(this->prev_embed + (num_prev - 1) * this->model->hidden_size, this->embedding->output, this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->prev_embed + (num_prev - 1) * this->model->hidden_size, this->model->embedding->output, this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
         this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->rms_norm_rotation->prefill(calc_stream, num_prev, this->prev_hidden_state);
-        this->fc2->prefill(calc_stream, num_prev, this->rms_norm_rotation->output);
+        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
@@ -166,8 +144,7 @@ struct EagleImplBaseW4A8QQQRot: Model {
 
     void eagle_decode(int32_t* cache_length) {
         this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->rms_norm_rotation->prefill(calc_stream, num_prev, this->prev_hidden_state);
-        this->fc2->prefill(calc_stream, num_prev, this->rms_norm_rotation->output);
+        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
@@ -183,10 +160,7 @@ struct EagleImplBaseW4A8QQQRot: Model {
             this->eagle_prefill(this->num_history_tokens);
         }
 
-        // new embedding
-        this->embedding->prefill(calc_stream, num_tokens, input);
-        cudaMemcpy(this->prev_embed, this->embedding->output + this->model->hidden_size, (num_tokens - 1) * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-
+        cudaMemcpy(this->prev_embed, this->model->embedding->output + this->model->hidden_size, (num_tokens - 1) * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
         this->model->prefill_embed(num_tokens, num_history_tokens, this->model->embedding->output, position_ids, output);
         this->prev_hidden_state = this->model->norm->output;
         cudaMemcpy(this->eagle_position_ids, position_ids, num_tokens * sizeof(int32_t), cudaMemcpyDeviceToDevice);
@@ -206,7 +180,7 @@ struct EagleImplBaseW4A8QQQRot: Model {
 
 
         if (this->is_first_draft) {
-            this->embedding->prefill(calc_stream, 1, tree_draft_ids);
+            this->model->embedding->prefill(calc_stream, 1, tree_draft_ids);
             this->eagle_prefill(this->num_history_tokens);
         } else {
             this->eagle_decode(cache_length);
@@ -216,7 +190,7 @@ struct EagleImplBaseW4A8QQQRot: Model {
         repeat(calc_stream, topk_per_iter, 1, 0, this->eagle_position_ids);
 
         { // d = 0
-            this->lm_head->prefill(calc_stream, 1, this->fc2->output + (num_prev - 1) * this->model->hidden_size, this->eagle_logits);
+            this->model->lm_head->prefill(calc_stream, 1, this->fc2->output + (num_prev - 1) * this->model->hidden_size, this->eagle_logits);
             log_softmax(calc_stream, 1, this->model->vocab_size, this->eagle_logits);
             this->topk_func->prefill(calc_stream, 1, this->eagle_logits);
             cudaMemcpy(this->topk_func_2->topk_pos, this->topk_func->topk_pos, topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
@@ -228,9 +202,9 @@ struct EagleImplBaseW4A8QQQRot: Model {
         }
         for (int d = 1; d < this->num_iter; ++d) {
             add(calc_stream, 1, this->eagle_cache_length, topk_per_iter);
-            this->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
+            this->model->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
             this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
-            this->fc1->prefill(calc_stream, topk_per_iter, this->embedding->output);
+            this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
             T* layer_output = nullptr;
             for (int i = 0; i < num_layers; i++) {
@@ -240,7 +214,7 @@ struct EagleImplBaseW4A8QQQRot: Model {
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
             add(calc_stream, topk_per_iter, this->eagle_position_ids, 1);
 
-            this->lm_head->prefill(calc_stream, topk_per_iter, this->fc2->output, this->eagle_logits);
+            this->model->lm_head->prefill(calc_stream, topk_per_iter, this->fc2->output, this->eagle_logits);
             log_softmax(calc_stream, topk_per_iter, this->model->vocab_size, this->eagle_logits);
             this->topk_func->prefill(calc_stream, topk_per_iter, this->eagle_logits);
             cumsum(calc_stream, topk_per_iter, topk_per_iter, this->topk_func->topk_val, this->topk_func_2->topk_val);
@@ -274,8 +248,8 @@ struct EagleImplBaseW4A8QQQRot: Model {
 
         fix_kv_cache(calc_stream, h_best[0], this->model->kv_caches->num_hidden_layers * 2, this->model->kv_caches->dim, pred, gt, cache_length, this->model->kv_caches->d_flat_caches, this->tmp_kvcache);
 
-        this->embedding->prefill(calc_stream, this->num_prev, pred);
-        cudaMemcpy(this->prev_embed, this->embedding->output, this->num_prev * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+        this->model->embedding->prefill(calc_stream, this->num_prev, pred);
+        cudaMemcpy(this->prev_embed, this->model->embedding->output, this->num_prev * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
         make_arange(calc_stream, this->num_prev, cache_length, this->eagle_position_ids);
 

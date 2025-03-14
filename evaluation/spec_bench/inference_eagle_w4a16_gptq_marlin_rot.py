@@ -3,10 +3,10 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.spec_w4a16_gm_for_w4a8_per_chn_model import W4A16GMSpecW4A8PerChn
+from llamacu.speculative.eagle_base_w4a16_marlin_gptq_rot import W4A16GPTQMarlinLLM_with_eagle_rot
 
 
-def spec_w4a8_with_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def eagle_w4a16_rot_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
@@ -31,7 +31,7 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--draft-path",
+        "--eagle-path",
         type=str,
         default=None,
     )
@@ -105,15 +105,20 @@ if __name__ == "__main__":
         default="llama-2",
     )
     parser.add_argument(
-        "--spec-num-iter",
+        "--eagle-num-iter",
         type=int,
         default=6,
     )
     parser.add_argument(
-        "--draft-cuda-graph",
-        action="store_true",
+        "--eagle-topk-per-iter",
+        type=int,
+        default=10,
     )
-
+    parser.add_argument(
+        "--eagle-tree-size",
+        type=int,
+        default=60,
+    )
 
 
     args = parser.parse_args()
@@ -129,15 +134,16 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A16GMSpecW4A8PerChn(
+    model = W4A16GPTQMarlinLLM_with_eagle_rot(
         base_path=args.model_path,
-        drafter_path=args.draft_path,
+        eagle_path=args.eagle_path,
         memory_limit=args.memory_limit,
         chunk_length=args.chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
-        draft_num=args.spec_num_iter,
-        draft_cuda_graph=args.draft_cuda_graph,
+        num_iter=args.eagle_num_iter,
+        topk_per_iter=args.eagle_topk_per_iter,
+        tree_size=args.eagle_tree_size,
     )
     model.init_storage()
     model.load_from_hf()
@@ -157,7 +163,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=spec_w4a8_with_w4a16_forward,
+        forward_func=eagle_w4a16_rot_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

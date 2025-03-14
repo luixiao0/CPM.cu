@@ -1,13 +1,13 @@
 #pragma once
-#include "w4a16_gptq_marlin_model.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../w4a8_qqq/w4a8_qqq_model.cuh"
 #include "../eagle.cuh"
 #include "../drafter.cuh"
-#include "w4a16_gptq_marlin_layer.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
-struct CascadeEagleRotW4A8QQQSpecW4A16GPTQMarlinModelImpl: Model {
+struct CascadeEagleRotW4A8QQQSpecW4A16GMImpl: Model {
 
     // eagle
     int ea_num_layers;
@@ -82,7 +82,7 @@ struct CascadeEagleRotW4A8QQQSpecW4A16GPTQMarlinModelImpl: Model {
     int ea_accept_nums_size;
     int cur_ea_accept_nums_size;
 
-    CascadeEagleRotW4A8QQQSpecW4A16GPTQMarlinModelImpl(
+    CascadeEagleRotW4A8QQQSpecW4A16GMImpl(
         W4A16GPTQMarlinModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,

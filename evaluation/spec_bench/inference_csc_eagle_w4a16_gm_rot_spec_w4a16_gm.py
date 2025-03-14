@@ -3,7 +3,7 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.cascade_eagle_drafter_spec_w4a16_gptq_marlin import CascadeEagleSpecW4A16GPTQMarlin
+from llamacu.speculative.csc_eagle_w4a16_gm_rot_spec_w4a16_gm import CascadeEagleW4A16GMRotSpecW4A16GM
 
 
 def cascade_spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = CascadeEagleSpecW4A16GPTQMarlin(
+    model = CascadeEagleW4A16GMRotSpecW4A16GM(
         base_path=args.model_path,
         drafter_path=args.draft_path,
         memory_limit=args.memory_limit,

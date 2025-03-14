@@ -30,7 +30,7 @@ class EagleConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.eagle_num_layers = num_hidden_layers
 
-class CascadeEagleSpecW4A16GPTQMarlinSep(W4A16GPTQMarlinLLM):
+class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
     def __init__(self,
                 drafter_path: str,
                 base_path: str,
@@ -83,6 +83,7 @@ class CascadeEagleSpecW4A16GPTQMarlinSep(W4A16GPTQMarlinLLM):
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
         self.draft_cuda_graph = False
         
+        # TODO: adapt
         C.init_cascade_eagle_spec_w4a16_gptq_marlin_sep_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,

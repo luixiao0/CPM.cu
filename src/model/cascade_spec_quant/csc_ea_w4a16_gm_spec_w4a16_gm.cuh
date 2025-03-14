@@ -1,12 +1,12 @@
 #pragma once
-#include "w4a16_gptq_marlin_model.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle.cuh"
 #include "../drafter.cuh"
-#include "w4a16_gptq_marlin_layer.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
-struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
+struct CascadeEagleW4A16GMSpecW4A16GMImpl: Model {
 
     // eagle
     int ea_num_layers;
@@ -16,13 +16,9 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
     int ea_total_tried;
 
     KVCacheManager<T>* ea_kv_caches;
-    // new embedding
-    Embedding<T>* ea_embedding;
     std::vector<Layer<T>*> ea_layers;
-    Linear<T> * ea_rms_norm_rotation;
     Linear<T, true, true> *ea_fc1;
     Linear<T> *ea_fc2;
-    Linear<T> *ea_lm_head;
     functions::TopK<T>* ea_topk_func;
     functions::TopK<T>* ea_topk_func_2;
 
@@ -81,7 +77,7 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
     int ea_accept_nums_size;
     int cur_ea_accept_nums_size;
 
-    CascadeEagleRotSpecW4A16GPTQMarlinModelImpl(
+     CascadeEagleW4A16GMSpecW4A16GMImpl(
         W4A16GPTQMarlinModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,
@@ -139,16 +135,12 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
         this->ea_total_tried = ea_topk_per_iter * ea_topk_per_iter * (ea_num_iter-1) +  ea_topk_per_iter;
 
         // ea model
-        ea_embedding = new Embedding<T>(this->draft_model->vocab_size, this->draft_model->hidden_size);
-
         ea_kv_caches = new KVCacheManager<T>(ea_num_layers, this->draft_model->num_key_value_heads, this->draft_model->head_dim);
-        ea_rms_norm_rotation = new Linear<T>(this->draft_model->hidden_size, this->draft_model->hidden_size);
         ea_fc1 = new Linear<T, true, true>(this->draft_model->hidden_size, this->draft_model->hidden_size);
         ea_fc2 = new Linear<T>(this->draft_model->hidden_size, this->draft_model->hidden_size);
         for (int i = 0; i < ea_num_layers; i++) {
             ea_layers.push_back(new Layer<T>(this->draft_model->hidden_size, this->draft_model->intermediate_size, this->draft_model->num_attention_heads, this->draft_model->num_key_value_heads, this->draft_model->head_dim, this->draft_model->rms_norm_eps));
         }
-        ea_lm_head = new Linear<T>(this->draft_model->hidden_size, this->draft_model->vocab_size);
 
         ea_topk_func = new functions::TopK<T>(this->draft_model->vocab_size, ea_topk_per_iter);
         ea_topk_func_2 = new functions::TopK<T>(ea_total_tried, this->ea_tree_size-1); // TODO current topk do not support k > 32
@@ -159,14 +151,11 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
     }
 
     void init_weight_ptr(Memory* memory) {
-        ea_embedding->init_weight_ptr(memory);
-        ea_rms_norm_rotation->init_weight_ptr(memory);
         ea_fc1->init_weight_ptr(memory);
         ea_fc2->init_weight_ptr(memory);
         for (int i = 0; i < ea_num_layers; i++) {
             ea_layers[i]->init_weight_ptr(memory);
         }
-        ea_lm_head->init_weight_ptr(memory);
         ea_layers[0]->attn->attn_norm = new Skip<T>(this->draft_model->hidden_size);
         ea_kv_caches->rotary_embedding = this->draft_model->kv_caches->rotary_embedding;
     }
@@ -174,15 +163,13 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         // init eagle output
-        offset = ea_embedding->init_output_ptr(memory, num_tokens, offset);
-        offset = ea_rms_norm_rotation->init_output_ptr(memory, num_tokens, offset);
         offset = ea_fc1->init_output_ptr(memory, num_tokens, offset);
         offset = ea_fc2->init_output_ptr(memory, num_tokens, offset);
         int64_t layer_end = 0;
         for (int i = 0; i < ea_num_layers; i++) {
             layer_end = ea_layers[i]->init_output_ptr(memory, num_tokens, offset);
         }
-        offset = ea_lm_head->init_output_ptr(memory, 64, layer_end);
+        offset = layer_end;
         offset = memory->allocate((void**)&eagle_logits, offset, this->ea_topk_per_iter * this->draft_model->vocab_size * sizeof(T));
         offset = memory->allocate((void**)&eagle_mask_2d, offset, this->ea_topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&ea_tmp_mask_2d, offset, this->ea_topk_per_iter * sizeof(uint64_t));
@@ -259,16 +246,10 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
 
     void load_to_storage(std::string name, void* ptr) {
         if (name.substr(0, 5) == "eagle") {
-            if (name.substr(0, 23) == "eagle.rms_norm_rotation") {
-                ea_rms_norm_rotation->load_to_storage(name, ptr);
-            } else if (name.substr(0, 18) == "eagle.embed_tokens") {
-                ea_embedding->load_to_storage(name, ptr);
-            } else if (name.substr(0, 9) == "eagle.fc1") {
+            if (name.substr(0, 9) == "eagle.fc1") {
                 ea_fc1->load_to_storage(name, ptr);
             } else if (name.substr(0, 9) == "eagle.fc2") {
                 ea_fc2->load_to_storage(name, ptr);
-            } else if (name.substr(0, 13) == "eagle.lm_head") {
-                ea_lm_head->load_to_storage(name, ptr);
             } else {
                 std::regex layer_regex("eagle\\.layers\\.(\\d+)\\.(.*)");
                 std::smatch matches;
@@ -290,10 +271,9 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
 
 
     void eagle_prefill(int num_history_tokens) {
-        cudaMemcpy(this->ea_prev_embed + (ea_num_prev - 1) * this->draft_model->hidden_size, this->ea_embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->ea_prev_embed + (ea_num_prev - 1) * this->draft_model->hidden_size, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
         this->ea_fc1->prefill(calc_stream, ea_num_prev, this->ea_prev_embed);
-        this->ea_rms_norm_rotation->prefill(calc_stream, ea_num_prev, this->ea_prev_hidden_state);
-        this->ea_fc2->prefill(calc_stream, ea_num_prev, this->ea_rms_norm_rotation->output);
+        this->ea_fc2->prefill(calc_stream, ea_num_prev, this->ea_prev_hidden_state);
         elementwise_add(calc_stream, ea_num_prev, this->draft_model->hidden_size, this->ea_fc1->output, this->ea_fc2->output, this->ea_fc2->output);
         T* layer_output = nullptr;
 
@@ -307,8 +287,7 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
     void eagle_decode(int32_t* cache_length) {
 
         this->ea_fc1->prefill(calc_stream, ea_num_prev, this->ea_prev_embed);
-        this->ea_rms_norm_rotation->prefill(calc_stream, ea_num_prev, this->ea_prev_hidden_state);
-        this->ea_fc2->prefill(calc_stream, ea_num_prev, this->ea_rms_norm_rotation->output);
+        this->ea_fc2->prefill(calc_stream, ea_num_prev, this->ea_prev_hidden_state);
         elementwise_add(calc_stream, ea_num_prev, this->draft_model->hidden_size, this->ea_fc1->output, this->ea_fc2->output, this->ea_fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < ea_num_layers; i++) {
@@ -322,16 +301,12 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
         this->model->prefill(num_tokens, num_history_tokens, input, position_ids, output);
         if (num_history_tokens > 0) {
             this->draft_model->embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-
-            // new embedding
-            this->ea_embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-            cudaMemcpy(this->ea_prev_embed, this->ea_embedding->output+this->draft_model->hidden_size, (this->num_prev-1) * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-
+            cudaMemcpy(this->ea_prev_embed, this->draft_model->embedding->output+this->draft_model->hidden_size, (this->num_prev-1) * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
             this->draft_model->prefill_embed(this->num_prev, this->num_history_tokens, this->draft_model->embedding->output, this->draft_position_ids, (void*)this->draft_logits);
             
             cudaMemcpy(this->ea_prev_hidden_state, this->draft_model->norm->output, this->num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
             
-            this->ea_embedding->prefill(calc_stream, 1, input);
+            this->draft_model->embedding->prefill(calc_stream, 1, input);
             this->eagle_prefill(this->ea_num_history_tokens);
 
             // this->draft_model->
@@ -393,7 +368,7 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
         this->eagle_padded_length = (this->eagle_original_length[0] + 256 - 1) / 128 * 128;
         if (this->ea_is_first_draft) {
             // prefill hidden states and embedding have been cpy
-            this->ea_embedding->prefill(calc_stream, 1, ea_tree_draft_ids);
+            this->draft_model->embedding->prefill(calc_stream, 1, ea_tree_draft_ids);
             this->eagle_prefill(this->ea_num_history_tokens);
         } else {
             this->eagle_decode(ea_cache_length);
@@ -404,7 +379,7 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
         repeat(calc_stream, ea_topk_per_iter, 1, 0, this->eagle_position_ids);
 
         { // d = 0
-            this->ea_lm_head->prefill(calc_stream, 1, this->ea_fc2->output + (ea_num_prev - 1) * this->draft_model->hidden_size, this->eagle_logits);
+            this->draft_model->lm_head->prefill(calc_stream, 1, this->ea_fc2->output + (ea_num_prev - 1) * this->draft_model->hidden_size, this->eagle_logits);
             log_softmax(calc_stream, 1, this->draft_model->vocab_size, this->eagle_logits);
             this->ea_topk_func->prefill(calc_stream, 1, this->eagle_logits);
             cudaMemcpy(this->ea_topk_func_2->topk_pos, this->ea_topk_func->topk_pos, ea_topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
@@ -417,9 +392,9 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
 
         for (int d = 1; d < this->ea_num_iter; ++d) {
             add(calc_stream, 1, this->eagle_cache_length, ea_topk_per_iter);
-            this->ea_embedding->prefill(calc_stream, ea_topk_per_iter, this->ea_topk_func_2->topk_pos);
+            this->draft_model->embedding->prefill(calc_stream, ea_topk_per_iter, this->ea_topk_func_2->topk_pos);
             this->ea_fc2->prefill(calc_stream, ea_topk_per_iter, this->ea_fc1->output);
-            this->ea_fc1->prefill(calc_stream, ea_topk_per_iter, this->ea_embedding->output);
+            this->ea_fc1->prefill(calc_stream, ea_topk_per_iter, this->draft_model->embedding->output);
             elementwise_add(calc_stream, ea_topk_per_iter, this->draft_model->hidden_size, this->ea_fc1->output, this->ea_fc2->output, this->ea_fc2->output);
             T* layer_output = nullptr;
             for (int i = 0; i < ea_num_layers; i++) {
@@ -429,7 +404,7 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
             elementwise_add(calc_stream, ea_topk_per_iter, this->draft_model->hidden_size, this->ea_fc2->output, layer_output, this->ea_fc2->output);
             add(calc_stream, ea_topk_per_iter, this->eagle_position_ids, 1);
 
-            this->ea_lm_head->prefill(calc_stream, ea_topk_per_iter, this->ea_fc2->output, this->eagle_logits);
+            this->draft_model->lm_head->prefill(calc_stream, ea_topk_per_iter, this->ea_fc2->output, this->eagle_logits);
             log_softmax(calc_stream, ea_topk_per_iter, this->draft_model->vocab_size, this->eagle_logits);
             this->ea_topk_func->prefill(calc_stream, ea_topk_per_iter, this->eagle_logits);
             cumsum(calc_stream, ea_topk_per_iter, ea_topk_per_iter, this->ea_topk_func->topk_val, this->ea_topk_func_2->topk_val);
@@ -464,10 +439,7 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
             this->num_prev += 1;
 
             this->draft_model->embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-
-            // new embedding
-            this->ea_embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-            cudaMemcpy(this->ea_prev_embed, this->ea_embedding->output+ this->draft_model->hidden_size, (this->num_prev-1) * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->ea_prev_embed, this->draft_model->embedding->output+ this->draft_model->hidden_size, (this->num_prev-1) * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
             this->draft_model->prefill_embed(this->num_prev, this->num_history_tokens, this->draft_model->embedding->output, this->draft_position_ids, (void*)this->draft_logits);
 
@@ -496,10 +468,7 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
             
         } else if (this->num_prev == 2){
             this->draft_model->embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-
-            // new embedding
-            this->ea_embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-            cudaMemcpy(this->ea_prev_embed + (ea_num_prev)* this->draft_model->hidden_size, this->ea_embedding->output + this->draft_model->hidden_size, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->ea_prev_embed + (ea_num_prev)* this->draft_model->hidden_size, this->draft_model->embedding->output + this->draft_model->hidden_size, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
             this->draft_model->decode_embed(this->num_prev, this->draft_padded_length, this->draft_model->embedding->output, this->draft_position_ids, this->draft_cache_length, nullptr, (void*)this->draft_logits);
 
@@ -509,12 +478,8 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
 
             // prepare for the eagle input
             cudaMemcpy(this->ea_prev_hidden_state + (ea_num_prev)* this->draft_model->hidden_size, this->draft_model->norm->output, this->num_prev * this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
-
-            // new embeddding
-            // this->draft_model->embedding->prefill(calc_stream, 1, this->topk_func->topk_pos);
-            // cudaMemcpy(this->ea_prev_embed + (ea_num_prev+1)* this->draft_model->hidden_size, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-            this->ea_embedding->prefill(calc_stream, 1, this->topk_func->topk_pos);
-            cudaMemcpy(this->ea_prev_embed + (ea_num_prev+1)* this->draft_model->hidden_size, this->ea_embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+            this->draft_model->embedding->prefill(calc_stream, 1, this->topk_func->topk_pos);
+            cudaMemcpy(this->ea_prev_embed + (ea_num_prev+1)* this->draft_model->hidden_size, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
             this->ea_num_prev += this->num_prev;
             
 
@@ -534,11 +499,8 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
             // prepare for the eagle input
             cudaMemcpy(this->ea_prev_hidden_state + (ea_num_prev)*this->draft_model->hidden_size, this->draft_model->norm->output, this->num_prev * this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
             
-            // new embeddding
-            // this->draft_model->embedding->prefill(calc_stream, 1, this->topk_func->topk_pos);
-            // cudaMemcpy(this->ea_prev_embed + (ea_num_prev)* this->draft_model->hidden_size, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-            this->ea_embedding->prefill(calc_stream, 1, this->topk_func->topk_pos);
-            cudaMemcpy(this->ea_prev_embed + (ea_num_prev)* this->draft_model->hidden_size, this->ea_embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+            this->draft_model->embedding->prefill(calc_stream, 1, this->topk_func->topk_pos);
+            cudaMemcpy(this->ea_prev_embed + (ea_num_prev)* this->draft_model->hidden_size, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
             this->ea_num_prev += this->num_prev; 
 
             // prepare for draft with eagle            
@@ -625,8 +587,8 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
 
         fix_kv_cache(calc_stream, ea_h_best[0], this->draft_model->kv_caches->num_hidden_layers * 2, this->draft_model->kv_caches->dim, ea_pred, ea_gt, ea_cache_length, this->draft_model->kv_caches->d_flat_caches, this->ea_tmp_kvcache);
 
-        this->ea_embedding->prefill(calc_stream, this->ea_num_prev, ea_pred);
-        cudaMemcpy(this->ea_prev_embed, this->ea_embedding->output, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+        this->draft_model->embedding->prefill(calc_stream, this->ea_num_prev, ea_pred);
+        cudaMemcpy(this->ea_prev_embed, this->draft_model->embedding->output, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
         make_arange(calc_stream, this->ea_num_prev, ea_cache_length, this->eagle_position_ids);
 
@@ -672,21 +634,15 @@ struct CascadeEagleRotSpecW4A16GPTQMarlinModelImpl: Model {
             if (host_draft_cache_length[0] > this->eagle_original_length[0] + 1) {
                 this->ea_num_prev = host_draft_cache_length[0] - (this->eagle_original_length[0] + 1);
                 // keep ea_prev_hidden_state and update ea_prev_embed
-                // new embedding
-                // this->draft_model->embedding->prefill(calc_stream, 1, this->draft_input);
-                // cudaMemcpy(this->ea_prev_embed+(this->ea_num_prev-1), this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-                this->ea_embedding->prefill(calc_stream, 1, this->draft_input);
-                cudaMemcpy(this->ea_prev_embed+(this->ea_num_prev-1), this->ea_embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+                this->draft_model->embedding->prefill(calc_stream, 1, this->draft_input);
+                cudaMemcpy(this->ea_prev_embed+(this->ea_num_prev-1), this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
             } else {
                 // condition 2: eagle last start position is less than accept position
                 // index from the kepted draft model hidden state
                 cudaMemcpy(this->ea_prev_hidden_state, this->draft_tmp_hidden_state + (h_best[0]-1) *this->draft_model->hidden_size, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
                 this->ea_num_prev = 1;
-                // new embedding
-                // this->draft_model->embedding->prefill(calc_stream, 1, this->draft_input);
-                // cudaMemcpy(this->ea_prev_embed, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-                this->ea_embedding->prefill(calc_stream, 1, this->draft_input);
-                cudaMemcpy(this->ea_prev_embed, this->ea_embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+                this->draft_model->embedding->prefill(calc_stream, 1, this->draft_input);
+                cudaMemcpy(this->ea_prev_embed, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
                 cudaMemcpy(this->eagle_position_ids, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
                 add(calc_stream, 1, this->eagle_position_ids, this->h_best[0]-1);
             }

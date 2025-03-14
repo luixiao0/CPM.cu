@@ -1,5 +1,5 @@
 #pragma once
-#include "w8a8_model.cuh"
+#include "../w8a8/w8a8_model.cuh"
 #include "../medusa.cuh"
 
 

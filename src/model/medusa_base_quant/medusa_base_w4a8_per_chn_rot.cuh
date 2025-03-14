@@ -1,10 +1,10 @@
 #pragma once
-#include "w4a16_gptq_marlin_model.cuh"
+#include "../w4a8_per_chn/w4a8_per_chn_model.cuh"
 #include "../medusa.cuh"
 
 
 template<typename T>
-struct MedusaImplBaseW4A16GPTQMarlin : Model {
+struct MedusaImplBaseW4A8PerChnRot : Model {
     int num_heads;
     int num_layers;
     int topk_per_head;
@@ -12,19 +12,20 @@ struct MedusaImplBaseW4A16GPTQMarlin : Model {
     int32_t* tree_indices;
     int32_t* draft_position_ids;
 
-    W4A16GPTQMarlinModelImpl<T>* model;
+    W4A8PerChnModelImpl<T>* model;
+    Linear<T>* rotation;
     std::vector<ResidualBlock<T>*> blocks;
     std::vector<Linear<T>*> lm_heads;
 
     T* last_token_hidden_state;
-    int32_t *h_best, *d_best;    
+    int32_t *h_best, *d_best;
     T* logits;
 
     T* tmp_kvcache;
     functions::TopK<T>* topk_func;
 
-    MedusaImplBaseW4A16GPTQMarlin(
-        W4A16GPTQMarlinModelImpl<T>* model,
+    MedusaImplBaseW4A8PerChnRot(
+        W4A8PerChnModelImpl<T>* model,
         int num_heads,
         int num_layers,
         int topk_per_head,
@@ -40,6 +41,7 @@ struct MedusaImplBaseW4A16GPTQMarlin : Model {
         this->tree_indices = tree_indices;
         this->draft_position_ids = draft_position_ids;
 
+        this->rotation = new Linear<T>(model->hidden_size, model->hidden_size);
         for (int i = 0; i < num_heads; i++) {
             blocks.push_back(new ResidualBlock<T>(model->hidden_size, model->hidden_size));
             lm_heads.push_back(new Linear<T>(model->hidden_size, model->vocab_size));
@@ -48,6 +50,7 @@ struct MedusaImplBaseW4A16GPTQMarlin : Model {
     }
 
     void init_weight_ptr(Memory* memory) {
+        rotation->init_weight_ptr(memory);
         for (int i = 0; i < num_heads; i++) {
             blocks[i]->init_weight_ptr(memory);
             lm_heads[i]->init_weight_ptr(memory);
@@ -55,8 +58,10 @@ struct MedusaImplBaseW4A16GPTQMarlin : Model {
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        offset = rotation->init_output_ptr(memory, num_tokens, offset);
         for (int i = 0; i < num_heads; i++) {
             offset = blocks[i]->init_output_ptr(memory, num_tokens, offset);
+            // lm_head do not allocate, directly output
         } 
         offset = memory->allocate((void**)&logits, offset, this->num_heads * this->model->vocab_size * sizeof(T)); // lm_head
         offset = topk_func->init_output_ptr(memory, this->num_heads, offset);
@@ -78,15 +83,19 @@ struct MedusaImplBaseW4A16GPTQMarlin : Model {
 
     void load_to_storage(std::string name, void* ptr) {
         if (name.substr(0, 6) == "medusa") {
-            std::regex layer_regex("medusa\\.(\\d+)\\.(\\d+).*");
-            std::smatch matches;
-            if (std::regex_search(name, matches, layer_regex)) {
-                int head_idx = std::stoi(matches[1]);
-                int layer_idx = std::stoi(matches[2]);
-                if (layer_idx == 0) {
-                    blocks[head_idx]->load_to_storage(name, ptr);
-                } else {
-                    lm_heads[head_idx]->load_to_storage(name, ptr);
+            if (name.find("rotation") != std::string::npos) {
+                this->rotation->load_to_storage(name, ptr);
+            } else {
+                std::regex layer_regex("medusa\\.(\\d+)\\.(\\d+).*");
+                std::smatch matches;
+                if (std::regex_search(name, matches, layer_regex)) {
+                    int head_idx = std::stoi(matches[1]);
+                    int layer_idx = std::stoi(matches[2]);
+                    if (layer_idx == 0) {
+                        blocks[head_idx]->load_to_storage(name, ptr);
+                    } else {
+                        lm_heads[head_idx]->load_to_storage(name, ptr);
+                    }
                 }
             }
         } else {
@@ -104,15 +113,16 @@ struct MedusaImplBaseW4A16GPTQMarlin : Model {
     }
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t*, int32_t*) {
+        rotation->prefill(calc_stream, 1, this->last_token_hidden_state);
         for (int i = 0; i < num_heads; i++) {
-            blocks[i]->prefill(calc_stream, 1, this->last_token_hidden_state);
+            blocks[i]->prefill(calc_stream, 1, this->rotation->output);
             lm_heads[i]->prefill(calc_stream, 1, blocks[i]->output, this->logits + i * this->model->vocab_size);
         }
         topk_func->prefill(calc_stream, num_heads, this->logits);
         build_tree(calc_stream, this->tree_size, topk_func->topk_pos, this->tree_indices, this->draft_position_ids, tree_draft_ids, tree_position_ids, cache_length);
     }
 
-    int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, int32_t* tree_parent) {
+        int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, int32_t* tree_parent) {
         verify_draft(calc_stream, num_tokens, pred, gt, position_ids, cache_length, mask_2d, tree_parent, this->d_best);
         cudaMemcpyAsync(this->h_best, this->d_best, 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, calc_stream.stream);
         cudaStreamSynchronize(calc_stream.stream);
