@@ -3,10 +3,10 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.spec_w4a16_gm_for_w4a8_per_chn_model import W4A16GMSpecW4A8PerChn
+from llamacu.speculative.spec_quant.spec_w4a16_gm_for_w4a16_gm_model import W4A16GMSpecW4A16GM
 
 
-def spec_w4a8_with_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = W4A16GMSpecW4A8PerChn(
+    model = W4A16GMSpecW4A16GM(
         base_path=args.model_path,
         drafter_path=args.draft_path,
         memory_limit=args.memory_limit,
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=spec_w4a8_with_w4a16_forward,
+        forward_func=spec_w4a16_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

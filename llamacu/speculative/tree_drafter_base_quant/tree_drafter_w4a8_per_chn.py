@@ -1,13 +1,13 @@
-from .. import C
-from ..llama_w8a8 import W8A8LLM
+from ... import C
+from ...llama_w4a8_per_chn import W4A8PerChnLLM
 
 import torch
-from .tree_drafter import *
+from ..tree_drafter import *
 import time
 
 
 
-class W8A8LLM_with_tree_drafter(W8A8LLM):
+class W4A8PerChnLLM_with_tree_drafter(W4A8PerChnLLM):
     def __init__(self,
                  drafter_type, drafter_path, base_path,
                  tree_size,

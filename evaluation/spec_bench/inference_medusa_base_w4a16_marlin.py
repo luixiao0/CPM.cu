@@ -3,7 +3,7 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.medusa_base_w4a16_marlin import W4A16MarlinLLM_with_medusa
+from llamacu.speculative.medusa_base_quant.medusa_base_w4a16_marlin import W4A16MarlinLLM_with_medusa
 from llamacu.speculative.medusa_choices import *
 
 

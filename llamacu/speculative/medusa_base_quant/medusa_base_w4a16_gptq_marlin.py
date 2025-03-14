@@ -1,10 +1,10 @@
-from .. import C
-from .tree_drafter import pack_mask
-from .tree_drafter_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_tree_drafter
+from ... import C
+from ..tree_drafter import pack_mask
+from ..tree_drafter_base_quant.tree_drafter_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_tree_drafter
 
 import torch
 from transformers import PretrainedConfig
-from .medusa import MedusaConfig
+from ..medusa import MedusaConfig
 
 
 class W4A16GPTQMarlinLLM_with_medusa(W4A16GPTQMarlinLLM_with_tree_drafter):

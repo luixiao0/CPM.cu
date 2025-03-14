@@ -1,9 +1,9 @@
-from .. import C
+from ... import C
 from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from safetensors.torch import load_file
 
-from ..llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ...llama_w4a8_per_chn import W4A8PerChnLLM
 
 import torch
 import time
@@ -22,7 +22,7 @@ def pack_draft_mask(mask_2d):
     return mask_2d_packed
 
 
-class W4A16GMSpecW4A16GMV1(W4A16GPTQMarlinLLM):
+class W4A8PerChnSpecW4A8PerChn(W4A8PerChnLLM):
     def __init__(self,
                  drafter_path: str,
                  base_path: str,
@@ -51,10 +51,8 @@ class W4A16GMSpecW4A16GMV1(W4A16GPTQMarlinLLM):
         # self.draft_prefill_logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         # self.logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         self.draft_cuda_graph = draft_cuda_graph
-
-        self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_w4a16_gm_spec_w4a16_gm_v1_model(
+        C.init_w4a8_per_chn_spec_w4a8_per_chn_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,
@@ -63,10 +61,9 @@ class W4A16GMSpecW4A16GMV1(W4A16GPTQMarlinLLM):
             self.drafter_config.num_key_value_heads,
             self.drafter_config.head_dim,
             self.drafter_config.rms_norm_eps,
-            self.draft_group_size,
             self.draft_num,
             self.draft_cuda_graph,
-            self.dtype_int,
+            0,
         )
     
     def _load(self, name, param, dtype=None, cls=None):
@@ -77,18 +74,18 @@ class W4A16GMSpecW4A16GMV1(W4A16GPTQMarlinLLM):
                 else:
                     dtype = self.dtype
 
-            # if 'gate_up_proj' in name:
-            #     self._load(name.replace("gate_up_proj", "gate_proj"), param[:param.shape[0]//2], dtype, cls=cls)
-            #     self._load(name.replace("gate_up_proj", "up_proj"), param[param.shape[0]//2:], cls=cls)
-            # elif 'qkv_proj' in name:
-            #     self._load(name.replace("qkv_proj", "q_proj"), param[:self.config.num_attention_heads * self.config.head_dim], cls=cls)
-            #     self._load(name.replace("qkv_proj", "k_proj"), param[self.config.num_attention_heads * self.config.head_dim:(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim], cls=cls)
-            #     self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:], cls=cls)
-            # else:
-            param = param.contiguous()
-            if param.dtype not in [torch.int8, torch.int16, torch.int32]:
-                param = param.to(dtype)
-            C.load_model(f"{cls}.{name}", param.data_ptr())
+            if 'gate_up_proj' in name:
+                self._load(name.replace("gate_up_proj", "gate_proj"), param[:param.shape[0]//2], dtype, cls=cls)
+                self._load(name.replace("gate_up_proj", "up_proj"), param[param.shape[0]//2:], cls=cls)
+            elif 'qkv_proj' in name:
+                self._load(name.replace("qkv_proj", "q_proj"), param[:self.config.num_attention_heads * self.config.head_dim], cls=cls)
+                self._load(name.replace("qkv_proj", "k_proj"), param[self.config.num_attention_heads * self.config.head_dim:(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim], cls=cls)
+                self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:], cls=cls)
+            else:
+                param = param.contiguous()
+                if param.dtype not in [torch.int8, torch.int16, torch.int32]:
+                    param = param.to(dtype)
+                C.load_model(f"{cls}.{name}", param.data_ptr())
 
             if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
                 self._load("lm_head", param, cls)

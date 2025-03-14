@@ -3,7 +3,7 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.csc_eagle_w4a16_gm_rot_spec_w4a16_gm import CascadeEagleW4A16GMRotSpecW4A16GM
+from llamacu.speculative.cascade_spec_quant.csc_eagle_w4a16_gm_rot_spec_w4a16_gm import CascadeEagleW4A16GMRotSpecW4A16GM
 
 
 def cascade_spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):

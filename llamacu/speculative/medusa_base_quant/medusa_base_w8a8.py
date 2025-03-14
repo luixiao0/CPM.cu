@@ -1,13 +1,13 @@
-from .. import C
-from .tree_drafter import pack_mask
-from .tree_drafter_w4a8_per_chn import W4A8PerChnLLM_with_tree_drafter
+from ... import C
+from ..tree_drafter import pack_mask
+from ..tree_drafter_base_quant.tree_drafter_w8a8 import W8A8LLM_with_tree_drafter
 
 import torch
 from transformers import PretrainedConfig
-from .medusa import MedusaConfig
+from ..medusa import MedusaConfig
 
 
-class W4A8PerChnLLM_with_medusa_rot(W4A8PerChnLLM_with_tree_drafter):
+class W8A8LLM_with_medusa(W8A8LLM_with_tree_drafter):
     def __init__(self,
                  medusa_path,
                  base_path,
@@ -29,7 +29,7 @@ class W4A8PerChnLLM_with_medusa_rot(W4A8PerChnLLM_with_tree_drafter):
 
         self.medusa_position_ids = medusa_buffers["medusa_position_ids"].to(torch.int32)
         self.medusa_tree_indices = (medusa_buffers["tree_indices"][1:] - 1).to(torch.int32)
-        C.init_medusa_w4a8_per_chn_rot_model(
+        C.init_medusa_w8a8_model(
             self.medusa_config.medusa_num_heads,
             self.medusa_config.medusa_num_layers,
             medusa_topk,
@@ -54,9 +54,7 @@ class W4A8PerChnLLM_with_medusa_rot(W4A8PerChnLLM_with_tree_drafter):
             if dtype is None:
                 dtype = self.dtype
             param = param.contiguous().to(dtype)
-            if "rotation" in name:
-                C.load_model(f"{cls}.{name}", param.data_ptr())
-            elif int(name.split(".")[0]) < self.medusa_config.medusa_num_heads:
+            if int(name.split(".")[0]) < self.medusa_config.medusa_num_heads:
                 C.load_model(f"{cls}.{name}", param.data_ptr())
         else:
             super()._load(name, param, dtype)

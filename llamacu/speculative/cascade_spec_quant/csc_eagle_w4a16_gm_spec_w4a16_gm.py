@@ -1,9 +1,9 @@
-from .. import C
-from ..llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ... import C
+from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
 
 import numpy as np
 import torch
-from .tree_drafter import *
+from ..tree_drafter import *
 import time
 from transformers import PretrainedConfig, AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -30,7 +30,7 @@ class EagleConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.eagle_num_layers = num_hidden_layers
 
-class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
+class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
     def __init__(self,
                 drafter_path: str,
                 base_path: str,
@@ -40,6 +40,7 @@ class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
                 ea_num_iter=6,
                 ea_topk_per_iter=10,
                 tree_size=60,
+                draft_model_start=False,
                 **kwargs):
         
         super().__init__(base_path, **kwargs)
@@ -76,15 +77,20 @@ class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
         self.draft_attn_mask = pack_draft_mask(
             torch.tril(torch.ones(self.max_draft_length+1, self.max_draft_length+1, dtype=torch.bool)).to("cuda")
         )
-        self.draft_parent = torch.tensor([], dtype=torch.int32, device="cuda")
+
+        # eagle accept list
+        self.draft_ea_accept_list = torch.empty((1024,), dtype=torch.int32, device="cuda")
 
         self.draft_logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
         self.draft_cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
-        self.draft_cuda_graph = False
+        self.draft_cuda_graph = draft_cuda_graph
+
+        self.draft_model_start = draft_model_start
+
+        self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        # TODO: adapt
-        C.init_cascade_eagle_spec_w4a16_gptq_marlin_sep_model(
+        C.init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,
@@ -93,12 +99,14 @@ class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
             self.drafter_config.num_key_value_heads,
             self.drafter_config.head_dim,
             self.drafter_config.rms_norm_eps,
+            self.draft_group_size,
             self.min_draft_length,
             self.draft_cuda_graph,
             self.eagle_config.eagle_num_layers,
             self.ea_num_iter,
             self.ea_topk_per_iter,
             self.tree_size,
+            self.draft_model_start,
             0,
         )
     
@@ -187,132 +195,52 @@ class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
         torch.cuda.synchronize()
         start_time = time.time()
 
-        eagle_accept_lengths = []
-
-        draft_length_list = []
-        last_draft_length = 0
-        
 
         while i < generation_length-1 and not terminal:
             self.cache_length[0] = prefix_length + i
             self.draft_position_ids[0] = prefix_length + i
-            self.draft_cache_length[0].copy_(self.cache_length[0])
 
-            cur_draft_length = 0
             
             # step 1: draft model prefill and eagle input prepare
-            if (model_step == 0) or (accept_length == last_draft_length+1):
-                C.draft(
-                    self.draft_ids.data_ptr(),
-                    self.draft_position_ids.data_ptr(),
-                    self.cache_length.data_ptr(),
-                    self.draft_attn_mask.data_ptr(),
-                    self.draft_parent.data_ptr(),
-                )
-                cur_draft_length += 1
-            # else:
-            #     print("direct ealge")
-
-            # C.draft(
-            #         self.draft_ids.data_ptr(),
-            #         self.draft_position_ids.data_ptr(),
-            #         self.cache_length.data_ptr(),
-            #         self.draft_attn_mask.data_ptr(),
-            #         self.draft_parent.data_ptr(),
-            #     )
-            # cur_draft_length += 1
-            
-            
-            # self.draft_ids[0].copy_(self.draft_ids[cur_draft_length])
-            self.tree_draft_ids[0].copy_(self.draft_ids[cur_draft_length])
-            
-            
-            while cur_draft_length < self.min_draft_length:
-                self.draft_cache_length[0] = self.cache_length[0].item()+cur_draft_length
-                # step 2: eagle draft to tree ids
-                C.draft_with_eagle(
-                    self.tree_draft_ids.data_ptr(),
-                    self.tree_position_ids.data_ptr(),
-                    self.draft_cache_length.data_ptr(),
-                    self.tree_attn_mask.data_ptr(),
-                    self.tree_parent.data_ptr(),
-                )
-                # TODO: debug here
-                # step 3: draft model decode
-                
-                self.draft_cache_length += self.tree_size
-                draft_padded_length = (self.draft_cache_length[0].item() + 128 -1) // 128 * 128
-                C.draft_decode(
-                    self.tree_size, draft_padded_length,
-                    self.tree_draft_ids.data_ptr(), self.tree_position_ids.data_ptr(),
-                    self.draft_cache_length.data_ptr(), self.tree_attn_mask.data_ptr(),
-                    self.draft_logits.data_ptr(),
-                    self.draft_cuda_graph
-                )
-                self.draft_cache_length -= self.tree_size
-
-
-                draft_gt_logists = self.draft_logits[:self.tree_size]
-                self.tree_gt_ids.copy_(draft_gt_logists.argmax(dim=-1))
-                
-                # step 4: verify and fix draft model
-                eagle_accept_length = C.draft_verify_and_fix(
-                    self.tree_draft_ids.numel(),
-                    self.tree_draft_ids.data_ptr(),
-                    self.tree_gt_ids.data_ptr(),
-                    self.tree_position_ids.data_ptr(),
-                    self.draft_cache_length.data_ptr(),
-                    self.tree_attn_mask.data_ptr(),
-                    self.tree_parent.data_ptr(),
-                )
-        
-                eagle_accept_lengths.append(eagle_accept_length)
-                self.draft_ids[1+cur_draft_length: 1+cur_draft_length+eagle_accept_length] = self.tree_draft_ids[:eagle_accept_length]
-                self.tree_draft_ids[0] = self.tree_draft_ids[eagle_accept_length-1]
-                cur_draft_length += eagle_accept_length
-            
-            self.draft_position_ids = torch.arange(self.cache_length.item(), self.cache_length.item()+cur_draft_length+1, dtype=torch.int32, device="cuda")
-
-            cur_draft_attn_mask = pack_draft_mask(
-                torch.tril(torch.ones(cur_draft_length+1, cur_draft_length+1, dtype=torch.bool)).to("cuda")
+            C.draft(
+                self.draft_ids.data_ptr(),
+                self.draft_position_ids.data_ptr(),
+                self.cache_length.data_ptr(),
+                self.draft_attn_mask.data_ptr(),
+                self.draft_ea_accept_list.data_ptr(),
             )
+            
 
-            draft_length_list.append(cur_draft_length+1)
-            # step 5: target model decode 
-            logits = self.decode(self.draft_ids[:cur_draft_length+1], self.draft_position_ids, self.cache_length, cur_draft_attn_mask)
-
-            self.draft_gt_ids[:cur_draft_length+1].copy_(logits.argmax(dim=-1))
+            # step 2: target model decode (length fixed for cuda graph)
+            logits = self.decode(self.draft_ids, self.draft_position_ids, self.cache_length, mask_2d=self.draft_attn_mask)
+            self.draft_gt_ids.copy_(logits.argmax(dim=-1))
             
             # step 6: verify and fix target model and eagle input
-            
             accept_length = C.verify_and_fix(
-                self.draft_ids[:cur_draft_length+1].numel(),
+                self.draft_ids.numel(),
                 self.draft_ids.data_ptr(),
                 self.draft_gt_ids.data_ptr(),
                 self.draft_position_ids.data_ptr(),
                 self.cache_length.data_ptr(),
-                cur_draft_attn_mask.data_ptr(),
-                self.draft_parent.data_ptr(),
+                self.draft_attn_mask.data_ptr(),
+                self.draft_ea_accept_list.data_ptr(),
             )
 
             model_step += 1
-            
             accept_lengths.append(accept_length)
             for temin in teminators:
                 if temin in self.draft_gt_ids[:accept_length]:
                     terminal = True
             append_length = min(accept_length, generation_length - 1 - i)
-            
             tokens[1+i:1+i+append_length].copy_(self.draft_gt_ids[:append_length])
             self.draft_ids[0] = self.draft_gt_ids[accept_length - 1]
             i += accept_length
-            last_draft_length = cur_draft_length
-            # print("forward time:", model_step)
-    
+        
+        
+        # print(f"ea accept avg:", np.mean(self.draft_ea_accept_list[1:ea_acc_nums+1].cpu().numpy()))
         
         torch.cuda.synchronize()
         decode_time = time.time() - start_time
+        ea_acc_nums = self.draft_ea_accept_list[0].item()
         tokens = tokens[:i+1].tolist()
-        print("eagle draft length: ", draft_length_list)
-        print("eagle avg accept length: ", np.mean(eagle_accept_lengths))
-        return tokens, accept_lengths, model_step, decode_time
+        return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()

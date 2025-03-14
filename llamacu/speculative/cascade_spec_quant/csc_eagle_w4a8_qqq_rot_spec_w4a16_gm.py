@@ -1,9 +1,9 @@
-from .. import C
-from ..llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ... import C
+from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
 
 import numpy as np
 import torch
-from .tree_drafter import *
+from ..tree_drafter import *
 import time
 from transformers import PretrainedConfig, AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS

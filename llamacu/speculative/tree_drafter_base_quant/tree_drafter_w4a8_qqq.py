@@ -1,12 +1,13 @@
-from .. import C
-from ..llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ... import C
+from ...llama_w4a8_qqq import W4A8QQQLLM
 
 import torch
-from .tree_drafter import *
+from ..tree_drafter import *
 import time
 
 
-class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
+
+class W4A8QQQLLM_with_tree_drafter(W4A8QQQLLM):
     def __init__(self,
                  drafter_type, drafter_path, base_path,
                  tree_size,

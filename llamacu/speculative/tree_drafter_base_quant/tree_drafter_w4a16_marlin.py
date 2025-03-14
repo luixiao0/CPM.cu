@@ -1,13 +1,12 @@
-from .. import C
-from ..llama_w4a8_per_chn import W4A8PerChnLLM
+from ... import C
+from ...llama_w4a16_marlin import W4A16MarlinLLM
 
 import torch
-from .tree_drafter import *
-import time
+from ..tree_drafter import *
 
 
 
-class W4A8PerChnLLM_with_tree_drafter(W4A8PerChnLLM):
+class W4A16MarlinLLM_with_tree_drafter(W4A16MarlinLLM):
     def __init__(self,
                  drafter_type, drafter_path, base_path,
                  tree_size,
@@ -76,6 +75,6 @@ class W4A8PerChnLLM_with_tree_drafter(W4A8PerChnLLM):
             self.tree_draft_ids[0] = self.tree_draft_ids[accept_length - 1]
             i += accept_length
         torch.cuda.synchronize()
-        decode_time = time.time() - start_time
+        decode_time = time.time() - start_time 
         tokens = tokens[:1+i].tolist()
         return tokens, accept_lengths, model_step, decode_time
