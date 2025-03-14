@@ -6,7 +6,7 @@
 
 
 template <typename T>
-struct W4A16GMSpecW4A8PerChnImpl: Model {
+struct W4A16GMSpecW4A8PerChnImplV0: Model {
 
     int vocab_size;
     int num_hidden_layers;
@@ -49,7 +49,7 @@ struct W4A16GMSpecW4A8PerChnImpl: Model {
     cudaGraph_t draft_graph;
     cudaGraphExec_t draft_graphExec;
 
-    W4A16GMSpecW4A8PerChnImpl(
+    W4A16GMSpecW4A8PerChnImplV0(
         W4A8PerChnModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,

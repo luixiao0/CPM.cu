@@ -8,23 +8,9 @@
 template <typename T>
 struct W4A16GMSpecW4A16GMImpl: Model {
 
-    int vocab_size;
-    int num_hidden_layers;
-    int hidden_size;
-    int intermediate_size;
-    int num_attention_heads;
-    int num_key_value_heads;
-    int head_dim;
-    float rms_norm_eps;
 
-
+    W4A16GPTQMarlinModelImpl<T>* draft_model;
     W4A16GPTQMarlinModelImpl<T>* model;
-    KVCacheManager<T>* kv_caches;
-
-    Embedding<T>* embedding;
-    std::vector<W4A16GPTQMarlinLayer<T>*> layers;
-    RMSNorm<T>* norm;
-    Linear<T>* lm_head;
 
     // draft args
     int32_t *draft_input;
@@ -64,27 +50,25 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         bool draft_cuda_graph
     ) {
         this->model = model;
-        this->vocab_size = draft_vocab_size;
-        this->num_hidden_layers = draft_num_hidden_layers;
-        this->hidden_size = draft_hidden_size;
-        this->intermediate_size = draft_intermediate_size;
-        this->num_attention_heads = draft_num_attention_heads;
-        this->num_key_value_heads = draft_num_key_value_heads;
-        this->head_dim = draft_head_dim;
-        this->rms_norm_eps = draft_rms_norm_eps;
+        this->draft_model = new W4A16GPTQMarlinModelImpl<T>(
+            0,
+            nullptr,
+            draft_vocab_size,
+            draft_num_hidden_layers,
+            draft_hidden_size,
+            draft_intermediate_size,
+            draft_num_attention_heads,
+            draft_num_key_value_heads,
+            draft_head_dim,
+            draft_rms_norm_eps,
+            draft_group_size,
+            this->model->chunk_length
+        );
 
         this->num_iter = num_iter;
 
         this->draft_mask_2d = 0;
         
-        kv_caches = new KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim);
-
-        embedding = new Embedding<T>(vocab_size, hidden_size);
-        for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new W4A16GPTQMarlinLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, draft_group_size));
-        }
-        norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        lm_head = new Linear<T>(hidden_size, vocab_size);
 
         topk_func = new functions::TopK<T>(model->vocab_size, 1); // greedy sample
         
@@ -95,25 +79,10 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         this->draft_graphExec = nullptr;
     }
 
-    void init_weight_ptr(Memory* memory) {
-        embedding->init_weight_ptr(memory);
-        for (int i = 0; i < num_hidden_layers; i++) {
-            layers[i]->init_weight_ptr(memory);
-        }
-        norm->init_weight_ptr(memory);
-        lm_head->init_weight_ptr(memory);
-        kv_caches->init_weight_ptr(memory);
-    }
+    
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        int64_t embedding_end = embedding->init_output_ptr(memory, num_tokens, offset);
-        int64_t layer_end = 0;
-        for (int i = 0; i < num_hidden_layers; i++) {
-            layer_end = layers[i]->init_output_ptr(memory, num_tokens, embedding_end);
-        }
-        // norm and lm_head are not used in prefill
-        int64_t norm_end = norm->init_output_ptr(memory, num_tokens, layer_end);
-        int64_t lm_head_end = lm_head->init_output_ptr(memory, 64, norm_end);
+        int64_t lm_head_end = this->draft_model->init_output_ptr(memory, num_tokens, offset);
         offset = lm_head_end;
         
         offset = memory->allocate((void**)&draft_input, offset, num_tokens * sizeof(int32_t));
@@ -122,7 +91,7 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         cudaMallocHost(&host_draft_cache_length, sizeof(int32_t));
 
         
-        offset = memory->allocate((void**)&draft_logits, offset, 64 * vocab_size * sizeof(T));
+        offset = memory->allocate((void**)&draft_logits, offset, 64 * this->draft_model->vocab_size * sizeof(T));
         offset = topk_func->init_output_ptr(memory, 1, offset);
         
         offset = memory->allocate((void**)&draft_tmp, offset, 16*sizeof(int32_t));
@@ -133,79 +102,32 @@ struct W4A16GMSpecW4A16GMImpl: Model {
 
     int init_storage() {
         this->model->init_weight_ptr(this->model->memory);
-        this->init_weight_ptr(this->model->memory);
+        // this->init_weight_ptr(this->model->memory);
+        this->draft_model->init_weight_ptr(this->model->memory);
 
         int64_t offset = this->model->init_output_ptr(this->model->memory, this->model->chunk_length, this->model->memory->model_offset);
         int64_t kv_cache_offset = init_output_ptr(this->model->memory, this->model->chunk_length, offset);
 
         int model_kv_size = (this->model->num_hidden_layers*this->model->num_key_value_heads*this->model->head_dim);
-        int draft_kv_size = (this->num_hidden_layers*this->num_key_value_heads*this->head_dim);
+        int draft_kv_size = (this->draft_model->num_hidden_layers*this->draft_model->num_key_value_heads*this->draft_model->head_dim);
         float ratio = float(model_kv_size)/float(model_kv_size + draft_kv_size);
         kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset, ratio);
-        kv_caches->init_output_ptr(this->model->memory, kv_cache_offset);
-        return min(kv_caches->budget, this->model->kv_caches->budget);
+        this->draft_model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset);
+        return min(this->draft_model->kv_caches->budget, this->model->kv_caches->budget);
     }
 
     void load_to_storage(std::string name, void* ptr) {
         if (name.substr(0, 5) == "draft"){
-            if (name.substr(0, 24) == "draft.model.embed_tokens") {
-                embedding->load_to_storage(name, ptr);
-            } else if (name.substr(0, 16) == "draft.model.norm") {
-                norm->load_to_storage(name, ptr);
-            } else if (name.substr(0, 13) == "draft.lm_head") {
-                lm_head->load_to_storage(name, ptr);
-            } else if (name.find("rotary_emb") != std::string::npos) {
-                kv_caches->rotary_embedding->load_to_storage(name, ptr);
-            } else if (name.substr(0, 18) == "draft.model.layers") { // e.g. draft.model.layers.20.attn.q_proj.weight
-                std::regex layer_regex("draft\\.model\\.layers\\.(\\d+)\\.(.*)");
-                std::smatch matches;
-                if (std::regex_search(name, matches, layer_regex)) {
-                    int layer_idx = std::stoi(matches[1]);
-                    layers[layer_idx]->load_to_storage(matches[2], ptr);
-                } else {
-                    throw std::invalid_argument("Unsupported name (layer_idx not found): " + name);
-                }
-            } else {
-                throw std::invalid_argument("Unsupported name " + name);
-            }
+            std::string draft_name = name.substr(6);
+            this->draft_model->load_to_storage(draft_name, ptr);
         } else {
             this->model->load_to_storage(name, ptr);
         }
     }
 
-    void draft_prefill_embed(int32_t num_tokens, int32_t num_history_tokens, T* embed, int32_t* position_ids, void* output) {
-        T* layer_output = nullptr;
-        for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
-            layer_output = this->layers[i]->output;
-        }
-        // TODO : remove norm and lm_head prefill
-        this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
-        this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*) output);
-    }
 
-    void draft_prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
-        this->embedding->prefill(calc_stream, num_tokens, input);
-        this->draft_prefill_embed(num_tokens, num_history_tokens, this->embedding->output, position_ids, output);
-    }
-
-    void draft_decode_embed(int32_t num_tokens, int32_t padded_length, T* embed, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
-        Mask mask(mask_2d, num_tokens, num_tokens);
-        T* layer_output = nullptr;
-        for (int i = 0; i < num_hidden_layers; i++) {
-            this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
-            layer_output = this->layers[i]->output;
-        }
-        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
-        this->lm_head->prefill(calc_stream, num_tokens, this->norm->output + (num_tokens - 1) * hidden_size, (T*) output);
-    }
-
-    void draft_decode(int32_t num_tokens, int32_t padded_length, void* output) {
-        this->embedding->prefill(calc_stream, num_tokens, this->draft_input);
-        this->draft_decode_embed(num_tokens, padded_length, this->embedding->output, this->draft_position_ids, this->draft_cache_length, this->draft_mask_2d, output);
-    }
     
-    void draft_decode_with_graph_control(int32_t num_tokens, int32_t padded_length, void* output) {
+    void draft_decode_with_graph_control(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         if (this->draft_cuda_graph) {
             if (this->draft_graphCreated_padding_length != padded_length || this->draft_graphCreated_input_length != num_tokens) {
                 if (this->draft_graphExec != nullptr) {
@@ -217,7 +139,8 @@ struct W4A16GMSpecW4A16GMImpl: Model {
                     this->draft_graph = nullptr;
                 }
                 cudaStreamBeginCapture(calc_stream.stream, cudaStreamCaptureModeGlobal);
-                this->draft_decode(num_tokens, padded_length, output);
+                // this->draft_decode(num_tokens, padded_length, output);
+                this->draft_model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
                 cudaStreamEndCapture(calc_stream.stream, &(this->draft_graph));
                 cudaGraphInstantiate(&(this->draft_graphExec), this->draft_graph, nullptr, nullptr, 0);
                 this->draft_graphCreated_padding_length = padded_length;
@@ -225,14 +148,15 @@ struct W4A16GMSpecW4A16GMImpl: Model {
             }
             cudaGraphLaunch(this->draft_graphExec, calc_stream.stream);
         } else {
-            this->draft_decode(num_tokens, padded_length, output);
+            // this->draft_decode(num_tokens, padded_length, output);
+            this->draft_model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
         }
     }
 
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->model->prefill(num_tokens, num_history_tokens, input, position_ids, output);
         if (num_history_tokens > 0) {
-            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, this->draft_logits);
+            this->draft_model->prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, this->draft_logits);
         }
         
         cudaMemcpy(this->draft_input, input, num_tokens * sizeof(int32_t), cudaMemcpyDeviceToDevice);
@@ -252,7 +176,7 @@ struct W4A16GMSpecW4A16GMImpl: Model {
             cudaMemcpy(this->draft_input+this->num_prev, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->draft_position_ids+this->num_prev, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             this->num_prev += 1;
-            this->draft_prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, this->draft_logits);
+            this->draft_model->prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, (void*)this->draft_logits);
 
             
             cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
@@ -260,14 +184,18 @@ struct W4A16GMSpecW4A16GMImpl: Model {
             cudaMemcpy(this->draft_position_ids, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
             // this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
+            this->topk_func->prefill(calc_stream, 1, this->draft_logits);
         } else if (this->num_prev == 2){
-            this->draft_decode(this->num_prev, this->draft_padded_length, this->draft_logits);
+            // this->draft_decode(this->num_prev, this->draft_padded_length, this->draft_logits);
+            this->draft_model->decode(this->num_prev, this->draft_padded_length, this->draft_input, this->draft_position_ids, this->draft_cache_length, nullptr, (void*)this->draft_logits);
+            this->topk_func->prefill(calc_stream, 1, this->draft_logits+(this->draft_model->vocab_size));
             add(calc_stream, 1, this->draft_position_ids, 1);
         } else {
             // num_prev == 1
-            this->draft_decode_with_graph_control(this->num_prev, this->draft_padded_length, this->draft_logits);
+            this->draft_decode_with_graph_control(this->num_prev, this->draft_padded_length, this->draft_input, this->draft_position_ids, this->draft_cache_length, nullptr, (void*)this->draft_logits);
+            this->topk_func->prefill(calc_stream, 1, this->draft_logits);
         }
-        this->topk_func->prefill(calc_stream, 1, this->draft_logits);
+        
         cudaMemcpy(this->draft_input, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
         cudaMemcpy(this->draft_tmp, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
 
@@ -278,7 +206,7 @@ struct W4A16GMSpecW4A16GMImpl: Model {
 
             this->host_draft_cache_length[0] += 1;
             this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;;
-            this->draft_decode_with_graph_control(1, this->draft_padded_length, (void*) this->draft_logits);
+            this->draft_decode_with_graph_control(1, this->draft_padded_length, this->draft_input, this->draft_position_ids, this->draft_cache_length, nullptr, (void*)this->draft_logits);
             this->topk_func->prefill(calc_stream, 1, this->draft_logits);
             cudaMemcpy(this->draft_input, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->draft_tmp + d, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
