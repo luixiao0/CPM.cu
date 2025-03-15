@@ -90,7 +90,7 @@ class CascadeEagleW4A16GMRotSpecW4A16GM(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_cascade_eagle_rot_w4a16_gm_spec_w4a16_gm_model(
+        C.init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,

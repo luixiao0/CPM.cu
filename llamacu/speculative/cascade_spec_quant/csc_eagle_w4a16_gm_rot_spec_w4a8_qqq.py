@@ -1,5 +1,5 @@
 from ... import C
-from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ...llama_w4a8_qqq import W4A8QQQLLM
 
 import numpy as np
 import torch
@@ -30,7 +30,7 @@ class EagleConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.eagle_num_layers = num_hidden_layers
 
-class CascadeEagleW4A8QQQRotSpecW4A16GM(W4A16GPTQMarlinLLM):
+class CascadeEagleW4A16GMRotSpecW4A8QQQ(W4A8QQQLLM):
     def __init__(self,
                 drafter_path: str,
                 base_path: str,
@@ -90,7 +90,7 @@ class CascadeEagleW4A8QQQRotSpecW4A16GM(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_cascade_eagle_w4a8_qqq_rot_spec_w4a16_gm_model(
+        C.init_cascade_eagle_w4a16_gm_rot_spec_w4a8_qqq_model(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,
@@ -148,10 +148,10 @@ class CascadeEagleW4A8QQQRotSpecW4A16GM(W4A16GPTQMarlinLLM):
             #     self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:], cls=cls)
             # else:
             param = param.contiguous()
-            if param.dtype not in [torch.int8, torch.int16, torch.int32] and "s_channel" not in name and "s_group" not in name:
+            # if param.data_ptr() == 0:
+            #     return
+            if param.dtype not in [torch.int8, torch.int16, torch.int32]:
                 param = param.to(dtype)
-            if param.data_ptr() == 0:
-                return
             C.load_model(f"{cls}.{name}", param.data_ptr())
 
             if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:

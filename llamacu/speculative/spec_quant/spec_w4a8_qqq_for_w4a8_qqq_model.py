@@ -89,8 +89,8 @@ class W4A8QQQSpecW4A8QQQ(W4A8QQQLLM):
             param = param.contiguous()
             if param.data_ptr() == 0:
                 return
-            # if param.dtype not in [torch.int8, torch.int16, torch.int32]:
-            #     param = param.to(dtype)
+            if param.dtype not in [torch.int8, torch.int16, torch.int32] and "s_channel" not in name and "s_group" not in name:
+                param = param.to(dtype)
             C.load_model(f"{cls}.{name}", param.data_ptr())
 
             if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:

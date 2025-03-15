@@ -85,8 +85,8 @@ class W4A8QQQLLM(torch.nn.Module):
         #     self._load(name.replace("qkv_proj", "v_proj"), param[(self.config.num_attention_heads + self.config.num_key_value_heads) * self.config.head_dim:])
         # else:
         param = param.contiguous()
-        # if param.dtype not in [torch.int8, torch.int16, torch.int32]:
-        #     param = param.to(dtype)
+        if param.dtype not in [torch.int8, torch.int16, torch.int32] and "s_channel" not in name and "s_group" not in name:
+            param = param.to(dtype)
         if param.data_ptr() == 0:
             return
         C.load_model(name, param.data_ptr())
