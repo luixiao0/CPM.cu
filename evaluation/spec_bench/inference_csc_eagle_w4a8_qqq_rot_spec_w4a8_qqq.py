@@ -3,10 +3,10 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.cascade_spec_quant.csc_eagle_w4a8_qqq_rot_spec_w4a16_gm import CascadeEagleW4A8QQQRotSpecW4A16GM
+from llamacu.speculative.cascade_spec_quant.csc_eagle_w4a8_qqq_rot_spec_w4a8_qqq import CascadeEagleW4A8QQQRotSpecW4A8QQQ
 
 
-def cascade_spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def cascade_spec_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
 
-    model = CascadeEagleW4A8QQQRotSpecW4A16GM(
+    model = CascadeEagleW4A8QQQRotSpecW4A8QQQ(
         base_path=args.model_path,
         drafter_path=args.draft_path,
         memory_limit=args.memory_limit,
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=cascade_spec_w4a16_forward,
+        forward_func=cascade_spec_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,
