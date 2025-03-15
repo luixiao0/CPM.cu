@@ -1,9 +1,9 @@
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=0
 Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-70B-Instruct-w4a8-gchn
 Eagle_Path=/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-70B-w4a8_rotation
-Model_id="llama-3-70b-instruct-w4a8_per_chn"
+Model_id="llama-3-70b-instruct-w4a8_per_chn_v3"
 
-python3 evaluation/spec_bench/inference_eagle_w4a8_per_chn.py \
+python3 evaluation/spec_bench/inference_eagle_w4a8_per_chn_rot.py \
     --model-path $Model_Path \
     --eagle-path $Eagle_Path \
     --cuda-graph \

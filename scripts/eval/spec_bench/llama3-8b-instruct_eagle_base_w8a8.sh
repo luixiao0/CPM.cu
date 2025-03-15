@@ -1,5 +1,5 @@
 export CUDA_VISIBLE_DEVICES=2
-Model_Path=/home/ydzhang/checkpoints/neuralmagic/Meta-Llama-3-8B-Instruct-quantized.w8a8
+Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w8a8-gchn-pileval-neuralmagic
 Eagle_Path=/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-8B
 Model_id="llama-3-8b-instruct-w8a8"
 

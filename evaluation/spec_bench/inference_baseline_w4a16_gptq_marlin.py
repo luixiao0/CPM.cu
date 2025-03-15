@@ -68,7 +68,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chunk-length",
         type=int,
-        default=1024,
+        default=4096,
         help="The chunk length of the model prefill.",
     )
     parser.add_argument(
@@ -115,11 +115,12 @@ if __name__ == "__main__":
     
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
+    chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
     model = W4A16GPTQMarlinLLM(
         path=args.model_path,
         memory_limit=args.memory_limit,
-        chunk_length=args.chunk_length,
+        chunk_length=chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
     )

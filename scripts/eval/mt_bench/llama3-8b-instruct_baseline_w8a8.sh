@@ -1,5 +1,5 @@
-export CUDA_VISIBLE_DEVICES=2
-Model_Path=/home/ydzhang/checkpoints/neuralmagic/Meta-Llama-3-8B-Instruct-quantized.w8a8
+export CUDA_VISIBLE_DEVICES=1
+Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w8a8-gchn-pileval-neuralmagic
 Model_id="llama-3-8b-instruct"
 
 python3 evaluation/spec_bench/inference_baseline_w8a8.py \

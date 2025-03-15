@@ -15,66 +15,6 @@ import numpy as np
 from fastchat.model import get_conversation_template
 from evalplus.sanitize import sanitize
 
-def get_function_name(question: str, lang: str = 'Python'):
-    func_lines = [x for x in question.strip().split('\n') if x.strip()]
-
-    if lang.lower() == 'python':
-        func_idx = [i for i in range(len(func_lines)) if func_lines[i].startswith("def ")][-1]
-        func_name = func_lines[func_idx].split('(')[0].strip()
-        func_prefix = "\n".join(func_lines[:func_idx])
-        return func_name, func_prefix
-    
-    func_name = func_lines[-1].split('{')[0].strip()
-    func_prefix = "\n".join(func_lines[:-1])
-    return func_name, func_prefix
-
-
-def extract_generation_code(question, output, verbose: bool=False):
-    setting = {
-        'full_name': 'Python',
-        'indent': 4,
-    }
-    lang = setting['full_name']
-    indent = setting['indent']
-
-    try:
-        code_block: str = re.findall(f'```{lang.lower()}\n(.*?)```', output, re.DOTALL | re.IGNORECASE)[0]
-        
-        # Remove main
-        if setting.get('main', None) and setting['main'] in code_block:
-            main_start = code_block.index(setting['main'])
-            code_block = code_block[:main_start]
-        
-        func_name, func_prefix = get_function_name(question, lang)
-
-        try:
-            start = code_block.lower().index(func_name.lower())
-            indent = 0
-            while start - indent >= 0 and code_block[start - indent-1] == ' ':
-                indent += 1
-            
-            try:
-                end = code_block.rindex('\n' + ' '*indent + '}')
-            except:
-                end = len(code_block)
-        except:
-            start = 0
-            try:
-                end = code_block.rindex('\n' + ' '*indent + '}')
-            except:
-                end = len(code_block)
-
-        body = code_block[start:end]
-    
-        generation = func_prefix + '\n' + body + '\n'
-        from IPython import embed; embed()
-        result = generation
-
-    except Exception as ex:
-        result = question + '\n' + output
-    
-    return result
-
 
 def entry_point(
     problem_file: str,
@@ -94,25 +34,6 @@ def entry_point(
 
     return results
 
-
-def filter_code(completion: str) -> str:
-    completion = completion.lstrip("\n")
-    return completion.split("\n\n")[0]
-
-
-def gen_prompt(prompt: str) -> str:
-#     if args.model_type == "deepseek":
-#         return '''
-# Please continue to complete the function. You are not allowed to modify the given code and do the completion only. Please return all completed function in a codeblock. Here is the given code to do completion:
-# ```{}
-# {}
-# ```
-# '''.strip().format("Python", prompt.strip())
-    prompt = (
-        "Please complete the following Python code without providing any additional tasks such as testing or explanations\n"
-        + prompt
-    )
-    return prompt
 
 
 def count_indent(text: str) -> int:

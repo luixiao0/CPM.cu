@@ -1,5 +1,5 @@
-export CUDA_VISIBLE_DEVICES=1
-Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-4bit-128g-pileval-mse-gptq_marlin
+export CUDA_VISIBLE_DEVICES=2
+Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-rotation-4bit-128g-pileval-mse-desc-static_group_default_merge
 Model_id="llama-3-8b-instruct-w4a16-gptq_marlin"
 
 python3 evaluation/spec_bench/inference_baseline_w4a16_gptq_marlin.py \

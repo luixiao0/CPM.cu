@@ -1,10 +1,10 @@
 import os
 import torch
 from llamacu.llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
-from llamacu.speculative.medusa_base_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_medusa
+from llamacu.speculative.medusa_base_quant.medusa_base_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_medusa
 from llamacu.speculative.medusa_choices import *
-from llamacu.speculative.eagle_base_w4a16_marlin_gptq import W4A16GPTQMarlinLLM_with_eagle
-from llamacu.speculative.cascade_eagle_drafter_spec_w4a16_gptq_marlin import CascadeEagleSpecW4A16GPTQMarlin
+from llamacu.speculative.eagle_base_quant.eagle_base_w4a16_marlin_gptq import W4A16GPTQMarlinLLM_with_eagle
+from llamacu.speculative.cascade_spec_quant.csc_eagle_w4a16_gm_spec_w4a16_gm import CascadeEagleW4A16GMSpecW4A16GM
 # from llamacu.medusa_w8a8 import W8A8LLM_with_medusa
 from transformers import AutoTokenizer
 from triton.testing import do_bench
@@ -148,7 +148,7 @@ position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1
 teminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
 
 
-llm = CascadeEagleSpecW4A16GPTQMarlin(
+llm = CascadeEagleW4A16GMSpecW4A16GM(
     drafter_path=draft_path, 
     base_path=path,
     min_draft_length=6,

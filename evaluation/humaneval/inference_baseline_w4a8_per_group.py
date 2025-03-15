@@ -63,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chunk-length",
         type=int,
-        default=1024,
+        default=4096,
         help="The chunk length of the model prefill.",
     )
     parser.add_argument(
