@@ -3,32 +3,40 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.humaneval.eval_plus import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.llama_w4a8_qqq import W4A8QQQLLM
+from llamacu.speculative.cascade_spec_quant.csc_eagle_w4a8_qqq_rot_spec_w4a8_qqq import CascadeEagleW4A8QQQRotSpecW4A8QQQ
 
 
-def baseline_w4a8_qqq_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators=[]):
+def cascade_spec_forward(inputs_ids, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, decode_time= model.generate(
+    output_ids, accept_length_list, model_step, decode_time, cascade_accept_length_list = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    step = new_token
-    accept_length_list = [1] * new_token
-    return output_ids, new_token, step, accept_length_list, decode_time
+    return output_ids, new_token, model_step, accept_length_list, decode_time, cascade_accept_length_list.tolist()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--draft-path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--eagle-path",
         type=str,
         default=None,
     )
@@ -101,6 +109,37 @@ if __name__ == "__main__":
         type=str,
         default="llama-3",
     )
+    parser.add_argument(
+        "--spec-min-draft-length",
+        type=int,
+        default=6,
+    )
+    parser.add_argument(
+        "--draft-cuda-graph",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--eagle-num-iter",
+        type=int,
+        default=6,
+    )
+    parser.add_argument(
+        "--eagle-topk-per-iter",
+        type=int,
+        default=10,
+    )
+    parser.add_argument(
+        "--eagle-tree-size",
+        type=int,
+        default=60,
+    )
+    parser.add_argument(
+        "--draft-model-start",
+        action="store_true",
+    )
+
+
 
     args = parser.parse_args()
 
@@ -116,12 +155,20 @@ if __name__ == "__main__":
     max_length = min(args.max_length, config.max_position_embeddings)
     chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
-    model = W4A8QQQLLM(
-        path=args.model_path,
+    model = CascadeEagleW4A8QQQRotSpecW4A8QQQ(
+        base_path=args.model_path,
+        drafter_path=args.draft_path,
         memory_limit=args.memory_limit,
         chunk_length=chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
+        min_draft_length=args.spec_min_draft_length,
+        draft_cuda_graph=args.draft_cuda_graph,
+        tree_path=args.eagle_path,
+        draft_model_start=args.draft_model_start,
+        ea_num_iter=args.eagle_num_iter,
+        ea_topk_per_iter=args.eagle_topk_per_iter,
+        tree_size=args.eagle_tree_size,
     )
     model.init_storage()
     model.load_from_hf()
@@ -141,7 +188,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=baseline_forward,
+        forward_func=cascade_spec_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,
@@ -151,4 +198,5 @@ if __name__ == "__main__":
         max_length=max_length,
         num_choices=args.num_choices,
         teminators=teminators,
+        is_cascade=True,
     )

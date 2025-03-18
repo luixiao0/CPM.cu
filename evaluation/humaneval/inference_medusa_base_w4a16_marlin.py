@@ -3,32 +3,36 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.humaneval.eval_plus import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.llama_w4a8_qqq import W4A8QQQLLM
+from llamacu.speculative.medusa_base_quant.medusa_base_w4a16_marlin import W4A16MarlinLLM_with_medusa
+from llamacu.speculative.medusa_choices import *
 
 
-def baseline_w4a8_qqq_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators=[]):
+def medusa_w4a16_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, decode_time= model.generate(
+    output_ids, accept_length_list, model_step, decode_time = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    step = new_token
-    accept_length_list = [1] * new_token
-    return output_ids, new_token, step, accept_length_list, decode_time
+    return output_ids, new_token, model_step, accept_length_list, decode_time
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--medusa-path",
         type=str,
         default=None,
     )
@@ -101,6 +105,21 @@ if __name__ == "__main__":
         type=str,
         default="llama-3",
     )
+    parser.add_argument(
+        "--medusa-num-heads",
+        type=int,
+        default=4,
+    )
+    parser.add_argument(
+        "--medusa-choices",
+        type=str,
+        default="mc_sim_7b_63",
+    )
+    parser.add_argument(
+        "--group-size",
+        type=int,
+        default=128,
+    )
 
     args = parser.parse_args()
 
@@ -116,12 +135,17 @@ if __name__ == "__main__":
     max_length = min(args.max_length, config.max_position_embeddings)
     chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
-    model = W4A8QQQLLM(
-        path=args.model_path,
+    model = W4A16MarlinLLM_with_medusa(
+        base_path=args.model_path,
+        medusa_path=args.medusa_path,
         memory_limit=args.memory_limit,
         chunk_length=chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
+        medusa_num_heads=args.medusa_num_heads,
+        medusa_choices=eval(args.medusa_choices),
+        group_size=args.group_size,
+        use_marlin=True,
     )
     model.init_storage()
     model.load_from_hf()
@@ -141,7 +165,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=baseline_forward,
+        forward_func=medusa_w4a16_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

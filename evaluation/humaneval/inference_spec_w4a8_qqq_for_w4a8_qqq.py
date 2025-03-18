@@ -3,32 +3,35 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.humaneval.eval_plus import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.llama_w4a8_qqq import W4A8QQQLLM
+from llamacu.speculative.spec_quant.spec_w4a8_qqq_for_w4a8_qqq_model import W4A8QQQSpecW4A8QQQ
 
 
-def baseline_w4a8_qqq_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators=[]):
+def spec_w4a16_forward(input_ids, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, decode_time= model.generate(
+    output_ids, accept_length_list, model_step, decode_time = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    step = new_token
-    accept_length_list = [1] * new_token
-    return output_ids, new_token, step, accept_length_list, decode_time
+    return output_ids, new_token, model_step, accept_length_list, decode_time
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--draft-path",
         type=str,
         default=None,
     )
@@ -101,6 +104,17 @@ if __name__ == "__main__":
         type=str,
         default="llama-3",
     )
+    parser.add_argument(
+        "--spec-num-iter",
+        type=int,
+        default=6,
+    )
+    parser.add_argument(
+        "--draft-cuda-graph",
+        action="store_true",
+    )
+
+
 
     args = parser.parse_args()
 
@@ -116,12 +130,15 @@ if __name__ == "__main__":
     max_length = min(args.max_length, config.max_position_embeddings)
     chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
-    model = W4A8QQQLLM(
-        path=args.model_path,
+    model = W4A8QQQSpecW4A8QQQ(
+        base_path=args.model_path,
+        drafter_path=args.draft_path,
         memory_limit=args.memory_limit,
         chunk_length=chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
+        draft_num=args.spec_num_iter,
+        draft_cuda_graph=args.draft_cuda_graph,
     )
     model.init_storage()
     model.load_from_hf()
@@ -141,7 +158,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=baseline_forward,
+        forward_func=spec_w4a16_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

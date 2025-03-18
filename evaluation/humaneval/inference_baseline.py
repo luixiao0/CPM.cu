@@ -49,9 +49,14 @@ if __name__ == "__main__":
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
-        "--bench-path",
-        type=str,
-        default=None,
+        "--question-begin",
+        type=int,
+        help="A debug option. The begin index of questions.",
+    )
+    parser.add_argument(
+        "--question-end",
+        type=int,
+        help="A debug option. The end index of questions."
     )
     parser.add_argument("--answer-file", type=str, help="The output answer file.")
     parser.add_argument(
@@ -61,16 +66,22 @@ if __name__ == "__main__":
         help="The maximum length of the model input length.",
     )
     parser.add_argument(
-        "--max-new-tokens",
+        "--chunk-length",
         type=int,
         default=4096,
+        help="The chunk length of the model prefill.",
+    )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=1024,
         help="The maximum number of new generated tokens.",
     )
     parser.add_argument(
-        "--chunk-length",
+        "--num-choices",
         type=int,
-        default=1024,
-        help="The chunk length of the model prefill.",
+        default=1,
+        help="How many completion choices to generate.",
     )
     parser.add_argument(
         "--temperature",
@@ -93,6 +104,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    question_file = f"data/{args.bench_name}/HumanEval.jsonl.gz"
     if args.answer_file:
         answer_file = args.answer_file
     else:
@@ -116,7 +128,7 @@ if __name__ == "__main__":
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
-    if "llama-3" in args.model_id or "llama_3" in args.model_id:
+    if "llama-3" in args.model_id.lower() or "llama_3" in args.model_id.lower() or "llama3" in args.model_id.lower():
         teminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
     else:
         teminators = [tokenizer.eos_token_id]
@@ -129,13 +141,14 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        data_path=args.bench_path,
         forward_func=baseline_forward,
         model_id=args.model_id,
+        question_file=question_file,
+        question_begin=args.question_begin,
+        question_end=args.question_end,
         answer_file=answer_file,
         max_new_tokens=args.max_new_tokens,
-        max_length=args.max_length,
-        chat_template=args.chat_template,
+        max_length=max_length,
+        num_choices=args.num_choices,
         teminators=teminators,
     )
-

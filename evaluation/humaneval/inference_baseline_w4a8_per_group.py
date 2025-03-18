@@ -49,9 +49,14 @@ if __name__ == "__main__":
         help="The name of the benchmark question set.",
     )
     parser.add_argument(
-        "--bench-path",
-        type=str,
-        default=None,
+        "--question-begin",
+        type=int,
+        help="A debug option. The begin index of questions.",
+    )
+    parser.add_argument(
+        "--question-end",
+        type=int,
+        help="A debug option. The end index of questions."
     )
     parser.add_argument("--answer-file", type=str, help="The output answer file.")
     parser.add_argument(
@@ -97,10 +102,9 @@ if __name__ == "__main__":
         default="llama-3",
     )
 
-
     args = parser.parse_args()
 
-    question_file = f"data/{args.bench_name}/question.jsonl"
+    question_file = f"data/{args.bench_name}/HumanEval.jsonl.gz"
     if args.answer_file:
         answer_file = args.answer_file
     else:
@@ -110,11 +114,12 @@ if __name__ == "__main__":
     
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
+    chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
     model = W4A8PerGroupLLM(
         path=args.model_path,
         memory_limit=args.memory_limit,
-        chunk_length=args.chunk_length,
+        chunk_length=chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
     )
@@ -136,11 +141,14 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        data_path=args.bench_path,
-        forward_func=baseline_w4a8_per_chn_forward,
+        forward_func=baseline_forward,
         model_id=args.model_id,
+        question_file=question_file,
+        question_begin=args.question_begin,
+        question_end=args.question_end,
         answer_file=answer_file,
         max_new_tokens=args.max_new_tokens,
-        max_length=args.max_length,
+        max_length=max_length,
+        num_choices=args.num_choices,
         teminators=teminators,
     )
