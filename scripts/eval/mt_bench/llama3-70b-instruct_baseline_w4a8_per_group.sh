@@ -5,7 +5,7 @@ Model_id="llama-3-70b-instruct"
 python3 evaluation/spec_bench/inference_baseline_w4a8_per_group.py \
     --model-path $Model_Path \
     --cuda-graph \
-    --model-id ${Model_id}_w4a8_per_chn_baseline \
+    --model-id ${Model_id}_w4a8_per_group_baseline \
     --memory-limit 0.8 \
     --bench-name "mt_bench" \
     --dtype "float16" \
