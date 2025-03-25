@@ -24,6 +24,7 @@
 #include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_rot.cuh"
 #include "model/eagle_base_quant/eagle_base_w4a8_qqq_rot.cuh"
 #include "model/eagle_base_quant/eagle_base_w4a8_per_chn_rot.cuh"
+#include "model/eagle_base_quant/eagle_base_w4a8_per_group_rot.cuh"
 
 // spec model
 #include "model/spec_model.cuh"
@@ -42,7 +43,6 @@
 #include "model/cascade_spec_quant/csc_ea_w4a8_qqq_rot_spec_w4a8_qqq.cuh"
 #include "model/cascade_spec_quant/csc_ea_w4a16_gm_rot_spec_w4a8_qqq.cuh"
 
-// #include "model/w4a8_qqq/eagle_base_w4a8_qqq_rot.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -475,6 +475,27 @@ void init_eagle_w4a8_per_chn_rot_model(
         tree_size
     );
 }
+
+
+void init_eagle_w4a8_per_group_rot_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new EagleImplBaseW4A8PerGroupRot<half>(
+        (W4A8PerGroupModelImpl<half>*)model,
+        num_layers,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
 
 
 // spec model
@@ -1062,25 +1083,6 @@ void init_cascade_eagle_w4a16_gm_rot_spec_w4a8_qqq_model(
 // }
 
 
-// void init_eagle_w4a8_per_group_rot_model(
-//     int num_layers,
-//     int num_iter,
-//     int topk_per_iter,
-//     int tree_size,
-//     int torch_dtype
-// ) {
-//     if (torch_dtype != 0) {
-//         throw std::invalid_argument("Only half precision is supported for W8A8 model");
-//     }
-//     model = new EagleImplBaseW4A8PerGroupRot<half>(
-//         (W4A8PerGroupModelImpl<half>*)model,
-//         num_layers,
-//         num_iter,
-//         topk_per_iter,
-//         tree_size
-//     );
-// }
-
 
 int init_storage() {
     return model->init_storage();
@@ -1148,6 +1150,7 @@ PYBIND11_MODULE(C, m) {
     m.def("init_eagle_w4a16_gptq_marlin_rot_model", &init_eagle_w4a16_gptq_marlin_rot_model, "Init eagle W4A16 model");
     m.def("init_eagle_w4a8_qqq_rot_model", &init_eagle_w4a8_qqq_rot_model, "Init W4A8 per group base model");
     m.def("init_eagle_w4a8_per_chn_rot_model", &init_eagle_w4a8_per_chn_rot_model, "Init eagle W4A8 per channel model");
+    m.def("init_eagle_w4a8_per_group_rot_model", &init_eagle_w4a8_per_group_rot_model, "Init W4A8 per group base model");
 
     // spec bind
     m.def("init_spec_model", &init_spec_model, "Init spec model");
@@ -1173,7 +1176,6 @@ PYBIND11_MODULE(C, m) {
     // m.def("init_medusa_w4a16_marlin_model", &init_medusa_w4a16_marlin_model, "Init medusa W4A16 model");
     // m.def("init_eagle_w4a16_marlin_model", &init_eagle_w4a16_marlin_model, "Init eagle W4A16 model");
     
-    // m.def("init_eagle_w4a8_per_group_rot_model", &init_eagle_w4a8_per_group_rot_model, "Init W4A8 per group base model");
     
     
     m.def("init_storage", &init_storage, "Init storage");

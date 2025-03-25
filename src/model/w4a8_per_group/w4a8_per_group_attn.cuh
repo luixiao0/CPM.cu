@@ -136,7 +136,7 @@ struct W4A8PerGroupAttention {
         T *q, *k, *v;
 
         if (num_tokens > 1){
-            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale);
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, this->attn_norm->output_scale, this->v_proj_output);
             permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj_output, this->q_proj_output);
             q = this->q_proj_output;
             k = q + num_tokens * this->num_attention_heads * this->head_dim;

@@ -1,8 +1,7 @@
 #pragma once
-#include "w4a8_per_group_model.cuh"
+#include "../w4a8_per_group/w4a8_per_group_model.cuh"
 #include "../eagle.cuh"
 
-// TODO: eagle for w4a8 per group bug here
 template<typename T>
 struct EagleImplBaseW4A8PerGroupRot: Model {
     int num_layers;

@@ -1,9 +1,9 @@
 import os
 import torch
 from llamacu.llama_w4a8_per_group import W4A8PerGroupLLM
-from llamacu.speculative.medusa_base_w4a8_per_chn_rot import W4A8PerChnLLM_with_medusa_rot
+from llamacu.speculative.medusa_base_quant.medusa_base_w4a8_per_chn_rot import W4A8PerChnLLM_with_medusa_rot
 from llamacu.speculative.medusa_choices import *
-from llamacu.speculative.eagle_base_w4a8_per_group_rot import W4A8PerGroupLLM_with_eagle_rot
+from llamacu.speculative.eagle_base_quant.eagle_base_w4a8_per_group_rot import W4A8PerGroupLLM_with_eagle_rot
 # from llamacu.medusa_w8a8 import W8A8LLM_with_medusa
 from transformers import AutoTokenizer
 from triton.testing import do_bench
@@ -14,14 +14,16 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 # path = "../../models/Llama-2-7b-hf"
 # path = "/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w4a8-gchn-pileval"
 # path = "/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-70B-Instruct-w4a8-gchn"
-path = "/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w4a8-g128-merge"
+# path = "/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w4a8-g128-merge"
 # path = "/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w4a8-g128"
+path = "/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-70B-Instruct-w4a8-g128-merge"
 medusa_path = "/home/ydzhang/checkpoints/predibase/Meta-Llama-3-8B-Instruct-medusa-full-rotation"
-eagle_path = "/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-8B-w4a8_rotation"
+# eagle_path = "/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-8B-w4a8_rotation"
+eagle_path = "/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-70B-w4a8_rotation"
 dtype = torch.float16
 cuda_graph = True
 num_generate = 512
-model_type = ["base", "medusa", "eagle"][0]
+model_type = ["base", "medusa", "eagle"][2]
 Bench = True
 
 # prompt = "Beijing is the"
@@ -53,7 +55,7 @@ elif model_type == "eagle":
     llm = W4A8PerGroupLLM_with_eagle_rot(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=6, tree_size=60, cuda_graph=cuda_graph)
     our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
-    llm = W4A8PerGroupLLM(path, dtype=dtype, memory_limit=0.2, cuda_graph=cuda_graph)
+    llm = W4A8PerGroupLLM(path, dtype=dtype, memory_limit=0.8, cuda_graph=cuda_graph)
     our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()
