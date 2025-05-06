@@ -43,6 +43,8 @@
 #include "model/cascade_spec_quant/csc_ea_w4a8_qqq_rot_spec_w4a8_qqq.cuh"
 #include "model/cascade_spec_quant/csc_ea_w4a16_gm_rot_spec_w4a8_qqq.cuh"
 
+// eagle3
+#include "model/eagle3.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -1083,6 +1085,24 @@ void init_cascade_eagle_w4a16_gm_rot_spec_w4a8_qqq_model(
 // }
 
 
+void init_eagle3_model(
+    int draft_vocab_size,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new Eagle3Impl<elem_type>(
+            (ModelImpl<elem_type>*)model,
+            draft_vocab_size,
+            num_iter,
+            topk_per_iter,
+            tree_size
+        );
+    });
+}
+
 
 int init_storage() {
     return model->init_storage();
@@ -1175,7 +1195,9 @@ PYBIND11_MODULE(C, m) {
     // m.def("init_w4a16_marlin_base_model", &init_w4a16_marlin_base_model, "Init W4A16 base model");
     // m.def("init_medusa_w4a16_marlin_model", &init_medusa_w4a16_marlin_model, "Init medusa W4A16 model");
     // m.def("init_eagle_w4a16_marlin_model", &init_eagle_w4a16_marlin_model, "Init eagle W4A16 model");
-    
+
+    // eagle3 
+    m.def("init_eagle3_model", &init_eagle3_model, "Init eagle model");
     
     
     m.def("init_storage", &init_storage, "Init storage");

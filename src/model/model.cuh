@@ -17,6 +17,9 @@ struct Model {
     virtual void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) = 0;
     virtual void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) = 0;
 
+    // virtual void prefill_eagle3_states(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output, void* low_states, void* mid_states, void* high_states) = 0;
+    // virtual void decode_eagle3_states(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output, void* low_states, void* mid_states, void* high_states) = 0;
+
     virtual void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t* attn_mask, int32_t* tree_parent) = 0;
     virtual int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) = 0;
     /* verify should find max accept length (based on tree_parent and position_ids) and return, fix kvcache (based on position_ids), and make pred[:accept_length] the accept path (based on attn_mask and position_ids) */
@@ -161,6 +164,54 @@ struct ModelImpl : Model {
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         this->embedding->prefill(calc_stream, num_tokens, input);
         decode_embed(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output);
+    }
+
+    // eagle-3 hidden states
+    void prefill_embed_eagle3_states(int32_t num_tokens, int32_t num_history_tokens, T* embed, int32_t* position_ids, void* output, T* low_states, T* mid_states, T* high_states) {
+        T* layer_output = nullptr;
+        for (int i = 0; i < num_hidden_layers; i++) {
+            if (i==2){
+                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i], low_states);
+            } else if (i == num_hidden_layers/2){
+                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i], mid_states);
+            } else if (i == num_hidden_layers-3){
+                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i], high_states);
+            } else {
+                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
+            }
+            layer_output = this->layers[i]->output;
+        }
+        this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
+        this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
+    }
+
+    void prefill_eagle3_states(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output, void* low_states, void* mid_states, void* high_states) {
+        this->embedding->prefill(calc_stream, num_tokens, input);
+        prefill_embed_eagle3_states(num_tokens, num_history_tokens, this->embedding->output, position_ids, output, (T*)low_states, (T*)mid_states, (T*)high_states);
+    }
+
+    void decode_embed_eagle3_states(int32_t num_tokens, int32_t padded_length, T* embed, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output, T* low_states, T* mid_states, T* high_states) {
+        Mask mask(mask_2d, num_tokens, num_tokens);
+        T* layer_output = nullptr;
+        for (int i = 0; i < num_hidden_layers; i++) {
+            if (i==2){
+                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i], low_states);
+            } else if (i == num_hidden_layers/2){
+                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i], mid_states);
+            } else if (i == num_hidden_layers-3){
+                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i], high_states);
+            } else {
+                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
+            }
+            layer_output = this->layers[i]->output;
+        }
+        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
+        this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*)output);
+    }
+
+    void decode_eagle3_states(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output, void* low_states, void* mid_states, void* high_states) {
+        this->embedding->prefill(calc_stream, num_tokens, input);
+        decode_embed_eagle3_states(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output, (T*)low_states, (T*)mid_states, (T*)high_states);
     }
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Draft is not supported"); }
