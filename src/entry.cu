@@ -47,6 +47,10 @@
 #include "model/eagle3.cuh"
 #include "model/eagle3_base_quant/eagle3_base_w4a16_gptq_marlin.cuh"
 
+// cascade ea3
+#include "model/cascade_eagle3_spec_quant/csc_ea3_w4a16_gm_spec_w4a16_gm.cuh"
+#include "model/cascade_eagle3_spec_quant/csc_ea3_w4a16_gm_spec_w4a16_gm_ea3_head.cuh"
+
 
 #define DTYPE_SWITCH(COND, ...)               \
   [&] {                                      \
@@ -1141,6 +1145,112 @@ void init_eagle3_w4a16_gptq_marlin_model(
 }
 
 
+void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_draft_hidden_size,
+    int ea_draft_intermediate_size,
+    int ea_draft_num_attention_heads,
+    int ea_draft_num_key_value_heads,
+    bool ea_load_target_embed,
+    int ea_draft_vocab_size,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagle3W4A16GMSpecW4A16GMImpl<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_draft_hidden_size,
+        ea_draft_intermediate_size,
+        ea_draft_num_attention_heads,
+        ea_draft_num_key_value_heads,
+        ea_load_target_embed,
+        ea_draft_vocab_size,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
+
+void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_ea3_head_model(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_draft_hidden_size,
+    int ea_draft_intermediate_size,
+    int ea_draft_num_attention_heads,
+    int ea_draft_num_key_value_heads,
+    bool ea_load_target_embed,
+    int ea_draft_vocab_size,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagle3W4A16GMSpecW4A16GMEa3HeadImpl<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_draft_hidden_size,
+        ea_draft_intermediate_size,
+        ea_draft_num_attention_heads,
+        ea_draft_num_key_value_heads,
+        ea_load_target_embed,
+        ea_draft_vocab_size,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
+
 int init_storage() {
     return model->init_storage();
 }
@@ -1237,6 +1347,9 @@ PYBIND11_MODULE(C, m) {
     m.def("init_eagle3_model", &init_eagle3_model, "Init eagle model");
     m.def("init_eagle3_w4a16_gptq_marlin_model", &init_eagle3_w4a16_gptq_marlin_model, "Init eagle model");
     
+    // cascade eagle3
+    m.def("init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model", &init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model, "Init casacde eagle3 model");
+    m.def("init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_ea3_head_model", &init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_ea3_head_model, "Init casacde eagle3 model cut head");
     
     m.def("init_storage", &init_storage, "Init storage");
     m.def("load_model", &load_model, "Load model");
