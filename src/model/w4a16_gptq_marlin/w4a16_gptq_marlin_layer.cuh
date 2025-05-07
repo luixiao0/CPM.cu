@@ -48,13 +48,31 @@ struct W4A16GPTQMarlinLayer {
         }
     }
 
-    void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input, T* prev_output, int32_t* position_ids, KVCache<T>* kv_cache) {
+    void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input, T* prev_output, int32_t* position_ids, KVCache<T>* kv_cache, T* prev_layer_states=nullptr) {
         this->attn->prefill(calc_stream, num_tokens, num_history_tokens, input, prev_output, position_ids, kv_cache, a_tmp, c_tmp);
+        if (prev_layer_states != nullptr) {
+            cudaMemcpyAsync(
+                prev_layer_states,    // dst
+                input,                // src
+                num_tokens * this->attn->hidden_size * sizeof(T),
+                cudaMemcpyDeviceToDevice,
+                calc_stream.stream
+            );
+        }
         this->ffn->prefill(calc_stream, num_tokens, input, this->attn->output, a_tmp, c_tmp);
     }
 
-    void decode(int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
+    void decode(int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache, T* prev_layer_states=nullptr) {
         this->attn->decode(calc_stream, num_tokens, padded_length, input, prev_output, position_ids, cache_length, mask, kv_cache, a_tmp, c_tmp);
+        if (prev_layer_states != nullptr) {
+            cudaMemcpyAsync(
+                prev_layer_states,    // dst
+                input,                // src
+                num_tokens * this->attn->hidden_size * sizeof(T),
+                cudaMemcpyDeviceToDevice,
+                calc_stream.stream
+            );
+        }
         this->ffn->decode(calc_stream, num_tokens, input, this->attn->output, a_tmp, c_tmp);
     }
 };

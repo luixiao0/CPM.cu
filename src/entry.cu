@@ -45,6 +45,7 @@
 
 // eagle3
 #include "model/eagle3.cuh"
+#include "model/eagle3_base_quant/eagle3_base_w4a16_gptq_marlin.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -1086,6 +1087,11 @@ void init_cascade_eagle_w4a16_gm_rot_spec_w4a8_qqq_model(
 
 
 void init_eagle3_model(
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    bool load_target_embed,
     int draft_vocab_size,
     int num_iter,
     int topk_per_iter,
@@ -1095,12 +1101,43 @@ void init_eagle3_model(
     DTYPE_SWITCH(torch_dtype, [&] {
         model = new Eagle3Impl<elem_type>(
             (ModelImpl<elem_type>*)model,
+            draft_hidden_size,
+            draft_intermediate_size,
+            draft_num_attention_heads,
+            draft_num_key_value_heads,
+            load_target_embed,
             draft_vocab_size,
             num_iter,
             topk_per_iter,
             tree_size
         );
     });
+}
+
+void init_eagle3_w4a16_gptq_marlin_model(
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    bool load_target_embed,
+    int draft_vocab_size,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    model = new Eagle3ImplBaseW4A16GPTQMarlin<half>(
+        (W4A16GPTQMarlinModelImpl<half>*)model,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        load_target_embed,
+        draft_vocab_size,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
 }
 
 
@@ -1198,6 +1235,7 @@ PYBIND11_MODULE(C, m) {
 
     // eagle3 
     m.def("init_eagle3_model", &init_eagle3_model, "Init eagle model");
+    m.def("init_eagle3_w4a16_gptq_marlin_model", &init_eagle3_w4a16_gptq_marlin_model, "Init eagle model");
     
     
     m.def("init_storage", &init_storage, "Init storage");

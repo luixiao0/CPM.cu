@@ -1,27 +1,11 @@
-from .. import C
-from .tree_drafter import LLM_with_tree_drafter
+from ... import C
+from ..eagle3 import Eagle3Config
+from ..tree_drafter_base_quant.tree_drafter_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_tree_drafter
 
 import torch
-from transformers import PretrainedConfig
 
-class Eagle3Config(PretrainedConfig):
-    def __init__(
-        self,
-        **kwargs,
-    ):
-        self.draft_hidden_size          = kwargs.pop("hidden_size", None)
-        self.draft_intermediate_size    = kwargs.pop("intermediate_size", None)
-        self.draft_num_attention_heads  = kwargs.pop("num_attention_heads", None)
-        self.draft_num_key_value_heads  = kwargs.pop("num_key_value_heads", None)
-        self.draft_vocab_size           = kwargs.pop("draft_vocab_size", 1)
 
-        # whether the config had a “target_hidden_size” key
-        self.load_target_embed = not ("target_hidden_size" in kwargs)
-
-        # let the base class handle everything else (e.g. target_hidden_size, hidden_act, etc.)
-        super().__init__(**kwargs)
-
-class LLM_with_eagle3(LLM_with_tree_drafter):
+class W4A16GPTQMarlinLLM_with_eagle3(W4A16GPTQMarlinLLM_with_tree_drafter):
     def __init__(self,
                  eagle_path,
                  base_path,
@@ -38,7 +22,7 @@ class LLM_with_eagle3(LLM_with_tree_drafter):
         self.eagle_path = eagle_path
         self.eagle_config = Eagle3Config.from_pretrained(eagle_path)
 
-        C.init_eagle3_model(
+        C.init_eagle3_w4a16_gptq_marlin_model(
             self.eagle_config.draft_hidden_size,
             self.eagle_config.draft_intermediate_size,
             self.eagle_config.draft_num_attention_heads,
@@ -61,7 +45,6 @@ class LLM_with_eagle3(LLM_with_tree_drafter):
             elif 't2d' not in name:
                 param = param.contiguous().to(dtype)
 
-            
             if 'fc' in name:
                 if 'weight' in name:
                     split_dim = param.shape[-1] // 3
