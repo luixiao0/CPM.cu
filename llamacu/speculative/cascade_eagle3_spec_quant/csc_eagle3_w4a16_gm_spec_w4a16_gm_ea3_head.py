@@ -84,7 +84,7 @@ class CascadeEagle3W4A16GMSpecW4A16GMEa3Head(W4A16GPTQMarlinLLM):
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
         C.init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_ea3_head_model(
-            self.eagle_config.draft_vocab_size,
+            self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,
             self.drafter_config.intermediate_size,
@@ -158,7 +158,7 @@ class CascadeEagle3W4A16GMSpecW4A16GMEa3Head(W4A16GPTQMarlinLLM):
             if param.dtype not in [torch.int8, torch.int16, torch.int32]:
                 param = param.to(dtype)
             if name == "lm_head.weight":
-                param = param.clone()[self.t2d]
+                param = param.clone()[self.t2d].contiguous()
             C.load_model(f"{cls}.{name}", param.data_ptr())
 
             if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:

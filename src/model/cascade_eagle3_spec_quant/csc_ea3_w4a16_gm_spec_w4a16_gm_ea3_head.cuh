@@ -133,10 +133,11 @@ struct CascadeEagle3W4A16GMSpecW4A16GMEa3HeadImpl: Model {
             draft_group_size,
             this->model->chunk_length
         );
+        this->draft_model->lm_head = new Linear<T>(draft_hidden_size, ea_draft_vocab_size);
 
         // draft config
         this->draft_mask_2d = 0;
-        topk_func = new functions::TopK<T>(draft_vocab_size, 1); // greedy sample
+        topk_func = new functions::TopK<T>(ea_draft_vocab_size, 1); // greedy sample
         
         this->draft_cuda_graph = draft_cuda_graph;
         this->draft_graphCreated_padding_length = -1;
@@ -249,7 +250,7 @@ struct CascadeEagle3W4A16GMSpecW4A16GMEa3HeadImpl: Model {
         cudaMallocHost(&host_draft_cache_length, sizeof(int32_t));
 
         
-        offset = memory->allocate((void**)&draft_logits, offset, 64 * this->draft_model->vocab_size * sizeof(T));
+        offset = memory->allocate((void**)&draft_logits, offset, 64 * this->ea_draft_vocab_size * sizeof(T));
         offset = topk_func->init_output_ptr(memory, 64, offset);
         
         offset = memory->allocate((void**)&draft_tmp, offset, (this->min_draft_length + ea_num_iter + 1)*sizeof(int32_t));
@@ -543,7 +544,7 @@ struct CascadeEagle3W4A16GMSpecW4A16GMEa3HeadImpl: Model {
             this->draft_model->decode_embed_eagle3_states(this->num_prev, this->draft_padded_length, this->draft_model->embedding->output, this->draft_position_ids, this->draft_cache_length, nullptr, (void*)this->draft_logits, this->ea_decode_low_state, this->ea_decode_mid_state, this->ea_decode_high_state);
 
 
-            this->topk_func->prefill(calc_stream, 1, this->draft_logits+(this->draft_model->vocab_size));
+            this->topk_func->prefill(calc_stream, 1, this->draft_logits+(this->ea_draft_vocab_size));
             gather_int(calc_stream, 1, this->ea_d2t, this->topk_func->topk_pos, this->topk_func->topk_pos);
 
             // prepare for the eagle input
