@@ -1,12 +1,12 @@
 from ... import C
-from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ...llama_w4a16_gptq_marlin_latency import W4A16GPTQMarlinLLMLatency
 
 import torch
 from ..tree_drafter import *
 import time
 
 
-class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
+class W4A16GPTQMarlinLLM_with_tree_drafter_Latency(W4A16GPTQMarlinLLMLatency):
     def __init__(self,
                  drafter_type, drafter_path, base_path,
                  tree_size,
@@ -34,10 +34,18 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
+        torch.cuda.synchronize()
+        prefill_start_time = time.time()
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+        C.draft_prefill(
+            self.tree_draft_ids.data_ptr(),
+            self.tree_position_ids.data_ptr(),
+            self.cache_length.data_ptr() # no use
+        )
+
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.tree_draft_ids[0])
@@ -75,6 +83,9 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
             self.tree_draft_ids[0] = self.tree_draft_ids[accept_length - 1]
             i += accept_length
         torch.cuda.synchronize()
-        decode_time = time.time() - start_time
+        end_time = time.time()
+        decode_time = end_time - start_time
+        latency = start_time - prefill_start_time
+        total_time = end_time - prefill_start_time
         tokens = tokens[:1+i].tolist()
-        return tokens, accept_lengths, model_step, decode_time
+        return tokens, accept_lengths, model_step, decode_time, latency, total_time

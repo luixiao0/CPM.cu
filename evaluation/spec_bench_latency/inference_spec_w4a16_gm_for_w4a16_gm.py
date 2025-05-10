@@ -3,10 +3,10 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench_latency.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.eagle3_latency import LLM_with_eagle3_Latency
+from llamacu.speculative.spec_quant.spec_w4a16_gm_for_w4a16_gm_model_latency import W4A16GMSpecW4A16GMLatency
 
 
-def eagle_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
@@ -31,7 +31,7 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--eagle-path",
+        "--draft-path",
         type=str,
         default=None,
     )
@@ -105,20 +105,15 @@ if __name__ == "__main__":
         default="llama-2",
     )
     parser.add_argument(
-        "--eagle-num-iter",
+        "--spec-num-iter",
         type=int,
         default=6,
     )
     parser.add_argument(
-        "--eagle-topk-per-iter",
-        type=int,
-        default=10,
+        "--draft-cuda-graph",
+        action="store_true",
     )
-    parser.add_argument(
-        "--eagle-tree-size",
-        type=int,
-        default=60,
-    )
+
 
 
     args = parser.parse_args()
@@ -135,16 +130,15 @@ if __name__ == "__main__":
     max_length = min(args.max_length, config.max_position_embeddings)
     chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
-    model = LLM_with_eagle3_Latency(
+    model = W4A16GMSpecW4A16GMLatency(
         base_path=args.model_path,
-        eagle_path=args.eagle_path,
+        drafter_path=args.draft_path,
         memory_limit=args.memory_limit,
         chunk_length=chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
-        num_iter=args.eagle_num_iter,
-        topk_per_iter=args.eagle_topk_per_iter,
-        tree_size=args.eagle_tree_size,
+        draft_num=args.spec_num_iter,
+        draft_cuda_graph=args.draft_cuda_graph,
     )
     model.init_storage()
     model.load_from_hf()
@@ -164,7 +158,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=eagle_forward,
+        forward_func=spec_w4a16_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,

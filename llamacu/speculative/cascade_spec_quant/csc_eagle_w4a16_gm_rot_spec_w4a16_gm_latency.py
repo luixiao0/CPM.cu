@@ -1,5 +1,5 @@
 from ... import C
-from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ...llama_w4a16_gptq_marlin_latency import W4A16GPTQMarlinLLMLatency
 
 import numpy as np
 import torch
@@ -30,7 +30,7 @@ class EagleConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.eagle_num_layers = num_hidden_layers
 
-class CascadeEagleW4A16GMRotSpecW4A16GM(W4A16GPTQMarlinLLM):
+class CascadeEagleW4A16GMRotSpecW4A16GMLatency(W4A16GPTQMarlinLLMLatency):
     def __init__(self,
                 drafter_path: str,
                 base_path: str,
@@ -90,7 +90,7 @@ class CascadeEagleW4A16GMRotSpecW4A16GM(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
+        C.init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model_latency(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,
@@ -180,11 +180,20 @@ class CascadeEagleW4A16GMRotSpecW4A16GM(W4A16GPTQMarlinLLM):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
         
+        torch.cuda.synchronize()
+        prefill_start_time = time.time()
         prefix_length = input_ids.shape[1]
         
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+        self.cache_length[0] = prefix_length
+        self.draft_position_ids[0] = prefix_length
+        C.draft_prefill(
+            self.draft_ids.data_ptr(),
+            self.draft_position_ids.data_ptr(),
+            self.cache_length.data_ptr(),
+        )
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.draft_ids[0])
@@ -240,7 +249,10 @@ class CascadeEagleW4A16GMRotSpecW4A16GM(W4A16GPTQMarlinLLM):
         # print(f"ea accept avg:", np.mean(self.draft_ea_accept_list[1:ea_acc_nums+1].cpu().numpy()))
         
         torch.cuda.synchronize()
-        decode_time = time.time() - start_time
+        end_time = time.time()
+        decode_time = end_time - start_time
+        latency = start_time - prefill_start_time
+        total_time = end_time - prefill_start_time
         ea_acc_nums = self.draft_ea_accept_list[0].item()
         tokens = tokens[:i+1].tolist()
-        return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()
+        return tokens, accept_lengths, model_step, decode_time,  latency, total_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()

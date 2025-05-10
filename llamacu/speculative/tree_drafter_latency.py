@@ -1,5 +1,5 @@
 from .. import C
-from ..llama import LLM
+from ..llama_latency import LLM_Latency
 
 import torch
 import time
@@ -22,7 +22,7 @@ def pack_mask(mask_2d):
     mask_2d_packed = mask_2d_packed.view(torch.uint64).view(-1)
     return mask_2d_packed
 
-class LLM_with_tree_drafter(LLM):
+class LLM_with_tree_drafter_Latency(LLM_Latency):
     def __init__(self,
                  drafter_type, drafter_path, base_path,
                  tree_size,
@@ -50,10 +50,17 @@ class LLM_with_tree_drafter(LLM):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
+        torch.cuda.synchronize()
+        prefill_start_time = time.time()
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+        C.draft_prefill(
+            self.tree_draft_ids.data_ptr(),
+            self.tree_position_ids.data_ptr(),
+            self.cache_length.data_ptr() # no use
+        )
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.tree_draft_ids[0])
@@ -91,6 +98,9 @@ class LLM_with_tree_drafter(LLM):
             self.tree_draft_ids[0] = self.tree_draft_ids[accept_length - 1]
             i += accept_length
         torch.cuda.synchronize()
-        decode_time = time.time() - start_time
+        end_time = time.time()
+        decode_time = end_time - start_time
+        latency = start_time - prefill_start_time
+        total_time = end_time - prefill_start_time
         tokens = tokens[:1+i].tolist()
-        return tokens, accept_lengths, model_step, decode_time
+        return tokens, accept_lengths, model_step, decode_time, latency, total_time

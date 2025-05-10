@@ -1,11 +1,11 @@
 from ... import C
 from ..eagle3 import Eagle3Config
-from ..tree_drafter_base_quant.tree_drafter_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_tree_drafter
+from ..tree_drafter_base_quant.tree_drafter_w4a16_gptq_marlin_latency import W4A16GPTQMarlinLLM_with_tree_drafter_Latency
 
 import torch
 
 
-class W4A16GPTQMarlinLLM_with_eagle3(W4A16GPTQMarlinLLM_with_tree_drafter):
+class W4A16GPTQMarlinLLM_with_eagle3_Latency(W4A16GPTQMarlinLLM_with_tree_drafter_Latency):
     def __init__(self,
                  eagle_path,
                  base_path,
@@ -22,7 +22,7 @@ class W4A16GPTQMarlinLLM_with_eagle3(W4A16GPTQMarlinLLM_with_tree_drafter):
         self.eagle_path = eagle_path
         self.eagle_config = Eagle3Config.from_pretrained(eagle_path)
 
-        C.init_eagle3_w4a16_gptq_marlin_model(
+        C.init_eagle3_w4a16_gptq_marlin_model_latency(
             self.eagle_config.draft_hidden_size,
             self.eagle_config.draft_intermediate_size,
             self.eagle_config.draft_num_attention_heads,

@@ -1,0 +1,475 @@
+#include <pybind11/pybind11.h>
+#include <cuda_runtime.h>
+
+#include "utils.cuh"
+#include "trait.cuh"
+// base model
+#include "model/model_latency.cuh"
+#include "model/w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+
+// eagle
+#include "model/eagle_latency.cuh"
+#include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_latency.cuh"
+#include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_rot_latency.cuh"
+
+
+#include "model/eagle3_latency.cuh"
+#include "model/eagle3_base_quant/eagle3_base_w4a16_gptq_marlin_latency.cuh"
+
+#include "model/spec_quant/w4a16_gm_spec_w4a16_gm_latency.cuh"
+
+#include "model/cascade_spec_quant/csc_ea_w4a16_gm_spec_w4a16_gm_latency.cuh"
+#include "model/cascade_spec_quant/csc_ea_w4a16_gm_rot_spec_w4a16_gm_latency.cuh"
+
+#include "model/cascade_eagle3_spec_quant/csc_ea3_w4a16_gm_spec_w4a16_gm_latency.cuh"
+
+
+
+
+#define DTYPE_SWITCH(COND, ...)               \
+  [&] {                                      \
+    if (COND == 0) {                              \
+      using elem_type = __half;     \
+      return __VA_ARGS__();                  \
+    } else {                                 \
+      using elem_type = __nv_bfloat16; \
+      return __VA_ARGS__();                  \
+    }                                        \
+  }()
+
+ModelLatency* model;
+
+void init_base_model_latency(
+    int64_t memory_limit,
+    std::uintptr_t memory_pool,
+    int vocab_size,
+    int num_hidden_layers,
+    int hidden_size,
+    int intermediate_size,
+    int num_attention_heads,
+    int num_key_value_heads,
+    int head_dim,
+    float rms_norm_eps,
+    int torch_dtype,
+    int chunk_length
+) {
+    init_resources();
+
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new ModelLatencyImpl<elem_type>(
+            memory_limit,
+            reinterpret_cast<void*>(memory_pool),
+            vocab_size,
+            num_hidden_layers,
+            hidden_size,
+            intermediate_size,
+            num_attention_heads,
+            num_key_value_heads,
+            head_dim,
+            rms_norm_eps,
+            chunk_length
+        );
+    });
+
+}
+
+void init_w4a16_gptq_marlin_base_model_latency(
+    int64_t memory_limit,
+    std::uintptr_t memory_pool,
+    int vocab_size,
+    int num_hidden_layers,
+    int hidden_size,
+    int intermediate_size,
+    int num_attention_heads,
+    int num_key_value_heads,
+    int head_dim,
+    float rms_norm_eps,
+    int group_size,
+    int torch_dtype,
+    int chunk_length
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    init_resources();
+
+    model = new W4A16GPTQMarlinModelLatencyImpl<half>(
+        memory_limit,
+        reinterpret_cast<void*>(memory_pool),
+        vocab_size,
+        num_hidden_layers,
+        hidden_size,
+        intermediate_size,
+        num_attention_heads,
+        num_key_value_heads,
+        head_dim,
+        rms_norm_eps,
+        group_size,
+        chunk_length
+    );
+
+}
+
+
+// eagle model
+void init_eagle_model_latency(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new EagleLatencyImpl<elem_type>(
+            (ModelLatencyImpl<elem_type>*)model,
+            num_layers,
+            num_iter,
+            topk_per_iter,
+            tree_size
+        );
+    });
+}
+
+void init_eagle_w4a16_gptq_marlin_model_latency(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new EagleImplBaseW4A16GPTQMarlinLatency<half>(
+        (W4A16GPTQMarlinModelLatencyImpl<half>*)model,
+        num_layers,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
+void init_eagle_w4a16_gptq_marlin_rot_model_latency(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new EagleImplBaseW4A16GPTQMarlinRotLatency<half>(
+        (W4A16GPTQMarlinModelLatencyImpl<half>*)model,
+        num_layers,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
+void init_eagle3_model_latency(
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    bool load_target_embed,
+    int draft_vocab_size,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new Eagle3LatencyImpl<elem_type>(
+            (ModelLatencyImpl<elem_type>*)model,
+            draft_hidden_size,
+            draft_intermediate_size,
+            draft_num_attention_heads,
+            draft_num_key_value_heads,
+            load_target_embed,
+            draft_vocab_size,
+            num_iter,
+            topk_per_iter,
+            tree_size
+        );
+    });
+}
+
+void init_eagle3_w4a16_gptq_marlin_model_latency(
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    bool load_target_embed,
+    int draft_vocab_size,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype
+) {
+    model = new Eagle3ImplBaseW4A16GPTQMarlinLatency<half>(
+        (W4A16GPTQMarlinModelLatencyImpl<half>*)model,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        load_target_embed,
+        draft_vocab_size,
+        num_iter,
+        topk_per_iter,
+        tree_size
+    );
+}
+
+void init_w4a16_gm_spec_w4a16_gm_model_latency(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int num_iter,
+    bool draft_cuda_graph,
+    int torch_dtype
+) {
+    // TODO: different type 
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for spec model");
+    }
+    // DTYPE_SWITCH(torch_dtype, [&] {
+    model = new W4A16GMSpecW4A16GMLatencyImpl<half>(
+        (W4A16GPTQMarlinModelLatencyImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        num_iter, 
+        draft_cuda_graph
+    );
+    // });
+}
+
+void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model_latency(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_num_layers,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagleW4A16GMSpecW4A16GMLatencyImpl<half>(
+        (W4A16GPTQMarlinModelLatencyImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_num_layers,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
+void init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model_latency(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_num_layers,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl<half>(
+        (W4A16GPTQMarlinModelLatencyImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_num_layers,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
+
+void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model_latency(
+    int draft_vocab_size,
+    int draft_num_hidden_layers,
+    int draft_hidden_size,
+    int draft_intermediate_size,
+    int draft_num_attention_heads,
+    int draft_num_key_value_heads,
+    int draft_head_dim,
+    float draft_rms_norm_eps,
+    int draft_group_size,
+    int min_draft_length,
+    bool draft_cuda_graph,
+    int ea_draft_hidden_size,
+    int ea_draft_intermediate_size,
+    int ea_draft_num_attention_heads,
+    int ea_draft_num_key_value_heads,
+    bool ea_load_target_embed,
+    int ea_draft_vocab_size,
+    int ea_num_iter,
+    int ea_topk_per_iter,
+    int ea_tree_size,
+    bool draft_model_start,
+    int torch_dtype
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    model = new CascadeEagle3W4A16GMSpecW4A16GMLatencyImpl<half>(
+        (W4A16GPTQMarlinModelLatencyImpl<half>*)model,
+        draft_vocab_size,
+        draft_num_hidden_layers,
+        draft_hidden_size,
+        draft_intermediate_size,
+        draft_num_attention_heads,
+        draft_num_key_value_heads,
+        draft_head_dim,
+        draft_rms_norm_eps,
+        draft_group_size,
+        min_draft_length,
+        draft_cuda_graph,
+        ea_draft_hidden_size,
+        ea_draft_intermediate_size,
+        ea_draft_num_attention_heads,
+        ea_draft_num_key_value_heads,
+        ea_load_target_embed,
+        ea_draft_vocab_size,
+        ea_num_iter,
+        ea_topk_per_iter,
+        ea_tree_size,
+        draft_model_start
+    );
+}
+
+
+int init_storage() {
+    return model->init_storage();
+}
+
+void load_model(std::string name, std::uintptr_t param) {
+    model->load_to_storage(name, reinterpret_cast<void*>(param));
+}
+
+void prefill(int input_length, int history_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t output) {
+    model->prefill(input_length, history_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), (void*)(output));
+}
+
+void decode(int input_length, int padded_length, std::uintptr_t input, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t mask_2d, std::uintptr_t output, bool cuda_graph) {
+    if (cuda_graph) {
+        if (graphCreated_padding_length != padded_length || graphCreated_input_length != input_length) {
+            if (graphExec != nullptr) {
+                cudaGraphExecDestroy(graphExec);
+                graphExec = nullptr;
+            }
+            if (graph != nullptr) {
+                cudaGraphDestroy(graph);
+                graph = nullptr;
+            }
+            cudaStreamBeginCapture(calc_stream.stream, cudaStreamCaptureModeGlobal);
+            model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(mask_2d), reinterpret_cast<void*>(output));
+            cudaStreamEndCapture(calc_stream.stream, &graph);
+            cudaGraphInstantiate(&graphExec, graph, nullptr, nullptr, 0);
+            graphCreated_padding_length = padded_length;
+            graphCreated_input_length = input_length;
+        }
+        cudaGraphLaunch(graphExec, calc_stream.stream);
+    } else {
+        model->decode(input_length, padded_length, reinterpret_cast<int32_t*>(input), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(mask_2d), reinterpret_cast<void*>(output));
+    }
+}
+
+void draft_prefill(std::uintptr_t tree_draft_ids, std::uintptr_t tree_position_ids, std::uintptr_t cache_length) {
+    model->draft_prefill(reinterpret_cast<int32_t*>(tree_draft_ids), reinterpret_cast<int32_t*>(tree_position_ids), reinterpret_cast<int32_t*>(cache_length));
+}
+
+void draft(std::uintptr_t tree_draft_ids, std::uintptr_t tree_position_ids, std::uintptr_t cache_length, std::uintptr_t attn_mask, std::uintptr_t tree_parent) {
+    model->draft(reinterpret_cast<int32_t*>(tree_draft_ids), reinterpret_cast<int32_t*>(tree_position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(attn_mask), reinterpret_cast<int32_t*>(tree_parent));
+}
+
+int verify_and_fix(int num_tokens, std::uintptr_t pred, std::uintptr_t gt, std::uintptr_t position_ids, std::uintptr_t cache_length, std::uintptr_t attn_mask, std::uintptr_t tree_parent) {
+    return model->verify(num_tokens, reinterpret_cast<int32_t*>(pred), reinterpret_cast<int32_t*>(gt), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(attn_mask), reinterpret_cast<int32_t*>(tree_parent));
+}
+
+PYBIND11_MODULE(C, m) {
+    // base bind
+    m.def("init_base_model_latency", &init_base_model_latency, "Init base model");
+    m.def("init_w4a16_gptq_marlin_base_model_latency", &init_w4a16_gptq_marlin_base_model_latency, "Init w4a16 gptq marlin model");
+
+    // eagle bind
+    m.def("init_eagle_model_latency", &init_eagle_model_latency, "Init eagle model");
+    m.def("init_eagle_w4a16_gptq_marlin_model_latency", &init_eagle_w4a16_gptq_marlin_model_latency, "Init eagle W4A16 model");
+    m.def("init_eagle_w4a16_gptq_marlin_rot_model_latency", &init_eagle_w4a16_gptq_marlin_rot_model_latency, "Init eagle W4A16 model");
+
+    m.def("init_eagle3_model_latency", &init_eagle3_model_latency, "Init eagle model");
+    m.def("init_eagle3_w4a16_gptq_marlin_model_latency", &init_eagle3_w4a16_gptq_marlin_model_latency, "Init eagle W4A16 model");
+
+    m.def("init_w4a16_gm_spec_w4a16_gm_model_latency", &init_w4a16_gm_spec_w4a16_gm_model_latency, "Init spec W4A16 model");
+
+    m.def("init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model_latency", &init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model_latency, "Init csc W4A16 model");
+    m.def("init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model_latency", &init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model_latency, "Init csc W4A16 model");
+
+    m.def("init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model_latency", &init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model_latency, "Init csc W4A16 ea3 model");
+
+    m.def("init_storage", &init_storage, "Init storage");
+    m.def("load_model", &load_model, "Load model");
+    m.def("prefill", &prefill, "Prefill");
+    m.def("decode", &decode, "Decode");
+    m.def("draft_prefill", &draft_prefill, "Draft Prefill");
+    m.def("draft", &draft, "Draft");
+    m.def("verify_and_fix", &verify_and_fix, "Verify and fix");
+} 

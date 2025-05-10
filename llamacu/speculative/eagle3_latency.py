@@ -1,5 +1,5 @@
 from .. import C
-from .tree_drafter import LLM_with_tree_drafter
+from .tree_drafter_latency import LLM_with_tree_drafter_Latency
 
 import torch
 from transformers import PretrainedConfig
@@ -21,7 +21,7 @@ class Eagle3Config(PretrainedConfig):
         # let the base class handle everything else (e.g. target_hidden_size, hidden_act, etc.)
         super().__init__(**kwargs)
 
-class LLM_with_eagle3(LLM_with_tree_drafter):
+class LLM_with_eagle3_Latency(LLM_with_tree_drafter_Latency):
     def __init__(self,
                  eagle_path,
                  base_path,
@@ -38,7 +38,7 @@ class LLM_with_eagle3(LLM_with_tree_drafter):
         self.eagle_path = eagle_path
         self.eagle_config = Eagle3Config.from_pretrained(eagle_path)
 
-        C.init_eagle3_model(
+        C.init_eagle3_model_latency(
             self.eagle_config.draft_hidden_size,
             self.eagle_config.draft_intermediate_size,
             self.eagle_config.draft_num_attention_heads,

@@ -18,7 +18,7 @@ def dtype_to_int(dtype):
         raise ValueError(f"Unsupported dtype: {dtype}")
     return ret
 
-class LLM(torch.nn.Module):
+class LLM_Latency(torch.nn.Module):
     def __init__(self,
                  path: str, # hf model path
                  memory_limit: float = 0.8,
@@ -41,7 +41,7 @@ class LLM(torch.nn.Module):
         self.chunk_length = chunk_length
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
-        C.init_base_model(
+        C.init_base_model_latency(
             self.memory_limit,
             self.memory_pool.data.data_ptr(),
             self.config.vocab_size,
@@ -138,13 +138,13 @@ class LLM(torch.nn.Module):
     def prefill(self, input_ids, position_ids):
         assert input_ids.dtype == torch.int32
         for i in range(0, input_ids.numel(), self.chunk_length):
-            # torch.cuda.nvtx.range_push(f"chunk from {i}")
+            torch.cuda.nvtx.range_push(f"chunk from {i}")
             C.prefill(
                 min(input_ids.numel() - i, self.chunk_length), i,
                 input_ids.view(-1)[i:].data_ptr(), position_ids.view(-1)[i:].data_ptr(),
                 self.logits.data_ptr()
             )
-            # torch.cuda.nvtx.range_pop()
+            torch.cuda.nvtx.range_pop()
         return self.logits[:1].clone()
 
     def decode(self, input_ids, position_ids, cache_length, mask_2d = None):
@@ -172,10 +172,17 @@ class LLM(torch.nn.Module):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
+        torch.cuda.synchronize()
+        prefill_start_time = time.time()
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
+        
+        # torch.cuda.nvtx.range_push(f"prefill")
         logits = self.prefill(input_ids, position_ids)
+        # torch.cuda.nvtx.range_pop()
         token = logits[0].argmax(dim=-1).item()
+        
+        
 
         tokens = [token]
         if not hasattr(self, "input_ids"):
@@ -195,5 +202,8 @@ class LLM(torch.nn.Module):
             if token in teminators:
                 break
         torch.cuda.synchronize()
-        decode_time = time.time() - start_time
-        return tokens, decode_time
+        end_time = time.time()
+        decode_time = end_time - start_time
+        latency_time = start_time - prefill_start_time
+        total_time = end_time - prefill_start_time
+        return tokens, decode_time, latency_time, total_time

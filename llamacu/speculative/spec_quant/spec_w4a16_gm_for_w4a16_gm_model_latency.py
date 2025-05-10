@@ -3,7 +3,7 @@ from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from safetensors.torch import load_file
 
-from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ...llama_w4a16_gptq_marlin_latency import W4A16GPTQMarlinLLMLatency
 
 import torch
 import time
@@ -22,7 +22,7 @@ def pack_draft_mask(mask_2d):
     return mask_2d_packed
 
 
-class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
+class W4A16GMSpecW4A16GMLatency(W4A16GPTQMarlinLLMLatency):
     def __init__(self,
                  drafter_path: str,
                  base_path: str,
@@ -54,7 +54,7 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_w4a16_gm_spec_w4a16_gm_model(
+        C.init_w4a16_gm_spec_w4a16_gm_model_latency(
             self.drafter_config.vocab_size,
             self.drafter_config.num_hidden_layers,
             self.drafter_config.hidden_size,
@@ -128,10 +128,19 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
+        torch.cuda.synchronize()
+        prefill_start_time = time.time()
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+        self.cache_length[0] = prefix_length
+        self.draft_position_ids[0] = prefix_length 
+        C.draft_prefill(
+            self.draft_ids.data_ptr(), 
+            self.draft_position_ids.data_ptr(), 
+            self.cache_length.data_ptr()
+        )
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.draft_ids[0])
@@ -171,6 +180,9 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
             self.draft_ids[0] = self.draft_gt_ids[accept_length - 1]
             i += accept_length
         torch.cuda.synchronize()
-        decode_time = time.time() - start_time
+        end_time = time.time()
+        decode_time = end_time - start_time
+        latency = start_time - prefill_start_time
+        total_time = end_time - prefill_start_time
         tokens = tokens[:1+i].tolist()
-        return tokens, accept_lengths, model_step, decode_time
+        return tokens, accept_lengths, model_step, decode_time, latency, total_time

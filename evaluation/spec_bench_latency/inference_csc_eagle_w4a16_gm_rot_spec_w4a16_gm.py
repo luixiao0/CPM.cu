@@ -3,30 +3,35 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench_latency.eval import run_eval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.eagle3_latency import LLM_with_eagle3_Latency
+from llamacu.speculative.cascade_spec_quant.csc_eagle_w4a16_gm_rot_spec_w4a16_gm_latency import CascadeEagleW4A16GMRotSpecW4A16GMLatency
 
 
-def eagle_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def cascade_spec_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, accept_length_list, model_step, decode_time, latency_time, total_time = model.generate(
+    output_ids, accept_length_list, model_step, decode_time, latency_time, total_time, cascade_accept_length_list = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    return output_ids, new_token, model_step, accept_length_list, decode_time, latency_time, total_time
+    return output_ids, new_token, model_step, accept_length_list, decode_time, latency_time, total_time, cascade_accept_length_list.tolist()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--draft-path",
         type=str,
         default=None,
     )
@@ -99,11 +104,22 @@ if __name__ == "__main__":
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
     )
+    
     parser.add_argument(
         "--chat-template",
         type=str,
         default="llama-2",
     )
+    parser.add_argument(
+        "--spec-min-draft-length",
+        type=int,
+        default=6,
+    )
+    parser.add_argument(
+        "--draft-cuda-graph",
+        action="store_true",
+    )
+
     parser.add_argument(
         "--eagle-num-iter",
         type=int,
@@ -119,6 +135,11 @@ if __name__ == "__main__":
         type=int,
         default=60,
     )
+    parser.add_argument(
+        "--draft-model-start",
+        action="store_true",
+    )
+
 
 
     args = parser.parse_args()
@@ -135,15 +156,19 @@ if __name__ == "__main__":
     max_length = min(args.max_length, config.max_position_embeddings)
     chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
-    model = LLM_with_eagle3_Latency(
+    model = CascadeEagleW4A16GMRotSpecW4A16GMLatency(
         base_path=args.model_path,
-        eagle_path=args.eagle_path,
+        drafter_path=args.draft_path,
         memory_limit=args.memory_limit,
         chunk_length=chunk_length,
         dtype=str_to_torch_dtype(args.dtype),
         cuda_graph=args.cuda_graph,
-        num_iter=args.eagle_num_iter,
-        topk_per_iter=args.eagle_topk_per_iter,
+        min_draft_length=args.spec_min_draft_length,
+        draft_cuda_graph=args.draft_cuda_graph,
+        tree_path=args.eagle_path,
+        draft_model_start=args.draft_model_start,
+        ea_num_iter=args.eagle_num_iter,
+        ea_topk_per_iter=args.eagle_topk_per_iter,
         tree_size=args.eagle_tree_size,
     )
     model.init_storage()
@@ -164,15 +189,16 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=eagle_forward,
+        forward_func=cascade_spec_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,
         question_end=args.question_end,
         answer_file=answer_file,
         max_new_tokens=args.max_new_tokens,
-        max_length=max_length,
+        max_length=args.max_length,
         num_choices=args.num_choices,
         chat_template=args.chat_template,
         teminators=teminators,
+        is_cascade=True,
     )

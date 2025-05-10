@@ -82,6 +82,7 @@ class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
         self.draft_cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
         self.draft_cuda_graph = False
+        self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
         # TODO: adapt
         C.init_cascade_eagle_spec_w4a16_gptq_marlin_sep_model(
@@ -93,6 +94,7 @@ class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
             self.drafter_config.num_key_value_heads,
             self.drafter_config.head_dim,
             self.drafter_config.rms_norm_eps,
+            self.draft_group_size,
             self.min_draft_length,
             self.draft_cuda_graph,
             self.eagle_config.eagle_num_layers,
@@ -315,4 +317,4 @@ class CascadeEagleW4A16GMSpecW4A16GMSep(W4A16GPTQMarlinLLM):
         tokens = tokens[:i+1].tolist()
         print("eagle draft length: ", draft_length_list)
         print("eagle avg accept length: ", np.mean(eagle_accept_lengths))
-        return tokens, accept_lengths, model_step, decode_time
+        return tokens, accept_lengths, model_step, decode_time, eagle_accept_lengths

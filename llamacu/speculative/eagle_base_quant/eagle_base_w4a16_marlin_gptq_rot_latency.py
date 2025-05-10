@@ -1,11 +1,11 @@
 from ... import C
 from ..eagle import EagleConfig
-from ..tree_drafter_base_quant.tree_drafter_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_tree_drafter
+from ..tree_drafter_base_quant.tree_drafter_w4a16_gptq_marlin_latency import W4A16GPTQMarlinLLM_with_tree_drafter_Latency
 
 import torch
 
 
-class W4A16GPTQMarlinLLM_with_eagle_rot(W4A16GPTQMarlinLLM_with_tree_drafter):
+class W4A16GPTQMarlinLLM_with_eagle_rot_Latency(W4A16GPTQMarlinLLM_with_tree_drafter_Latency):
     def __init__(self,
                  eagle_path,
                  base_path,
@@ -22,7 +22,7 @@ class W4A16GPTQMarlinLLM_with_eagle_rot(W4A16GPTQMarlinLLM_with_tree_drafter):
         self.eagle_path = eagle_path
         self.eagle_config = EagleConfig.from_pretrained(eagle_path)
 
-        C.init_eagle_w4a16_gptq_marlin_rot_model(
+        C.init_eagle_w4a16_gptq_marlin_rot_model_latency(
             self.eagle_config.eagle_num_layers,
             num_iter,
             topk_per_iter,

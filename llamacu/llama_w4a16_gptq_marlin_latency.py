@@ -18,7 +18,7 @@ def dtype_to_int(dtype):
         raise ValueError(f"Unsupported dtype: {dtype}")
     return ret
 
-class W4A16GPTQMarlinLLM(torch.nn.Module):
+class W4A16GPTQMarlinLLMLatency(torch.nn.Module):
     def __init__(self,
                  path: str, # hf model path
                  memory_limit: float = 0.8,
@@ -45,7 +45,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         self.group_size = self.config.quantization_config['group_size']
         print("group size", self.group_size)
 
-        C.init_w4a16_gptq_marlin_base_model(
+        C.init_w4a16_gptq_marlin_base_model_latency(
             self.memory_limit,
             self.memory_pool.data.data_ptr(),
             self.config.vocab_size,
@@ -186,6 +186,8 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
+        torch.cuda.synchronize()
+        prefill_start_time = time.time()
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
@@ -209,5 +211,8 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             if token in teminators:
                 break
         torch.cuda.synchronize()
-        decode_time = time.time() - start_time
-        return tokens, decode_time
+        end_time = time.time()
+        decode_time = end_time - start_time
+        latency_time = start_time - prefill_start_time
+        total_time = end_time - prefill_start_time
+        return tokens, decode_time, latency_time, total_time
