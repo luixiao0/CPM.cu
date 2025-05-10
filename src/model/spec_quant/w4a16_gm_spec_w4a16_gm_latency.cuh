@@ -1,15 +1,15 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
-#include "../eagle.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../eagle_latency.cuh"
 #include "../drafter.cuh"
 
 
 template <typename T>
-struct W4A16GMSpecW4A16GMImpl: Model {
+struct W4A16GMSpecW4A16GMLatencyImpl: ModelLatency {
 
 
-    W4A16GPTQMarlinModelImpl<T>* draft_model;
-    W4A16GPTQMarlinModelImpl<T>* model;
+    W4A16GPTQMarlinModelLatencyImpl<T>* draft_model;
+    W4A16GPTQMarlinModelLatencyImpl<T>* model;
 
     // draft args
     int32_t *draft_input;
@@ -34,8 +34,8 @@ struct W4A16GMSpecW4A16GMImpl: Model {
     cudaGraph_t draft_graph;
     cudaGraphExec_t draft_graphExec;
 
-    W4A16GMSpecW4A16GMImpl(
-        W4A16GPTQMarlinModelImpl<T>* model,
+     W4A16GMSpecW4A16GMLatencyImpl(
+        W4A16GPTQMarlinModelLatencyImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,
         int draft_hidden_size,
@@ -49,7 +49,7 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         bool draft_cuda_graph
     ) {
         this->model = model;
-        this->draft_model = new W4A16GPTQMarlinModelImpl<T>(
+        this->draft_model = new W4A16GPTQMarlinModelLatencyImpl<T>(
             0,
             nullptr,
             draft_vocab_size,
@@ -169,21 +169,25 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, nullptr, output);
     }
 
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { 
+        cudaMemcpy(this->draft_input+this->num_prev, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->draft_position_ids+this->num_prev, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        this->num_prev += 1;
+        this->draft_model->prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, (void*)this->draft_logits);
+        this->topk_func->prefill(calc_stream, 1, this->draft_logits);
+
+        cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        add(calc_stream, 1, this->draft_cache_length, 1);
+        cudaMemcpy(this->draft_position_ids, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+    }
+
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t*, int32_t*) {
         if (this->is_first_draft) {
             // append tree draft ids to draft input
-            cudaMemcpy(this->draft_input+this->num_prev, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->draft_position_ids+this->num_prev, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            this->num_prev += 1;
-            this->draft_model->prefill(this->num_prev, this->num_history_tokens, this->draft_input, this->draft_position_ids, (void*)this->draft_logits);
-
-            
-            cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            add(calc_stream, 1, this->draft_cache_length, 1);
-            cudaMemcpy(this->draft_position_ids, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
+                        
             // this->draft_padded_length = (this->host_draft_cache_length[0]+ 128 -1) / 128*128;
-            this->topk_func->prefill(calc_stream, 1, this->draft_logits);
+            
         } else if (this->num_prev == 2){
             // this->draft_decode(this->num_prev, this->draft_padded_length, this->draft_logits);
             this->draft_model->decode(this->num_prev, this->draft_padded_length, this->draft_input, this->draft_position_ids, this->draft_cache_length, nullptr, (void*)this->draft_logits);

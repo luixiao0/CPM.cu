@@ -1,9 +1,9 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
-#include "../eagle3.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../eagle3_latency.cuh"
 
 template<typename T>
-struct Eagle3ImplBaseW4A16GPTQMarlin : Model {
+struct Eagle3ImplBaseW4A16GPTQMarlinLatency : ModelLatency {
     int num_iter;
     int topk_per_iter;
     int tree_size;
@@ -13,7 +13,7 @@ struct Eagle3ImplBaseW4A16GPTQMarlin : Model {
     int draft_vocab_size;
 
     Embedding<T>* embedding;
-    W4A16GPTQMarlinModelImpl<T>* model;
+    W4A16GPTQMarlinModelLatencyImpl<T>* model;
     KVCacheManager<T>* kv_caches;
     LayerEmbed<T>* mid_layer;
     Linear<T> *fc1; // low hidden states
@@ -43,8 +43,8 @@ struct Eagle3ImplBaseW4A16GPTQMarlin : Model {
 
     T* tmp_kvcache;
 
-    Eagle3ImplBaseW4A16GPTQMarlin(
-        W4A16GPTQMarlinModelImpl<T>* model,
+    Eagle3ImplBaseW4A16GPTQMarlinLatency(
+        W4A16GPTQMarlinModelLatencyImpl<T>* model,
         int draft_hidden_size,
         int draft_intermediate_size,
         int draft_num_attention_heads,
@@ -226,6 +226,12 @@ struct Eagle3ImplBaseW4A16GPTQMarlin : Model {
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         this->model->decode_eagle3_states(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output, (void*)this->decode_low_state, (void*)this->decode_mid_state, (void*)this->decode_high_state);
     }
+    
+    
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length){
+        this->embedding->prefill(calc_stream, 1, tree_draft_ids);
+        this->eagle_prefill(this->num_history_tokens);
+    }
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
@@ -233,8 +239,7 @@ struct Eagle3ImplBaseW4A16GPTQMarlin : Model {
 
 
         if (this->is_first_draft) {
-            this->embedding->prefill(calc_stream, 1, tree_draft_ids);
-            this->eagle_prefill(this->num_history_tokens);
+
         } else {
             this->eagle_decode(cache_length);
         }

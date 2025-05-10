@@ -4,262 +4,12 @@
 
 #include "attn.cuh"
 #include "layer.cuh"
-#include "eagle.cuh"
-
-namespace {
-__global__ void concat_2d_kernel(int num_tokens, int d1, int d2, float4* input1, float4* input2, float4* output) {
-    int row = blockIdx.x;
-    int output_offset = row * (d1+d2);
-    int t1_offset = row * d1;
-    int t2_offset = row * d2;
-
-    for (int i = threadIdx.x; i < (d1+d2); i += blockDim.x) {
-        if (i < d1) {
-            output[output_offset + i] = input1[t1_offset + i];
-        } else {
-            output[output_offset + i] = input2[t2_offset + (i - d1)];
-        }
-    }
-}
-
-__global__ void gather_int_kernel(int* d2t, int* input_ids, int* output) {
-    int token_id = input_ids[threadIdx.x];         // 获取索引
-    output[threadIdx.x] = d2t[token_id] + token_id;           // 查表赋值
-}
-}
-
-template<typename T>
-void concat_2d(const Stream& stream, int num_tokens, int d1, int d2, T* input1, T* input2, T* output) {
-    d1 = d1 / (16/sizeof(T));
-    d2 = d2 / (16/sizeof(T));
-    concat_2d_kernel<<<num_tokens, 512, 0, stream.stream>>>(num_tokens, d1, d2, (float4*)input1, (float4*)input2, (float4*)output);
-}
-
-void gather_int(const Stream& stream, int num_tokens, int* d2t, int* input_ids, int* output){
-    gather_int_kernel<<<1, num_tokens, 0, stream.stream>>>(d2t, input_ids, output);
-}
-
-template <typename T>
-struct AttentionEmbed {
-    int hidden_size;
-    int num_attention_heads;
-    int num_key_value_heads;
-    int head_dim;
-    float rms_norm_eps;
-
-    Linear<T> *q_proj, *k_proj, *v_proj;
-    Linear<T> *o_proj;
-    T* output;
-
-    T* attn_output;
-    float *softmax_lse, *softmax_lse_accum, *oaccum;
-
-    AttentionEmbed(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim) {
-        this->hidden_size = hidden_size;
-        this->num_attention_heads = num_attention_heads;
-        this->num_key_value_heads = num_key_value_heads;
-        this->head_dim = head_dim;
-
-        this->q_proj = new Linear<T>(hidden_size*2, num_attention_heads * head_dim);
-        this->k_proj = new Linear<T>(hidden_size*2, num_key_value_heads * head_dim);
-        this->v_proj = new Linear<T>(hidden_size*2, num_key_value_heads * head_dim);
-        this->o_proj = new Linear<T>(num_attention_heads * head_dim, hidden_size);
-    }
-
-    void init_weight_ptr(Memory* memory) {
-        this->q_proj->init_weight_ptr(memory);
-        this->k_proj->init_weight_ptr(memory);
-        this->v_proj->init_weight_ptr(memory);
-        this->o_proj->init_weight_ptr(memory);
-    }
-
-    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        int64_t q_proj_end = this->q_proj->init_output_ptr(memory, num_tokens, offset);
-        int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
-        int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
-        
-        memory->allocate((void**)&this->attn_output, offset);
-        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float));
-        int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
-        int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
-
-        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, v_proj_end);
-        this->output = this->o_proj->output;
-
-        return std::max(oaccum_end, o_proj_end);
-    }
-
-    void load_to_storage(std::string name, void* ptr) {
-        if (name.find("q_proj") != std::string::npos) {
-            this->q_proj->load_to_storage(name, ptr);
-        } else if (name.find("k_proj") != std::string::npos) {
-            this->k_proj->load_to_storage(name, ptr);
-        } else if (name.find("v_proj") != std::string::npos) {
-            this->v_proj->load_to_storage(name, ptr);
-        } else if (name.find("o_proj") != std::string::npos) {
-            this->o_proj->load_to_storage(name, ptr);
-        } else {
-            throw std::invalid_argument("Unsupported name " + name);
-        }
-    }
-
-    void prefill(const Stream& stream, int32_t num_tokens, int32_t num_history_tokens, T* input, T* prev_output, int32_t* position_ids, KVCache<T>* kv_cache) {
-        T* k_cache = kv_cache->offset_k(num_history_tokens);
-        T* v_cache = kv_cache->offset_v(num_history_tokens);
-
-        this->q_proj->prefill(stream, num_tokens, input);
-        this->k_proj->prefill(stream, num_tokens, input, k_cache);
-        this->v_proj->prefill(stream, num_tokens, input, v_cache);
-        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
-
-        mha_fwd_kvcache(
-            TypeTraits<T>::type_code()==1,
-            1,
-            num_tokens,
-            num_history_tokens+num_tokens,
-            num_tokens,
-            this->num_attention_heads,
-            this->num_key_value_heads,
-            this->head_dim,
-            this->q_proj->output,
-            kv_cache->k_cache,
-            kv_cache->v_cache,
-            nullptr,
-            Mask(nullptr),
-            this->attn_output,
-            this->softmax_lse,
-            this->softmax_lse_accum,
-            this->oaccum,
-            rsqrtf(float(this->head_dim)),
-            true,
-            -1,
-            -1,
-            0,
-            stream.stream
-        );
-
-        // flash attention and put output to attn_norm->output
-        this->o_proj->prefill(stream, num_tokens, this->attn_output);
-    }
-
-    void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
-        T *q, *k, *v;
-        int merge_dim_out = (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim;
-        if (num_tokens > 1) {
-            linear<T>(stream, num_tokens, this->hidden_size*2, merge_dim_out, input, this->q_proj->weight, this->v_proj->output);
-            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj->output, this->q_proj->output);
-        } else {
-            linear<T>(stream, num_tokens, this->hidden_size*2, merge_dim_out, input, this->q_proj->weight, this->q_proj->output);
-        }
-        q = this->q_proj->output;
-        k = q + num_tokens * this->num_attention_heads * this->head_dim;
-        v = k + num_tokens * this->num_key_value_heads * this->head_dim;
-        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
-
-        copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
-
-        mha_fwd_kvcache(
-            TypeTraits<T>::type_code()==1,
-            1,
-            num_tokens,
-            padded_length,
-            num_tokens,
-            this->num_attention_heads,
-            this->num_key_value_heads,
-            this->head_dim,
-            q,
-            kv_cache->k_cache,
-            kv_cache->v_cache,
-            cache_length,
-            mask,
-            this->attn_output,
-            this->softmax_lse,
-            this->softmax_lse_accum,
-            this->oaccum,
-            rsqrtf(float(this->head_dim)),
-            true,
-            -1,
-            -1,
-            0,
-            stream.stream
-        );
-
-        // flash attention and put output to attn_norm->output
-        this->o_proj->prefill(stream, num_tokens, this->attn_output);
-    }
-};
-
-template <typename T>
-struct LayerEmbed {
-    
-    AttentionEmbed<T> *attn;
-    FFN<T> *ffn;
-    T* output;
-    RMSNorm<T>* hidden_norm;
-    RMSNorm<T>* input_layernorm;
-    T* attn_input;
-
-    LayerEmbed(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
-        this->attn = new AttentionEmbed<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim);
-        this->ffn = new GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps);
-        this->hidden_norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        this->input_layernorm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-    }
-
-    void init_weight_ptr(Memory* memory) {
-        this->attn->init_weight_ptr(memory);
-        this->ffn->init_weight_ptr(memory);
-        this->hidden_norm->init_weight_ptr(memory);
-        this->input_layernorm->init_weight_ptr(memory);
-    }
-
-    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        int64_t hidden_norm_end = hidden_norm->init_output_ptr(memory, num_tokens, offset);
-        int64_t input_layernorm_end = input_layernorm->init_output_ptr(memory, num_tokens, hidden_norm_end);
-        int64_t attn_input_end = memory->allocate((void**)&attn_input, input_layernorm_end, num_tokens*this->attn->hidden_size*2*sizeof(T));
-
-        int64_t attn_end = this->attn->init_output_ptr(memory, num_tokens, attn_input_end);
-        int64_t ffn_end = this->ffn->init_output_ptr(memory, num_tokens, attn_input_end);
-        this->output = this->ffn->output;
-        return std::max(attn_end, ffn_end);
-    }
-
-    void load_to_storage(std::string name, void* ptr) {
-        if (name.find("attn") != std::string::npos) {
-            this->attn->load_to_storage(name, ptr);
-        } else if (name.find("mlp") != std::string::npos || name.find("post_attention_layernorm") != std::string::npos) {
-            this->ffn->load_to_storage(name, ptr);
-        } else if (name.find("hidden_norm") != std::string::npos) {
-            this->hidden_norm->load_to_storage(name, ptr);
-        } else if (name.find("input_layernorm") != std::string::npos) {
-            this->input_layernorm->load_to_storage(name, ptr);
-        } else {
-            throw std::invalid_argument("Unsupported name " + name);
-        }
-    }
-
-    void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input_embed, T* hidden_states, T* prev_output, int32_t* position_ids, KVCache<T>* kv_cache) { 
-        this->hidden_norm->prefill(calc_stream, num_tokens, hidden_states, nullptr);
-        this->input_layernorm->prefill(calc_stream, num_tokens, input_embed, nullptr);
-        concat_2d(calc_stream, num_tokens, this->attn->hidden_size, this->attn->hidden_size, this->input_layernorm->output, this->hidden_norm->output, this->attn_input);
-
-        this->attn->prefill(calc_stream, num_tokens, num_history_tokens, this->attn_input, prev_output, position_ids, kv_cache);
-        this->ffn->prefill(calc_stream, num_tokens, hidden_states, this->attn->output);
-    }
-
-    void decode(int32_t num_tokens, int32_t padded_length, T* input_embed, T* hidden_states, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
-        this->hidden_norm->prefill(calc_stream, num_tokens, hidden_states, nullptr);
-        this->input_layernorm->prefill(calc_stream, num_tokens, input_embed, nullptr);
-        concat_2d(calc_stream, num_tokens, this->attn->hidden_size, this->attn->hidden_size, this->input_layernorm->output, this->hidden_norm->output, this->attn_input);
-
-        this->attn->decode(calc_stream, num_tokens, padded_length, this->attn_input, prev_output, position_ids, cache_length, mask, kv_cache);
-        this->ffn->decode(calc_stream, num_tokens, hidden_states, this->attn->output);
-    }
-};
+#include "eagle3.cuh"
+#include "model_latency.cuh"
 
 
 template<typename T>
-struct Eagle3Impl : Model {
+struct Eagle3LatencyImpl : ModelLatency {
     int num_iter;
     int topk_per_iter;
     int tree_size;
@@ -269,7 +19,7 @@ struct Eagle3Impl : Model {
     int draft_vocab_size;
 
     Embedding<T>* embedding;
-    ModelImpl<T>* model;
+    ModelLatencyImpl<T>* model;
     KVCacheManager<T>* kv_caches;
     LayerEmbed<T>* mid_layer;
     Linear<T> *fc1; // low hidden states
@@ -299,8 +49,8 @@ struct Eagle3Impl : Model {
 
     T* tmp_kvcache;
 
-    Eagle3Impl(
-        ModelImpl<T>* model,
+    Eagle3LatencyImpl(
+        ModelLatencyImpl<T>* model,
         int draft_hidden_size,
         int draft_intermediate_size,
         int draft_num_attention_heads,
@@ -483,14 +233,18 @@ struct Eagle3Impl : Model {
         this->model->decode_eagle3_states(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output, (void*)this->decode_low_state, (void*)this->decode_mid_state, (void*)this->decode_high_state);
     }
 
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length){
+        this->embedding->prefill(calc_stream, 1, tree_draft_ids);
+        this->eagle_prefill(this->num_history_tokens);
+    }
+
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
         this->eagle_padded_length = (this->eagle_original_length[0] + 256 - 1) / 128 * 128;
 
 
         if (this->is_first_draft) {
-            this->embedding->prefill(calc_stream, 1, tree_draft_ids);
-            this->eagle_prefill(this->num_history_tokens);
+            
         } else {
             this->eagle_decode(cache_length);
         }

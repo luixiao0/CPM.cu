@@ -1,16 +1,16 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
-#include "../eagle.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../eagle_latency.cuh"
 
 template<typename T>
-struct EagleImplBaseW4A16GPTQMarlinRot : Model {
+struct EagleImplBaseW4A16GPTQMarlinRotLatency : ModelLatency {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
 
-    W4A16GPTQMarlinModelImpl<T>* model;
+    W4A16GPTQMarlinModelLatencyImpl<T>* model;
     KVCacheManager<T>* kv_caches;
 
     // new embedding
@@ -38,8 +38,8 @@ struct EagleImplBaseW4A16GPTQMarlinRot : Model {
 
     T* tmp_kvcache;
 
-    EagleImplBaseW4A16GPTQMarlinRot(
-        W4A16GPTQMarlinModelImpl<T>* model,
+    EagleImplBaseW4A16GPTQMarlinRotLatency(
+        W4A16GPTQMarlinModelLatencyImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,
@@ -200,14 +200,19 @@ struct EagleImplBaseW4A16GPTQMarlinRot : Model {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
     }
 
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length){
+        this->embedding->prefill(calc_stream, 1, tree_draft_ids);
+        this->eagle_prefill(this->num_history_tokens);
+    }
+
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
         this->eagle_padded_length = (this->eagle_original_length[0] + 256 - 1) / 128 * 128;
 
 
         if (this->is_first_draft) {
-            this->embedding->prefill(calc_stream, 1, tree_draft_ids);
-            this->eagle_prefill(this->num_history_tokens);
+            // this->embedding->prefill(calc_stream, 1, tree_draft_ids);
+            // this->eagle_prefill(this->num_history_tokens);
         } else {
             this->eagle_decode(cache_length);
         }

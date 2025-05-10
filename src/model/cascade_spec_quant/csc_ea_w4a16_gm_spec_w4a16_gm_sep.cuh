@@ -1,8 +1,8 @@
 #pragma once
-#include "w4a16_gptq_marlin_model.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle.cuh"
 #include "../drafter.cuh"
-#include "w4a16_gptq_marlin_layer.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
@@ -86,6 +86,7 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
         int draft_num_key_value_heads,
         int draft_head_dim,
         float draft_rms_norm_eps,
+        int draft_group_size,
         // int num_iter,
         int min_draft_length,
         bool draft_cuda_graph,
@@ -107,6 +108,7 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
             draft_num_key_value_heads,
             draft_head_dim,
             draft_rms_norm_eps,
+            draft_group_size,
             this->model->chunk_length
         );
 
@@ -296,37 +298,37 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
         // TODO: adapt for cascade prefill
         cudaMemcpy(this->ea_prev_embed + (ea_num_prev - 1) * this->draft_model->hidden_size, this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
-        // ****
-        int check_size = 1;
-        std::cout << "eagle prefill: " << std::endl;
-        T* host_check_embed = new T[this->ea_num_prev * this->draft_model->hidden_size];
-        cudaMemcpy(host_check_embed, this->ea_prev_embed, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
-        std::cout << "eagle prev embed: " << std::endl;
-        for (int i = 0; i < this->ea_num_prev; i++) {
-            for (int j = 0; j < check_size; j++) {
-                float value = __half2float(host_check_embed[i * this->draft_model->hidden_size + j]);
-                std::cout << value << " ";
-            }
-            // std::cout << std::endl;
-        }
-        std::cout << std::endl;
+        // // ****
+        // int check_size = 1;
+        // std::cout << "eagle prefill: " << std::endl;
+        // T* host_check_embed = new T[this->ea_num_prev * this->draft_model->hidden_size];
+        // cudaMemcpy(host_check_embed, this->ea_prev_embed, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
+        // std::cout << "eagle prev embed: " << std::endl;
+        // for (int i = 0; i < this->ea_num_prev; i++) {
+        //     for (int j = 0; j < check_size; j++) {
+        //         float value = __half2float(host_check_embed[i * this->draft_model->hidden_size + j]);
+        //         std::cout << value << " ";
+        //     }
+        //     // std::cout << std::endl;
+        // }
+        // std::cout << std::endl;
         
-        // print the prev_hidden_state
-        std::cout << "eagle prev hidden state: " << std::endl;
-        T* host_check_hidden_state = new T[this->ea_num_prev * this->draft_model->hidden_size];
-        cudaMemcpy(host_check_hidden_state, this->ea_prev_hidden_state, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
-        for (int i = 0; i < this->ea_num_prev; i++) {
-            for (int j = 0; j < check_size; j++) {
-                float value = __half2float(host_check_hidden_state[i * this->draft_model->hidden_size + j]);
-                std::cout << value << " ";
-            }
-            // std::cout << std::endl;
-        }
-        std::cout << std::endl;
+        // // print the prev_hidden_state
+        // std::cout << "eagle prev hidden state: " << std::endl;
+        // T* host_check_hidden_state = new T[this->ea_num_prev * this->draft_model->hidden_size];
+        // cudaMemcpy(host_check_hidden_state, this->ea_prev_hidden_state, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
+        // for (int i = 0; i < this->ea_num_prev; i++) {
+        //     for (int j = 0; j < check_size; j++) {
+        //         float value = __half2float(host_check_hidden_state[i * this->draft_model->hidden_size + j]);
+        //         std::cout << value << " ";
+        //     }
+        //     // std::cout << std::endl;
+        // }
+        // std::cout << std::endl;
 
-        delete[] host_check_embed;
-        delete[] host_check_hidden_state;
-        // ****
+        // delete[] host_check_embed;
+        // delete[] host_check_hidden_state;
+        // // ****
 
 
         this->ea_fc1->prefill(calc_stream, ea_num_prev, this->ea_prev_embed);
@@ -334,21 +336,21 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
         elementwise_add(calc_stream, ea_num_prev, this->draft_model->hidden_size, this->ea_fc1->output, this->ea_fc2->output, this->ea_fc2->output);
         T* layer_output = nullptr;
 
-        // ******
-        // TODO:debug output
-        std::cout << "eagle prefill" << this->ea_num_prev << std::endl;
-        int * host_eagle_position_ids = new int[this->ea_num_prev];
-        cudaMemcpy(host_eagle_position_ids, this->eagle_position_ids, this->ea_num_prev * sizeof(int), cudaMemcpyDeviceToHost);
+        // // ******
+        // // TODO:debug output
+        // std::cout << "eagle prefill" << this->ea_num_prev << std::endl;
+        // int * host_eagle_position_ids = new int[this->ea_num_prev];
+        // cudaMemcpy(host_eagle_position_ids, this->eagle_position_ids, this->ea_num_prev * sizeof(int), cudaMemcpyDeviceToHost);
         
-        std::cout << "eagle position ids: " << std::endl;
-        for (int i = 0; i < this->ea_num_prev; i++) {
-            std::cout << host_eagle_position_ids[i] << " ";
-        }
-        std::cout << std::endl;
+        // std::cout << "eagle position ids: " << std::endl;
+        // for (int i = 0; i < this->ea_num_prev; i++) {
+        //     std::cout << host_eagle_position_ids[i] << " ";
+        // }
+        // std::cout << std::endl;
 
         
-        delete[] host_eagle_position_ids;
-        // **********
+        // delete[] host_eagle_position_ids;
+        // // **********
         
         
         for (int i = 0; i < ea_num_layers; i++) {
@@ -359,38 +361,38 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
     }
 
     void eagle_decode(int32_t* cache_length) {
-        // ****
-        int check_size = 1;
-        std::cout << "eagle decode: " << std::endl;
-        std::cout << "eagle num prev" << this->ea_num_prev << std::endl;
-        T* host_check_embed = new T[this->ea_num_prev * this->draft_model->hidden_size];
-        cudaMemcpy(host_check_embed, this->ea_prev_embed, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
-        std::cout << "eagle prev embed: " << std::endl;
-        for (int i = 0; i < this->ea_num_prev; i++) {
-            for (int j = 0; j < check_size; j++) {
-                float value = __half2float(host_check_embed[i * this->draft_model->hidden_size + j]);
-                std::cout << value << " ";
-            }
-            // std::cout << std::endl;
-        }
-        std::cout << std::endl;
+        // // ****
+        // int check_size = 1;
+        // std::cout << "eagle decode: " << std::endl;
+        // std::cout << "eagle num prev" << this->ea_num_prev << std::endl;
+        // T* host_check_embed = new T[this->ea_num_prev * this->draft_model->hidden_size];
+        // cudaMemcpy(host_check_embed, this->ea_prev_embed, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
+        // std::cout << "eagle prev embed: " << std::endl;
+        // for (int i = 0; i < this->ea_num_prev; i++) {
+        //     for (int j = 0; j < check_size; j++) {
+        //         float value = __half2float(host_check_embed[i * this->draft_model->hidden_size + j]);
+        //         std::cout << value << " ";
+        //     }
+        //     // std::cout << std::endl;
+        // }
+        // std::cout << std::endl;
         
-        // print the prev_hidden_state
-        std::cout << "eagle prev hidden state: " << std::endl;
-        T* host_check_hidden_state = new T[this->ea_num_prev * this->draft_model->hidden_size];
-        cudaMemcpy(host_check_hidden_state, this->ea_prev_hidden_state, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
-        for (int i = 0; i < this->ea_num_prev; i++) {
-            for (int j = 0; j < check_size; j++) {
-                float value = __half2float(host_check_hidden_state[i * this->draft_model->hidden_size + j]);
-                std::cout << value << " ";
-            }
-            // std::cout << std::endl;
-        }
-        std::cout << std::endl;
+        // // print the prev_hidden_state
+        // std::cout << "eagle prev hidden state: " << std::endl;
+        // T* host_check_hidden_state = new T[this->ea_num_prev * this->draft_model->hidden_size];
+        // cudaMemcpy(host_check_hidden_state, this->ea_prev_hidden_state, this->ea_num_prev * this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
+        // for (int i = 0; i < this->ea_num_prev; i++) {
+        //     for (int j = 0; j < check_size; j++) {
+        //         float value = __half2float(host_check_hidden_state[i * this->draft_model->hidden_size + j]);
+        //         std::cout << value << " ";
+        //     }
+        //     // std::cout << std::endl;
+        // }
+        // std::cout << std::endl;
 
-        delete[] host_check_embed;
-        delete[] host_check_hidden_state;
-        // ****
+        // delete[] host_check_embed;
+        // delete[] host_check_hidden_state;
+        // // ****
 
         this->ea_fc1->prefill(calc_stream, ea_num_prev, this->ea_prev_embed);
         this->ea_fc2->prefill(calc_stream, ea_num_prev, this->ea_prev_hidden_state);
@@ -473,17 +475,17 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
         }
         
 
-        // ****
-        // debug output
-        int * host_iter_0_ids = new int[ea_topk_per_iter];
-        cudaMemcpy(host_iter_0_ids, this->ea_topk_func_2->topk_pos, ea_topk_per_iter * sizeof(int), cudaMemcpyDeviceToHost);
-        std::cout << "iter 0 ids: " << std::endl;
-        for (int i = 0; i < ea_topk_per_iter; i++) {
-            std::cout << host_iter_0_ids[i] << " ";
-        }
-        std::cout << std::endl;
-        delete[] host_iter_0_ids;
-        // ****
+        // // ****
+        // // debug output
+        // int * host_iter_0_ids = new int[ea_topk_per_iter];
+        // cudaMemcpy(host_iter_0_ids, this->ea_topk_func_2->topk_pos, ea_topk_per_iter * sizeof(int), cudaMemcpyDeviceToHost);
+        // std::cout << "iter 0 ids: " << std::endl;
+        // for (int i = 0; i < ea_topk_per_iter; i++) {
+        //     std::cout << host_iter_0_ids[i] << " ";
+        // }
+        // std::cout << std::endl;
+        // delete[] host_iter_0_ids;
+        // // ****
 
         for (int d = 1; d < this->ea_num_iter; ++d) {
             add(calc_stream, 1, this->eagle_cache_length, ea_topk_per_iter);
@@ -569,36 +571,36 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
 
             
         } else if (this->num_prev == 2){
-            std::cout << "full accept" << std::endl;
-            std::cout << "num_prev: " << this->num_prev << std::endl;
-            std::cout << "ea_num_prev: " << this->ea_num_prev << std::endl;
-            // TODO: delete print draft_cache_length
-            int * host_draft_cache_length_print = new int[1];
-            std::cout << "draft cache length: " << std::endl;
-            cudaMemcpy(host_draft_cache_length_print, this->draft_cache_length, sizeof(int), cudaMemcpyDeviceToHost);
-            std::cout << host_draft_cache_length_print[0] << std::endl;
-            delete[] host_draft_cache_length_print;
+            // std::cout << "full accept" << std::endl;
+            // std::cout << "num_prev: " << this->num_prev << std::endl;
+            // std::cout << "ea_num_prev: " << this->ea_num_prev << std::endl;
+            // // TODO: delete print draft_cache_length
+            // int * host_draft_cache_length_print = new int[1];
+            // std::cout << "draft cache length: " << std::endl;
+            // cudaMemcpy(host_draft_cache_length_print, this->draft_cache_length, sizeof(int), cudaMemcpyDeviceToHost);
+            // std::cout << host_draft_cache_length_print[0] << std::endl;
+            // delete[] host_draft_cache_length_print;
 
             
-            // print draft_position_ids
-            int * host_draft_position_ids = new int[this->num_prev];
-            cudaMemcpy(host_draft_position_ids, this->draft_position_ids, this->num_prev * sizeof(int), cudaMemcpyDeviceToHost);
-            std::cout << "draft position ids: " << std::endl;
-            for (int i = 0; i < this->num_prev; i++) {
-                std::cout << host_draft_position_ids[i] << " ";
-            }
-            std::cout << std::endl;
-            delete[] host_draft_position_ids;
+            // // print draft_position_ids
+            // int * host_draft_position_ids = new int[this->num_prev];
+            // cudaMemcpy(host_draft_position_ids, this->draft_position_ids, this->num_prev * sizeof(int), cudaMemcpyDeviceToHost);
+            // std::cout << "draft position ids: " << std::endl;
+            // for (int i = 0; i < this->num_prev; i++) {
+            //     std::cout << host_draft_position_ids[i] << " ";
+            // }
+            // std::cout << std::endl;
+            // delete[] host_draft_position_ids;
 
-            // print draft_input
-            int * host_draft_input = new int[this->num_prev];
-            cudaMemcpy(host_draft_input, this->draft_input, this->num_prev * sizeof(int), cudaMemcpyDeviceToHost);
-            std::cout << "draft input: " << std::endl;
-            for (int i = 0; i < this->num_prev; i++) {
-                std::cout << host_draft_input[i] << " ";
-            }
-            std::cout << std::endl;
-            delete[] host_draft_input;
+            // // print draft_input
+            // int * host_draft_input = new int[this->num_prev];
+            // cudaMemcpy(host_draft_input, this->draft_input, this->num_prev * sizeof(int), cudaMemcpyDeviceToHost);
+            // std::cout << "draft input: " << std::endl;
+            // for (int i = 0; i < this->num_prev; i++) {
+            //     std::cout << host_draft_input[i] << " ";
+            // }
+            // std::cout << std::endl;
+            // delete[] host_draft_input;
 
             // this->draft_decode(this->num_prev, this->draft_padded_length, this->draft_logits);
             this->draft_model->embedding->prefill(calc_stream, this->num_prev, this->draft_input);
@@ -739,27 +741,27 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
     }
 
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { 
-        // *****
-        // print the pred and gt
-        int * host_pred = new int[num_tokens];
-        int * host_gt = new int[num_tokens];
+        // // *****
+        // // print the pred and gt
+        // int * host_pred = new int[num_tokens];
+        // int * host_gt = new int[num_tokens];
         
-        cudaMemcpy(host_pred, pred, num_tokens * sizeof(int), cudaMemcpyDeviceToHost);
-        cudaMemcpy(host_gt, gt, num_tokens * sizeof(int), cudaMemcpyDeviceToHost);
-        std::cout << "pred: " << std::endl;
-        for (int i = 0; i < num_tokens; i++) {
-            std::cout << host_pred[i] << " ";
-        }
-        std::cout << std::endl;
-        std::cout << "gt: " << std::endl;
-        for (int i = 0; i < num_tokens; i++) {
-            std::cout << host_gt[i] << " ";
-        }
-        std::cout << std::endl;
+        // cudaMemcpy(host_pred, pred, num_tokens * sizeof(int), cudaMemcpyDeviceToHost);
+        // cudaMemcpy(host_gt, gt, num_tokens * sizeof(int), cudaMemcpyDeviceToHost);
+        // std::cout << "pred: " << std::endl;
+        // for (int i = 0; i < num_tokens; i++) {
+        //     std::cout << host_pred[i] << " ";
+        // }
+        // std::cout << std::endl;
+        // std::cout << "gt: " << std::endl;
+        // for (int i = 0; i < num_tokens; i++) {
+        //     std::cout << host_gt[i] << " ";
+        // }
+        // std::cout << std::endl;
 
-        delete[] host_pred;
-        delete[] host_gt;
-        // *****
+        // delete[] host_pred;
+        // delete[] host_gt;
+        // // *****
         
 
 
@@ -802,32 +804,32 @@ struct CascadeEagleSpecW4A16GPTQMarlinModelImplSep: Model {
                 this->draft_model->embedding->prefill(calc_stream, 1, this->draft_input);
                 cudaMemcpy(this->ea_prev_embed+(this->ea_num_prev-1), this->draft_model->embedding->output, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
-                // print the last ea_prev_hidden_state
-                T* host_check_hidden_state = new T[this->draft_model->hidden_size];
-                cudaMemcpy(host_check_hidden_state, this->ea_prev_hidden_state + (this->ea_num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
+                // // print the last ea_prev_hidden_state
+                // T* host_check_hidden_state = new T[this->draft_model->hidden_size];
+                // cudaMemcpy(host_check_hidden_state, this->ea_prev_hidden_state + (this->ea_num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
 
-                std::cout << "ea num prev" << this->ea_num_prev << std::endl;
+                // std::cout << "ea num prev" << this->ea_num_prev << std::endl;
                 
-                std::cout << "eagle prev hidden state: " << std::endl;
-                for (int j = 0; j < this->draft_model->hidden_size; j++) {
-                    float value = __half2float(host_check_hidden_state[j]);
-                    std::cout << value << " ";
-                }
-                std::cout << std::endl;
+                // std::cout << "eagle prev hidden state: " << std::endl;
+                // for (int j = 0; j < this->draft_model->hidden_size; j++) {
+                //     float value = __half2float(host_check_hidden_state[j]);
+                //     std::cout << value << " ";
+                // }
+                // std::cout << std::endl;
 
-                // print the kepted draft model hidden state
-                T* host_check_hidden_state_2 = new T[this->draft_model->hidden_size];
-                cudaMemcpy(host_check_hidden_state_2, this->draft_tmp_hidden_state + (this->h_best[0]-1) *this->draft_model->hidden_size, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
+                // // print the kepted draft model hidden state
+                // T* host_check_hidden_state_2 = new T[this->draft_model->hidden_size];
+                // cudaMemcpy(host_check_hidden_state_2, this->draft_tmp_hidden_state + (this->h_best[0]-1) *this->draft_model->hidden_size, this->draft_model->hidden_size * sizeof(T), cudaMemcpyDeviceToHost);
 
-                std::cout << "draft tmp hidden state: " << std::endl;
-                for (int j = 0; j < this->draft_model->hidden_size; j++) {
-                    float value = __half2float(host_check_hidden_state_2[j]);
-                    std::cout << value << " ";
-                }
-                std::cout << std::endl;
+                // std::cout << "draft tmp hidden state: " << std::endl;
+                // for (int j = 0; j < this->draft_model->hidden_size; j++) {
+                //     float value = __half2float(host_check_hidden_state_2[j]);
+                //     std::cout << value << " ";
+                // }
+                // std::cout << std::endl;
 
-                delete[] host_check_hidden_state;
-                delete[] host_check_hidden_state_2;
+                // delete[] host_check_hidden_state;
+                // delete[] host_check_hidden_state_2;
             } else {
                 // condition 2: eagle last start position is less than accept position
                 // index from the kepted draft model hidden state

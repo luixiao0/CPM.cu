@@ -1,12 +1,12 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
-#include "../eagle3.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../eagle3_latency.cuh"
 #include "../drafter.cuh"
 #include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
-struct CascadeEagle3W4A16GMSpecW4A16GMImpl: Model {
+struct CascadeEagle3W4A16GMSpecW4A16GMLatencyImpl: ModelLatency {
 
     // eagle3
     int ea_num_iter;
@@ -54,8 +54,8 @@ struct CascadeEagle3W4A16GMSpecW4A16GMImpl: Model {
 
     // draft & target
 
-    W4A16GPTQMarlinModelImpl<T>* draft_model;
-    W4A16GPTQMarlinModelImpl<T>* model;
+    W4A16GPTQMarlinModelLatencyImpl<T>* draft_model;
+    W4A16GPTQMarlinModelLatencyImpl<T>* model;
 
     // draft args
     int32_t *draft_input;
@@ -92,8 +92,8 @@ struct CascadeEagle3W4A16GMSpecW4A16GMImpl: Model {
     int ea_accept_nums_size;
     int cur_ea_accept_nums_size;
 
-     CascadeEagle3W4A16GMSpecW4A16GMImpl(
-        W4A16GPTQMarlinModelImpl<T>* model,
+     CascadeEagle3W4A16GMSpecW4A16GMLatencyImpl(
+        W4A16GPTQMarlinModelLatencyImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,
         int draft_hidden_size,
@@ -119,7 +119,7 @@ struct CascadeEagle3W4A16GMSpecW4A16GMImpl: Model {
         bool draft_model_start
     ) {
         this->model = model;
-        this->draft_model = new W4A16GPTQMarlinModelImpl<T>(
+        this->draft_model = new W4A16GPTQMarlinModelLatencyImpl<T>(
             0,
             nullptr,
             draft_vocab_size,
@@ -428,8 +428,7 @@ struct CascadeEagle3W4A16GMSpecW4A16GMImpl: Model {
         this->eagle_padded_length = (this->eagle_original_length[0] + 256 - 1) / 128 * 128;
         if (this->ea_is_first_draft) {
             // prefill hidden states and embedding have been cpy
-            this->ea_embedding->prefill(calc_stream, 1, ea_tree_draft_ids);
-            this->eagle_prefill(this->ea_num_history_tokens);
+            
         } else {
             this->eagle_decode(ea_cache_length);
         }
@@ -490,46 +489,53 @@ struct CascadeEagle3W4A16GMSpecW4A16GMImpl: Model {
         this->ea_is_first_draft = false;
     }
 
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) {
+        // append tree draft ids to draft input
+        cudaMemcpy(this->draft_input+this->num_prev, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->draft_position_ids+this->num_prev, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        this->num_prev += 1;
+
+        this->draft_model->embedding->prefill(calc_stream, this->num_prev, this->draft_input);
+
+        this->ea_embedding->prefill(calc_stream, this->num_prev, this->draft_input);
+        cudaMemcpy(this->ea_prev_embed, this->ea_embedding->output+ this->ea_draft_hidden_size, (this->num_prev-1) * this->ea_draft_hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
+
+        this->draft_model->prefill_embed_eagle3_states(this->num_prev, this->num_history_tokens, this->draft_model->embedding->output, this->draft_position_ids, (void*)this->draft_logits, this->ea_prev_low_state, this->ea_prev_mid_state, this->ea_prev_high_state);
+
+        // eagle prepare for draft_with_eagle function 
+        // ea_is_first_draft is True
+        cudaMemcpy(this->eagle_position_ids + (this->ea_num_prev), tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        this->ea_num_prev = this->num_prev;
+        
+        this->topk_func->prefill(calc_stream, 1, this->draft_logits);
+        
+
+        // prepare for draft with eagle     
+        cudaMemcpy(this->ea_tree_draft_ids, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->ea_tree_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        add(calc_stream, 1, this->ea_tree_cache_length, 1);
+
+        cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+        add(calc_stream, 1, this->draft_cache_length, 1);
+        cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);           
+
+        // draft model has forward one time
+        cudaMemcpy(this->draft_tmp, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
+
+        cudaMemcpy(this->draft_tmp_low_hidden_state, this->ea_prev_low_state + (this->num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->draft_tmp_mid_hidden_state, this->ea_prev_mid_state + (this->num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(this->draft_tmp_high_hidden_state, this->ea_prev_high_state + (this->num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
+        
+
+        this->ea_embedding->prefill(calc_stream, 1, ea_tree_draft_ids);
+        this->eagle_prefill(this->ea_num_history_tokens);
+    }
+
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t*, int32_t*) {
         // reset cur draft length
         this->cur_draft_length = 0;
         this->cur_ea_accept_nums_size = 0;
         if (this->is_first_draft) {
-            // append tree draft ids to draft input
-            cudaMemcpy(this->draft_input+this->num_prev, tree_draft_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->draft_position_ids+this->num_prev, tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            this->num_prev += 1;
-
-            this->draft_model->embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-
-            this->ea_embedding->prefill(calc_stream, this->num_prev, this->draft_input);
-            cudaMemcpy(this->ea_prev_embed, this->ea_embedding->output+ this->ea_draft_hidden_size, (this->num_prev-1) * this->ea_draft_hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-
-            this->draft_model->prefill_embed_eagle3_states(this->num_prev, this->num_history_tokens, this->draft_model->embedding->output, this->draft_position_ids, (void*)this->draft_logits, this->ea_prev_low_state, this->ea_prev_mid_state, this->ea_prev_high_state);
-
-            // eagle prepare for draft_with_eagle function 
-            // ea_is_first_draft is True
-            cudaMemcpy(this->eagle_position_ids + (this->ea_num_prev), tree_position_ids, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            this->ea_num_prev = this->num_prev;
-            
-            this->topk_func->prefill(calc_stream, 1, this->draft_logits);
-            
-
-            // prepare for draft with eagle     
-            cudaMemcpy(this->ea_tree_draft_ids, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->ea_tree_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            add(calc_stream, 1, this->ea_tree_cache_length, 1);
-
-            cudaMemcpy(this->draft_cache_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            add(calc_stream, 1, this->draft_cache_length, 1);
-            cudaMemcpy(this->host_draft_cache_length, this->draft_cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);           
-
-            // draft model has forward one time
-            cudaMemcpy(this->draft_tmp, this->topk_func->topk_pos, sizeof(int32_t), cudaMemcpyDeviceToDevice);
-
-            cudaMemcpy(this->draft_tmp_low_hidden_state, this->ea_prev_low_state + (this->num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->draft_tmp_mid_hidden_state, this->ea_prev_mid_state + (this->num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->draft_tmp_high_hidden_state, this->ea_prev_high_state + (this->num_prev-1) * this->draft_model->hidden_size, this->draft_model->hidden_size*sizeof(T), cudaMemcpyDeviceToDevice);
             this->cur_draft_length += 1;
             
         } else if (this->num_prev == 2){

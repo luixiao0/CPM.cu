@@ -11,7 +11,7 @@
 #include <vector>
 #include <regex>
 
-struct Model {
+struct ModelLatency {
     virtual int init_storage() = 0;
     virtual void load_to_storage(std::string name, void* ptr) = 0;
     virtual void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) = 0;
@@ -19,6 +19,7 @@ struct Model {
 
     // virtual void prefill_eagle3_states(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output, void* low_states, void* mid_states, void* high_states) = 0;
     // virtual void decode_eagle3_states(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output, void* low_states, void* mid_states, void* high_states) = 0;
+    virtual void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) = 0;
 
     virtual void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t* attn_mask, int32_t* tree_parent) = 0;
     virtual int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) = 0;
@@ -26,7 +27,7 @@ struct Model {
 };
 
 template <typename T>
-struct ModelImpl : Model {
+struct ModelLatencyImpl : ModelLatency {
     Memory* memory;
 
     int vocab_size;
@@ -47,7 +48,7 @@ struct ModelImpl : Model {
     RMSNorm<T>* norm;
     Linear<T>* lm_head;
 
-    ModelImpl(
+    ModelLatencyImpl(
         int64_t memory_limit,
         void* memory_pool,
         int vocab_size,
@@ -213,6 +214,8 @@ struct ModelImpl : Model {
         this->embedding->prefill(calc_stream, num_tokens, input);
         decode_embed_eagle3_states(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output, (T*)low_states, (T*)mid_states, (T*)high_states);
     }
+
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { throw std::runtime_error("Draft is not supported"); }
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Draft is not supported"); }
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Verify is not supported"); }

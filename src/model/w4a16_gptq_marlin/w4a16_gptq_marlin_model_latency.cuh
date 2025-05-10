@@ -1,10 +1,10 @@
 #pragma once
-#include "../model.cuh"
+#include "../model_latency.cuh"
 #include "w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
-struct W4A16GPTQMarlinModelImpl: Model {
+struct W4A16GPTQMarlinModelLatencyImpl: ModelLatency {
     Memory* memory;
 
     int vocab_size;
@@ -26,7 +26,7 @@ struct W4A16GPTQMarlinModelImpl: Model {
     Linear<T>* lm_head;
 
 
-    W4A16GPTQMarlinModelImpl(
+    W4A16GPTQMarlinModelLatencyImpl(
         int64_t memory_limit,
         void* memory_pool,
         int vocab_size,
@@ -193,6 +193,8 @@ struct W4A16GPTQMarlinModelImpl: Model {
         this->embedding->prefill(calc_stream, num_tokens, input);
         decode_embed_eagle3_states(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output, (T*)low_states, (T*)mid_states, (T*)high_states);
     }
+
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { throw std::runtime_error("Draft is not supported"); }
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Draft is not supported"); }
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Verify is not supported"); }
