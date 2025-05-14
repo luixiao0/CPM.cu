@@ -13,14 +13,14 @@ def cascade_spec_forward(inputs, model, tokenizer, max_new_tokens, max_length, t
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, accept_length_list, model_step, decode_time, latency_time, total_time, cascade_accept_length_list = model.generate(
+    output_ids, accept_length_list, model_step, decode_time, latency_time, cascade_accept_length_list = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    return output_ids, new_token, model_step, accept_length_list, decode_time, latency_time, total_time, cascade_accept_length_list.tolist()
+    return output_ids, new_token, model_step, accept_length_list, decode_time, latency_time, cascade_accept_length_list.tolist()
 
 
 if __name__ == "__main__":

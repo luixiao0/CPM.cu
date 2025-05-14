@@ -13,14 +13,14 @@ def eagle_w4a16_rot_forward(inputs, model, tokenizer, max_new_tokens, max_length
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, accept_length_list, model_step, decode_time, latency_time, total_time = model.generate(
+    output_ids, accept_length_list, model_step, decode_time, latency_time = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    return output_ids, new_token, model_step, accept_length_list, decode_time, latency_time, total_time
+    return output_ids, new_token, model_step, accept_length_list, decode_time, latency_time
 
 
 if __name__ == "__main__":

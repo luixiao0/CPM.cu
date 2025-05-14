@@ -186,8 +186,7 @@ class W4A16GPTQMarlinLLMLatency(torch.nn.Module):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
-        torch.cuda.synchronize()
-        prefill_start_time = time.time()
+        
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
@@ -213,6 +212,5 @@ class W4A16GPTQMarlinLLMLatency(torch.nn.Module):
         torch.cuda.synchronize()
         end_time = time.time()
         decode_time = end_time - start_time
-        latency_time = start_time - prefill_start_time
-        total_time = end_time - prefill_start_time
-        return tokens, decode_time, latency_time, total_time
+        latency_time = 0
+        return tokens, decode_time, latency_time

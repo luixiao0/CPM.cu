@@ -180,8 +180,7 @@ class CascadeEagleW4A16GMSpecW4A16GMLatency(W4A16GPTQMarlinLLMLatency):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
         
-        torch.cuda.synchronize()
-        prefill_start_time = time.time()
+        
         prefix_length = input_ids.shape[1]
 
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
@@ -189,11 +188,15 @@ class CascadeEagleW4A16GMSpecW4A16GMLatency(W4A16GPTQMarlinLLMLatency):
         self.draft_ids[:1].copy_(logits[0].argmax(dim=-1))
         self.cache_length[0] = prefix_length
         self.draft_position_ids[0] = prefix_length
+        torch.cuda.synchronize()
+        draft_start_time = time.time()
         C.draft_prefill(
             self.draft_ids.data_ptr(),
             self.draft_position_ids.data_ptr(),
             self.cache_length.data_ptr(),
         )
+        torch.cuda.synchronize()
+        draft_end_time = time.time()
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.draft_ids[0])
@@ -251,8 +254,8 @@ class CascadeEagleW4A16GMSpecW4A16GMLatency(W4A16GPTQMarlinLLMLatency):
         torch.cuda.synchronize()
         end_time = time.time()
         decode_time = end_time - start_time
-        latency = start_time - prefill_start_time
-        total_time = end_time - prefill_start_time
+        draft_latency = draft_end_time - draft_start_time
+        
         ea_acc_nums = self.draft_ea_accept_list[0].item()
         tokens = tokens[:i+1].tolist()
-        return tokens, accept_lengths, model_step, decode_time, latency, total_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()
+        return tokens, accept_lengths, model_step, decode_time, draft_latency, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()

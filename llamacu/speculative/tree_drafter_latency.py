@@ -50,17 +50,21 @@ class LLM_with_tree_drafter_Latency(LLM_Latency):
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
 
-        torch.cuda.synchronize()
-        prefill_start_time = time.time()
+        
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+
+        torch.cuda.synchronize()
+        draft_start_time = time.time()
         C.draft_prefill(
             self.tree_draft_ids.data_ptr(),
             self.tree_position_ids.data_ptr(),
             self.cache_length.data_ptr() # no use
         )
+        torch.cuda.synchronize()
+        draft_end_time = time.time()
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.tree_draft_ids[0])
@@ -100,7 +104,6 @@ class LLM_with_tree_drafter_Latency(LLM_Latency):
         torch.cuda.synchronize()
         end_time = time.time()
         decode_time = end_time - start_time
-        latency = start_time - prefill_start_time
-        total_time = end_time - prefill_start_time
+        draft_latency = draft_end_time - draft_start_time
         tokens = tokens[:1+i].tolist()
-        return tokens, accept_lengths, model_step, decode_time, latency, total_time
+        return tokens, accept_lengths, model_step, decode_time, draft_latency

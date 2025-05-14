@@ -321,7 +321,7 @@ def get_model_answers_hf(
             # torch.cuda.synchronize()
             # start_time = time.time()
             if is_cascade:
-                output_ids, new_token, step, accept_length_tree, decode_time, latency_time, total_time, cascade_accept_length_tree = forward_func(
+                output_ids, new_token, step, accept_length_tree, decode_time, latency_time, cascade_accept_length_tree = forward_func(
                     inputs,
                     model,
                     tokenizer,
@@ -331,7 +331,7 @@ def get_model_answers_hf(
                     **kwargs,
                 )
             else:
-                output_ids, new_token, step, accept_length_tree, decode_time, latency_time, total_time = forward_func(
+                output_ids, new_token, step, accept_length_tree, decode_time, latency_time = forward_func(
                     inputs,
                     model,
                     tokenizer,
@@ -401,7 +401,6 @@ def get_model_answers_hf(
             new_tokens = []
             wall_time = []
             latency_times = []
-            total_times = []
             generate_speed = []
             for j in range(len(question["turns"])):
                 qs = question["turns"][j]
@@ -420,7 +419,7 @@ def get_model_answers_hf(
                 # torch.cuda.synchronize()
                 # start_time = time.time()
                 if is_cascade:
-                    output_ids, new_token, step, accept_length_tree, decode_time, latency_time, total_time, cascade_accept_length_tree = forward_func(
+                    output_ids, new_token, step, accept_length_tree, decode_time, latency_time, cascade_accept_length_tree = forward_func(
                         inputs,
                         model,
                         tokenizer,
@@ -432,7 +431,7 @@ def get_model_answers_hf(
                     cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
                     cur_cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
                 else:
-                    output_ids, new_token, step, accept_length_tree, decode_time, latency_time, total_time = forward_func(
+                    output_ids, new_token, step, accept_length_tree, decode_time, latency_time = forward_func(
                         inputs,
                         model,
                         tokenizer,
@@ -475,7 +474,6 @@ def get_model_answers_hf(
                 new_tokens.append(int(new_token))
                 wall_time.append(decode_time)
                 latency_times.append(latency_time)
-                total_times.append(total_time)
                 generate_speed.append(int(new_token) / decode_time)
                 cur_accept_lengths_tree.extend(accept_length_tree)
                 messages.append({
@@ -484,10 +482,10 @@ def get_model_answers_hf(
                 })
             # torch.cuda.empty_cache()
             if is_cascade:
-                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time, "latency_time": latency_times, "total_time": total_times,
+                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time, "latency_time": latency_times,
                                 "accept_lengths": cur_accept_lengths_tree, "cascade_accept_lengths": cur_cascade_accept_lengths_tree, "generate_speed": generate_speed})
             else:
-                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time, "latency_time": latency_times, "total_time": total_times,
+                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time, "latency_time": latency_times, 
                                 "accept_lengths": cur_accept_lengths_tree, "generate_speed": generate_speed})
 
         # Dump answers

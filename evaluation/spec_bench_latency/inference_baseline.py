@@ -13,7 +13,7 @@ def baseline_forward(inputs, model, tokenizer, max_new_tokens, max_length, temin
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, decode_time, latency_time, total_time = model.generate(
+    output_ids, decode_time, latency_time = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
@@ -22,7 +22,7 @@ def baseline_forward(inputs, model, tokenizer, max_new_tokens, max_length, temin
     new_token = len(output_ids)
     step = new_token
     accept_length_list = [1] * new_token
-    return output_ids, new_token, step, accept_length_list, decode_time, latency_time, total_time
+    return output_ids, new_token, step, accept_length_list, decode_time, latency_time
 
 
 if __name__ == "__main__":
