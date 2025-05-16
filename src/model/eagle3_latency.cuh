@@ -5,11 +5,11 @@
 #include "attn.cuh"
 #include "layer.cuh"
 #include "eagle3.cuh"
-#include "model_latency.cuh"
+#include "model.cuh"
 
 
 template<typename T>
-struct Eagle3LatencyImpl : ModelLatency {
+struct Eagle3LatencyImpl : Model {
     int num_iter;
     int topk_per_iter;
     int tree_size;
@@ -19,7 +19,7 @@ struct Eagle3LatencyImpl : ModelLatency {
     int draft_vocab_size;
 
     Embedding<T>* embedding;
-    ModelLatencyImpl<T>* model;
+    ModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
     LayerEmbed<T>* mid_layer;
     Linear<T> *fc1; // low hidden states
@@ -50,7 +50,7 @@ struct Eagle3LatencyImpl : ModelLatency {
     T* tmp_kvcache;
 
     Eagle3LatencyImpl(
-        ModelLatencyImpl<T>* model,
+        ModelImpl<T>* model,
         int draft_hidden_size,
         int draft_intermediate_size,
         int draft_num_attention_heads,

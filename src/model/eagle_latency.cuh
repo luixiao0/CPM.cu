@@ -1,6 +1,6 @@
 #pragma once
 #include "tree_drafter.cuh"
-#include "model_latency.cuh"
+#include "model.cuh"
 #include "topk.cuh"
 #include "layer.cuh"
 #include "kvcache.cuh"
@@ -10,14 +10,14 @@
 
 
 template<typename T>
-struct EagleLatencyImpl : ModelLatency {
+struct EagleLatencyImpl : Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
 
-    ModelLatencyImpl<T>* model;
+    ModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1;
@@ -40,7 +40,7 @@ struct EagleLatencyImpl : ModelLatency {
     T* tmp_kvcache;
 
     EagleLatencyImpl(
-        ModelLatencyImpl<T>* model,
+        ModelImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,

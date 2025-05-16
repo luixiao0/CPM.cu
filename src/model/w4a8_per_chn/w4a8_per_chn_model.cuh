@@ -140,6 +140,7 @@ struct W4A8PerChnModelImpl: Model {
         decode_embed(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output);
     }
 
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; }
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Draft is not supported"); }
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Verify is not supported"); }
 };

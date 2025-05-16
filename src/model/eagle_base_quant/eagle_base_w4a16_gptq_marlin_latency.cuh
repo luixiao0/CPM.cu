@@ -1,16 +1,16 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle_latency.cuh"
 
 template<typename T>
-struct EagleImplBaseW4A16GPTQMarlinLatency : ModelLatency {
+struct EagleImplBaseW4A16GPTQMarlinLatency : Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
 
-    W4A16GPTQMarlinModelLatencyImpl<T>* model;
+    W4A16GPTQMarlinModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1;
@@ -33,7 +33,7 @@ struct EagleImplBaseW4A16GPTQMarlinLatency : ModelLatency {
     T* tmp_kvcache;
 
     EagleImplBaseW4A16GPTQMarlinLatency(
-        W4A16GPTQMarlinModelLatencyImpl<T>* model,
+        W4A16GPTQMarlinModelImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,

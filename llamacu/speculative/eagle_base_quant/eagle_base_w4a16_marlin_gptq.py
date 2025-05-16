@@ -12,30 +12,61 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
                  num_iter=6,
                  topk_per_iter=10,
                  tree_size=60,
+                 draft_prefill_sep=False,
+                 rotation=False,
                  **kwargs):
         super().__init__(
             "eagle", eagle_path, base_path,
             tree_size = tree_size,
+            draft_prefill_sep = draft_prefill_sep,
             **kwargs
         )
 
         self.eagle_path = eagle_path
         self.eagle_config = EagleConfig.from_pretrained(eagle_path)
+        self.rotation = rotation
 
-        C.init_eagle_w4a16_gptq_marlin_model(
-            self.eagle_config.eagle_num_layers,
-            num_iter,
-            topk_per_iter,
-            self.tree_size,
-            self.dtype_int,
-        )
+        if self.rotation:
+            if self.draft_prefill_sep:
+                C.init_eagle_w4a16_gptq_marlin_rot_latency_model(
+                    self.eagle_config.eagle_num_layers,
+                    num_iter,
+                    topk_per_iter,
+                    self.tree_size,
+                    self.dtype_int,
+                )
+            else:
+                C.init_eagle_w4a16_gptq_marlin_rot_model(
+                    self.eagle_config.eagle_num_layers,
+                    num_iter,
+                    topk_per_iter,
+                    self.tree_size,
+                    self.dtype_int,
+                )
+        else:
+            if self.draft_prefill_sep:
+                C.init_eagle_w4a16_gptq_marlin_latency_model(
+                    self.eagle_config.eagle_num_layers,
+                    num_iter,
+                    topk_per_iter,
+                    self.tree_size,
+                    self.dtype_int,
+                )
+            else:
+                C.init_eagle_w4a16_gptq_marlin_model(
+                    self.eagle_config.eagle_num_layers,
+                    num_iter,
+                    topk_per_iter,
+                    self.tree_size,
+                    self.dtype_int,
+                )
 
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:
             if dtype is None:
                 dtype = self.dtype
             param = param.contiguous().to(dtype)
-            if 'embed_tokens' in name:
+            if (not self.rotation) and 'embed_tokens' in name:
                 return
             if 'fc' in name:
                 if 'weight' in name:

@@ -13,14 +13,14 @@ def spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, tem
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, accept_length_list, model_step, decode_time = model.generate(
+    output_ids, accept_length_list, model_step, decode_time, *draft_prefill_latency = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    return output_ids, new_token, model_step, accept_length_list, decode_time
+    return output_ids, new_token, model_step, accept_length_list, decode_time, draft_prefill_latency[0] if draft_prefill_latency else None
 
 
 if __name__ == "__main__":
@@ -113,7 +113,11 @@ if __name__ == "__main__":
         "--draft-cuda-graph",
         action="store_true",
     )
-
+    parser.add_argument(
+        "--draft-prefill-sep",
+        action="store_true",
+        help="Draft prefill separation for draft latency",
+    )
 
 
     args = parser.parse_args()
@@ -139,6 +143,7 @@ if __name__ == "__main__":
         cuda_graph=args.cuda_graph,
         draft_num=args.spec_num_iter,
         draft_cuda_graph=args.draft_cuda_graph,
+        draft_prefill_sep=args.draft_prefill_sep,
     )
     model.init_storage()
     model.load_from_hf()

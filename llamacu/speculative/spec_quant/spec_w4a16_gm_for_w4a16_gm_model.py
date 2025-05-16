@@ -28,6 +28,7 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
                  base_path: str,
                  draft_num: int,
                  draft_cuda_graph: bool,
+                 draft_prefill_sep=False,
                   **kwargs):
         super().__init__(base_path, **kwargs)
         
@@ -46,6 +47,7 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         self.draft_parent = torch.tensor([], dtype=torch.int32, device="cuda")
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
 
+        self.draft_prefill_sep = draft_prefill_sep
 
         self.draft_prefill_logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
         # self.draft_prefill_logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
@@ -54,20 +56,36 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_w4a16_gm_spec_w4a16_gm_model(
-            self.drafter_config.vocab_size,
-            self.drafter_config.num_hidden_layers,
-            self.drafter_config.hidden_size,
-            self.drafter_config.intermediate_size,
-            self.drafter_config.num_attention_heads,
-            self.drafter_config.num_key_value_heads,
-            self.drafter_config.head_dim,
-            self.drafter_config.rms_norm_eps,
-            self.draft_group_size,
-            self.draft_num,
-            self.draft_cuda_graph,
-            self.dtype_int,
-        )
+        if self.draft_prefill_sep:
+            C.init_w4a16_gm_spec_w4a16_gm_latency_model(
+                self.drafter_config.vocab_size,
+                self.drafter_config.num_hidden_layers,
+                self.drafter_config.hidden_size,
+                self.drafter_config.intermediate_size,
+                self.drafter_config.num_attention_heads,
+                self.drafter_config.num_key_value_heads,
+                self.drafter_config.head_dim,
+                self.drafter_config.rms_norm_eps,
+                self.draft_group_size,
+                self.draft_num,
+                self.draft_cuda_graph,
+                self.dtype_int,
+            )
+        else:
+            C.init_w4a16_gm_spec_w4a16_gm_model(
+                self.drafter_config.vocab_size,
+                self.drafter_config.num_hidden_layers,
+                self.drafter_config.hidden_size,
+                self.drafter_config.intermediate_size,
+                self.drafter_config.num_attention_heads,
+                self.drafter_config.num_key_value_heads,
+                self.drafter_config.head_dim,
+                self.drafter_config.rms_norm_eps,
+                self.draft_group_size,
+                self.draft_num,
+                self.draft_cuda_graph,
+                self.dtype_int,
+            )
     
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:
@@ -132,6 +150,17 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+        self.cache_length[0] = prefix_length
+        self.draft_position_ids[0] = prefix_length 
+        torch.cuda.synchronize()
+        draft_prefill_start_time = time.time()
+        C.draft_prefill(
+            self.draft_ids.data_ptr(), 
+            self.draft_position_ids.data_ptr(), 
+            self.cache_length.data_ptr()
+        )
+        torch.cuda.synchronize()
+        draft_prefill_end_time = time.time()
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.draft_ids[0])
@@ -173,4 +202,9 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         torch.cuda.synchronize()
         decode_time = time.time() - start_time
         tokens = tokens[:1+i].tolist()
-        return tokens, accept_lengths, model_step, decode_time
+
+        if self.draft_prefill_sep:
+            draft_latency = draft_prefill_end_time - draft_prefill_start_time
+            return tokens, accept_lengths, model_step, decode_time, draft_latency
+        else:
+            return tokens, accept_lengths, model_step, decode_time

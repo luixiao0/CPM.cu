@@ -13,14 +13,14 @@ def cascade_spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_len
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
     
     # generate
-    output_ids, accept_length_list, model_step, decode_time, cascade_accept_length_list = model.generate(
+    output_ids, accept_length_list, model_step, decode_time, cascade_accept_length_list, *draft_prefill_latency = model.generate(
         input_ids=input_ids,
         generation_length=max_new_tokens,
         teminators=teminators,
     )
 
     new_token = len(output_ids)
-    return output_ids, new_token, model_step, accept_length_list, decode_time, cascade_accept_length_list.tolist()
+    return output_ids, new_token, model_step, accept_length_list, decode_time, cascade_accept_length_list.tolist(), draft_prefill_latency[0] if draft_prefill_latency else None
 
 
 if __name__ == "__main__":
@@ -139,6 +139,16 @@ if __name__ == "__main__":
         "--draft-model-start",
         action="store_true",
     )
+    parser.add_argument(
+        "--draft-prefill-sep",
+        action="store_true",
+        help="Draft prefill separation for draft latency",
+    )
+    parser.add_argument(
+        "--quant-rotation",
+        action="store_true",
+        help="quatized model with rotation",
+    )
 
 
 
@@ -170,6 +180,8 @@ if __name__ == "__main__":
         ea_num_iter=args.eagle_num_iter,
         ea_topk_per_iter=args.eagle_topk_per_iter,
         tree_size=args.eagle_tree_size,
+        draft_prefill_sep=args.draft_prefill_sep,
+        rotation=args.quant_rotation,
     )
     model.init_storage()
     model.load_from_hf()

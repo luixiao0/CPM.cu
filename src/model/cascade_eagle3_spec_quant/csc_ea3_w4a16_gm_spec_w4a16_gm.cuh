@@ -490,6 +490,8 @@ struct CascadeEagle3W4A16GMSpecW4A16GMImpl: Model {
         this->ea_is_first_draft = false;
     }
 
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; }
+
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t*, int32_t*) {
         // reset cur draft length
         this->cur_draft_length = 0;

@@ -41,6 +41,8 @@ class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
                 ea_topk_per_iter=10,
                 tree_size=60,
                 draft_model_start=False,
+                draft_prefill_sep=False,
+                rotation=False,
                 **kwargs):
         
         super().__init__(base_path, **kwargs)
@@ -60,6 +62,7 @@ class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
 
 
         self.eagle_config = EagleConfig.from_pretrained(self.eagle_path)
+        self.rotation = rotation
         
 
         # draft config
@@ -67,6 +70,7 @@ class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         self.drafter_path = drafter_path
         self.drafter_tokenizer = AutoTokenizer.from_pretrained(drafter_path)
         self.drafter_config = AutoConfig.from_pretrained(drafter_path)
+        self.draft_prefill_sep = draft_prefill_sep
 
         
         self.min_draft_length = min_draft_length
@@ -90,25 +94,90 @@ class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        C.init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model(
-            self.drafter_config.vocab_size,
-            self.drafter_config.num_hidden_layers,
-            self.drafter_config.hidden_size,
-            self.drafter_config.intermediate_size,
-            self.drafter_config.num_attention_heads,
-            self.drafter_config.num_key_value_heads,
-            self.drafter_config.head_dim,
-            self.drafter_config.rms_norm_eps,
-            self.draft_group_size,
-            self.min_draft_length,
-            self.draft_cuda_graph,
-            self.eagle_config.eagle_num_layers,
-            self.ea_num_iter,
-            self.ea_topk_per_iter,
-            self.tree_size,
-            self.draft_model_start,
-            0,
-        )
+        if self.rotation:
+            
+            if self.draft_prefill_sep:
+                C.init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_latency_model(
+                    self.drafter_config.vocab_size,
+                    self.drafter_config.num_hidden_layers,
+                    self.drafter_config.hidden_size,
+                    self.drafter_config.intermediate_size,
+                    self.drafter_config.num_attention_heads,
+                    self.drafter_config.num_key_value_heads,
+                    self.drafter_config.head_dim,
+                    self.drafter_config.rms_norm_eps,
+                    self.draft_group_size,
+                    self.min_draft_length,
+                    self.draft_cuda_graph,
+                    self.eagle_config.eagle_num_layers,
+                    self.ea_num_iter,
+                    self.ea_topk_per_iter,
+                    self.tree_size,
+                    self.draft_model_start,
+                    0,
+                )
+            else:
+                C.init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
+                    self.drafter_config.vocab_size,
+                    self.drafter_config.num_hidden_layers,
+                    self.drafter_config.hidden_size,
+                    self.drafter_config.intermediate_size,
+                    self.drafter_config.num_attention_heads,
+                    self.drafter_config.num_key_value_heads,
+                    self.drafter_config.head_dim,
+                    self.drafter_config.rms_norm_eps,
+                    self.draft_group_size,
+                    self.min_draft_length,
+                    self.draft_cuda_graph,
+                    self.eagle_config.eagle_num_layers,
+                    self.ea_num_iter,
+                    self.ea_topk_per_iter,
+                    self.tree_size,
+                    self.draft_model_start,
+                    0,
+                )
+                
+        else:
+            if self.draft_prefill_sep:
+                C.init_cascade_eagle_w4a16_gm_spec_w4a16_gm_latency_model(
+                    self.drafter_config.vocab_size,
+                    self.drafter_config.num_hidden_layers,
+                    self.drafter_config.hidden_size,
+                    self.drafter_config.intermediate_size,
+                    self.drafter_config.num_attention_heads,
+                    self.drafter_config.num_key_value_heads,
+                    self.drafter_config.head_dim,
+                    self.drafter_config.rms_norm_eps,
+                    self.draft_group_size,
+                    self.min_draft_length,
+                    self.draft_cuda_graph,
+                    self.eagle_config.eagle_num_layers,
+                    self.ea_num_iter,
+                    self.ea_topk_per_iter,
+                    self.tree_size,
+                    self.draft_model_start,
+                    0,
+                )
+            else:
+                C.init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model(
+                    self.drafter_config.vocab_size,
+                    self.drafter_config.num_hidden_layers,
+                    self.drafter_config.hidden_size,
+                    self.drafter_config.intermediate_size,
+                    self.drafter_config.num_attention_heads,
+                    self.drafter_config.num_key_value_heads,
+                    self.drafter_config.head_dim,
+                    self.drafter_config.rms_norm_eps,
+                    self.draft_group_size,
+                    self.min_draft_length,
+                    self.draft_cuda_graph,
+                    self.eagle_config.eagle_num_layers,
+                    self.ea_num_iter,
+                    self.ea_topk_per_iter,
+                    self.tree_size,
+                    self.draft_model_start,
+                    0,
+                )
     
     # def load_from_hf(self):
     #     self._load_from_ckpt(self.eagle_path, cls=self.tree_drafter_type)
@@ -120,7 +189,7 @@ class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
             if dtype is None:
                 dtype = self.dtype
             param = param.contiguous().to(dtype)
-            if 'embed_tokens' in name:
+            if (not self.rotation) and 'embed_tokens' in name:
                 return
             if 'fc' in name:
                 if 'weight' in name:
@@ -185,6 +254,17 @@ class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+        self.cache_length[0] = prefix_length
+        self.draft_position_ids[0] = prefix_length
+        torch.cuda.synchronize()
+        draft_start_time = time.time()
+        C.draft_prefill(
+            self.draft_ids.data_ptr(),
+            self.draft_position_ids.data_ptr(),
+            self.cache_length.data_ptr(),
+        )
+        torch.cuda.synchronize()
+        draft_end_time = time.time()
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.draft_ids[0])
@@ -243,4 +323,8 @@ class CascadeEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         decode_time = time.time() - start_time
         ea_acc_nums = self.draft_ea_accept_list[0].item()
         tokens = tokens[:i+1].tolist()
-        return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()
+        if self.draft_prefill_sep:
+            draft_latency = draft_end_time - draft_start_time
+            return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone(), draft_latency
+        else:
+            return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()

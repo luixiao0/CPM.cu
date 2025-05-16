@@ -1,10 +1,11 @@
+// TODO: delete this file
 #pragma once
-#include "../model_latency.cuh"
+#include "../model.cuh"
 #include "w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
-struct W4A16GPTQMarlinModelLatencyImpl: ModelLatency {
+struct W4A16GPTQMarlinModelLatencyImpl: Model {
     Memory* memory;
 
     int vocab_size;
@@ -194,7 +195,7 @@ struct W4A16GPTQMarlinModelLatencyImpl: ModelLatency {
         decode_embed_eagle3_states(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output, (T*)low_states, (T*)mid_states, (T*)high_states);
     }
 
-    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { throw std::runtime_error("Draft is not supported"); }
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; }
 
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Draft is not supported"); }
     int verify(int32_t num_tokens, int32_t* pred, int32_t* gt, int32_t* position_ids, int32_t* cache_length, uint64_t* attn_mask, int32_t* tree_parent) { throw std::runtime_error("Verify is not supported"); }

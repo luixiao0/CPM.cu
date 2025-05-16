@@ -1,15 +1,15 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle_latency.cuh"
 #include "../drafter.cuh"
 
 
 template <typename T>
-struct W4A16GMSpecW4A16GMLatencyImpl: ModelLatency {
+struct W4A16GMSpecW4A16GMLatencyImpl: Model {
 
 
-    W4A16GPTQMarlinModelLatencyImpl<T>* draft_model;
-    W4A16GPTQMarlinModelLatencyImpl<T>* model;
+    W4A16GPTQMarlinModelImpl<T>* draft_model;
+    W4A16GPTQMarlinModelImpl<T>* model;
 
     // draft args
     int32_t *draft_input;
@@ -35,7 +35,7 @@ struct W4A16GMSpecW4A16GMLatencyImpl: ModelLatency {
     cudaGraphExec_t draft_graphExec;
 
      W4A16GMSpecW4A16GMLatencyImpl(
-        W4A16GPTQMarlinModelLatencyImpl<T>* model,
+        W4A16GPTQMarlinModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,
         int draft_hidden_size,
@@ -49,7 +49,7 @@ struct W4A16GMSpecW4A16GMLatencyImpl: ModelLatency {
         bool draft_cuda_graph
     ) {
         this->model = model;
-        this->draft_model = new W4A16GPTQMarlinModelLatencyImpl<T>(
+        this->draft_model = new W4A16GPTQMarlinModelImpl<T>(
             0,
             nullptr,
             draft_vocab_size,

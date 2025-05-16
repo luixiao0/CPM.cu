@@ -40,11 +40,9 @@ def run_eval(
     #         get_model_answers
     #     ).remote
     # else:
-    if "llama" in kwargs["chat_template"].lower():
-        kwargs.pop('chat_template', 'llama-3')
-        get_answers_func = get_model_answers_hf
-    else:
-        get_answers_func = get_model_answers_fschat
+    kwargs.pop('chat_template', 'llama-3')
+    get_answers_func = get_model_answers_hf
+
 
     # chunk_size = len(questions) // (num_gpus_total // num_gpus_per_model)  # // 2
     # ans_handles = []
@@ -69,205 +67,6 @@ def run_eval(
     #     ray.get(ans_handles)
 
 
-
-
-@torch.inference_mode()
-def get_model_answers_fschat(
-        model,
-        tokenizer,
-        forward_func,
-        model_id,
-        questions,
-        answer_file,
-        max_new_tokens,
-        max_length,
-        num_choices,
-        teminators,
-        **kwargs,
-):
-    model.eval()
-    print('Check model training state:', model.training)
-
-    cuda_visible_devices = os.environ.get('CUDA_VISIBLE_DEVICES')
-    print('CUDA VISIBLE DEVICES:', cuda_visible_devices)
-
-    question = questions[0]
-    converse_template = kwargs.pop('chat_template', 'llama-3')
-
-    # warmup
-    for wm_i in range(3):
-        torch.manual_seed(0)
-        # conv = get_conversation_template("vicuna")
-        conv = get_conversation_template(converse_template)
-        if "llama-2" in converse_template or "llama-3" in converse_template:
-            sys_p = "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
-            conv.system_message = sys_p
-        conv.messages = []
-        turns = []
-        steps = []
-        new_tokens = []
-        wall_time = []
-        for j in range(len(question["turns"])):
-            qs = question["turns"][j]
-            conv.append_message(conv.roles[0], qs)
-            conv.append_message(conv.roles[1], None)
-            if converse_template=="vicuna":
-                conv.stop_str = "</s>"
-            prompt = conv.get_prompt()
-            inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
-            input_ids = inputs.input_ids
-            # try:
-            # torch.cuda.synchronize()
-            # start_time = time.time()
-            output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
-                inputs,
-                model,
-                tokenizer,
-                max_new_tokens,
-                max_length,
-                teminators,
-                **kwargs,
-            )
-            # torch.cuda.synchronize()
-            # total_time = time.time() - start_time
-            # be consistent with the template's stop_token_ids
-            if conv.stop_token_ids:
-                stop_token_ids_index = [
-                    i
-                    for i, id in enumerate(output_ids)
-                    if id in conv.stop_token_ids
-                ]
-                if len(stop_token_ids_index) > 0:
-                    output_ids = output_ids[: stop_token_ids_index[0]]
-
-            output = tokenizer.decode(
-                output_ids,
-                spaces_between_special_tokens=False,
-            )
-            if conv.stop_str and output.find(conv.stop_str) > 0:
-                output = output[: output.find(conv.stop_str)]
-            for special_token in tokenizer.special_tokens_map.values():
-                if isinstance(special_token, list):
-                    for special_tok in special_token:
-                        output = output.replace(special_tok, "")
-                else:
-                    output = output.replace(special_token, "")
-            output = output.strip()
-            
-
-            if conv.name == "xgen" and output.startswith("Assistant:"):
-                output = output.replace("Assistant:", "", 1).strip()
-            # except RuntimeError as e:
-            #     print("ERROR question ID: ", question["question_id"])
-            #     output = "ERROR"
-
-            turns.append(output)
-            steps.append(int(step))
-            new_tokens.append(int(new_token))
-            wall_time.append(decode_time)
-            conv.messages[-1][-1] = output
-        
-        print(f"warmup {wm_i} done")
-
-            
-    print('Warmup done')
-
-    accept_lengths_tree = []
-    for question in tqdm(questions):
-
-        choices = []
-        for i in range(num_choices):
-            cur_accept_lengths_tree = []
-            torch.manual_seed(i)
-            # conv = get_conversation_template("vicuna")
-            conv = get_conversation_template(converse_template)
-            if "llama-2" in converse_template or "llama-3" in converse_template:
-                sys_p = "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
-                conv.system_message = sys_p
-            conv.messages = []
-            turns = []
-            steps = []
-            new_tokens = []
-            wall_time = []
-            generate_speed = []
-            for j in range(len(question["turns"])):
-                qs = question["turns"][j]
-                conv.append_message(conv.roles[0], qs)
-                conv.append_message(conv.roles[1], None)
-                if converse_template=="vicuna":
-                    conv.stop_str = "</s>"
-                prompt = conv.get_prompt()
-                inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
-                input_ids = inputs.input_ids
-                # try:
-                # torch.cuda.synchronize()
-                # start_time = time.time()
-                output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
-                    inputs,
-                    model,
-                    tokenizer,
-                    max_new_tokens,
-                    max_length,
-                    teminators,
-                    **kwargs,
-                )
-                # torch.cuda.synchronize()
-                # total_time = time.time() - start_time
-                accept_lengths_tree.extend(accept_length_tree)
-
-                if conv.stop_token_ids:
-                    stop_token_ids_index = [
-                        i
-                        for i, id in enumerate(output_ids)
-                        if id in conv.stop_token_ids
-                    ]
-                    if len(stop_token_ids_index) > 0:
-                        output_ids = output_ids[: stop_token_ids_index[0]]
-
-                output = tokenizer.decode(
-                    output_ids,
-                    spaces_between_special_tokens=False,
-                )
-                if conv.stop_str and output.find(conv.stop_str) > 0:
-                    output = output[: output.find(conv.stop_str)]
-                for special_token in tokenizer.special_tokens_map.values():
-                    if isinstance(special_token, list):
-                        for special_tok in special_token:
-                            output = output.replace(special_tok, "")
-                    else:
-                        output = output.replace(special_token, "")
-                output = output.strip()
-
-                if conv.name == "xgen" and output.startswith("Assistant:"):
-                    output = output.replace("Assistant:", "", 1).strip()
-                # except RuntimeError as e:
-                #     print("ERROR question ID: ", question["question_id"])
-                #     output = "ERROR"
-
-                turns.append(output)
-                steps.append(int(step))
-                new_tokens.append(int(new_token))
-                wall_time.append(decode_time)
-                generate_speed.append(int(new_token) / decode_time)
-                cur_accept_lengths_tree.extend(accept_length_tree)
-                conv.messages[-1][-1] = output
-            # torch.cuda.empty_cache()
-            choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
-                            "accept_lengths": cur_accept_lengths_tree, "generate_speed": generate_speed})
-
-        # Dump answers
-        os.makedirs(os.path.dirname(answer_file), exist_ok=True)
-        with open(os.path.expanduser(answer_file), "a") as fout:
-            ans_json = {
-                "question_id": question["question_id"],
-                "category": question["category"],
-                "answer_id": shortuuid.uuid(),
-                "model_id": model_id,
-                "choices": choices,
-                "tstamp": time.time(),
-            }
-            fout.write(json.dumps(ans_json) + "\n")
-    print("#Mean accepted tokens: ", np.mean(accept_lengths_tree))
 
 @torch.inference_mode()
 def get_model_answers_hf(
@@ -317,32 +116,33 @@ def get_model_answers_hf(
             )
             inputs = tokenizer([prompt],add_special_tokens=False, return_tensors="pt").to("cuda")
             input_ids = inputs.input_ids
-            # try:
-            # torch.cuda.synchronize()
-            # start_time = time.time()
+
+            model_output = forward_func(
+                inputs,
+                model,
+                tokenizer,
+                max_new_tokens,
+                max_length,
+                teminators,
+                **kwargs,
+            )
             if is_cascade:
-                output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree = forward_func(
-                    inputs,
-                    model,
-                    tokenizer,
-                    max_new_tokens,
-                    max_length,
-                    teminators,
-                    **kwargs,
-                )
+                if len(model_output) == 6:
+                    output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree = model_output
+                    draft_prefill_latency = None
+                elif len(model_output) == 7:
+                    output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree, draft_prefill_latency = model_output
+                else:
+                    raise ValueError("Invalid model output")
             else:
-                output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
-                    inputs,
-                    model,
-                    tokenizer,
-                    max_new_tokens,
-                    max_length,
-                    teminators,
-                    **kwargs,
-                )
-            # torch.cuda.synchronize()
-            # total_time = time.time() - start_time
-            # be consistent with the template's stop_token_ids
+                if len(model_output) == 5:
+                    output_ids, new_token, step, accept_length_tree, decode_time = model_output
+                    draft_prefill_latency = None
+                elif len(model_output) == 6:
+                    output_ids, new_token, step, accept_length_tree, decode_time, draft_prefill_latency = model_output
+                else:
+                    raise ValueError("Invalid model output")
+
             if len(teminators)>0:
                 stop_token_ids_index = [
                     i
@@ -400,6 +200,7 @@ def get_model_answers_hf(
             steps = []
             new_tokens = []
             wall_time = []
+            draft_prefill_latency_list = []
             generate_speed = []
             for j in range(len(question["turns"])):
                 qs = question["turns"][j]
@@ -417,28 +218,33 @@ def get_model_answers_hf(
                 # try:
                 # torch.cuda.synchronize()
                 # start_time = time.time()
+                model_output = forward_func(
+                    inputs,
+                    model,
+                    tokenizer,
+                    max_new_tokens,
+                    max_length,
+                    teminators,
+                    **kwargs,
+                )
                 if is_cascade:
-                    output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree = forward_func(
-                        inputs,
-                        model,
-                        tokenizer,
-                        max_new_tokens,
-                        max_length,
-                        teminators,
-                        **kwargs,
-                    )
+                    if len(model_output) == 6:
+                        output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree = model_output
+                        draft_prefill_latency = None
+                    elif len(model_output) == 7:
+                        output_ids, new_token, step, accept_length_tree, decode_time, cascade_accept_length_tree, draft_prefill_latency = model_output
+                    else:
+                        raise ValueError("Invalid model output")
                     cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
                     cur_cascade_accept_lengths_tree.extend(cascade_accept_length_tree)
                 else:
-                    output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
-                        inputs,
-                        model,
-                        tokenizer,
-                        max_new_tokens,
-                        max_length,
-                        teminators,
-                        **kwargs,
-                    )
+                    if len(model_output) == 5:
+                        output_ids, new_token, step, accept_length_tree, decode_time = model_output
+                        draft_prefill_latency = None
+                    elif len(model_output) == 6:
+                        output_ids, new_token, step, accept_length_tree, decode_time, draft_prefill_latency = model_output
+                    else:
+                        raise ValueError("Invalid model output")
                 # torch.cuda.synchronize()
                 # total_time = time.time() - start_time
                 accept_lengths_tree.extend(accept_length_tree)
@@ -472,6 +278,8 @@ def get_model_answers_hf(
                 steps.append(int(step))
                 new_tokens.append(int(new_token))
                 wall_time.append(decode_time)
+                if draft_prefill_latency is not None:
+                    draft_prefill_latency_list.append(draft_prefill_latency)
                 generate_speed.append(int(new_token) / decode_time)
                 cur_accept_lengths_tree.extend(accept_length_tree)
                 messages.append({
@@ -480,11 +288,15 @@ def get_model_answers_hf(
                 })
             # torch.cuda.empty_cache()
             if is_cascade:
-                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
-                                "accept_lengths": cur_accept_lengths_tree, "cascade_accept_lengths": cur_cascade_accept_lengths_tree, "generate_speed": generate_speed})
+                choice_ans = {"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
+                                "accept_lengths": cur_accept_lengths_tree, "cascade_accept_lengths": cur_cascade_accept_lengths_tree, "generate_speed": generate_speed}
             else:
-                choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
-                                "accept_lengths": cur_accept_lengths_tree, "generate_speed": generate_speed})
+                choice_ans = {"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
+                                "accept_lengths": cur_accept_lengths_tree, "generate_speed": generate_speed}
+            if len(draft_prefill_latency_list) > 0:
+                choice_ans["draft_prefill_latency"] = draft_prefill_latency_list
+            
+            choices.append(choice_ans)
 
         # Dump answers
         os.makedirs(os.path.dirname(answer_file), exist_ok=True)

@@ -1,12 +1,12 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle_latency.cuh"
 #include "../drafter.cuh"
 #include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
 
 
 template <typename T>
-struct CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl: ModelLatency {
+struct CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl: Model {
 
     // eagle
     int ea_num_layers;
@@ -46,8 +46,8 @@ struct CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl: ModelLatency {
 
     // draft & target
 
-    W4A16GPTQMarlinModelLatencyImpl<T>* draft_model;
-    W4A16GPTQMarlinModelLatencyImpl<T>* model;
+    W4A16GPTQMarlinModelImpl<T>* draft_model;
+    W4A16GPTQMarlinModelImpl<T>* model;
 
     // draft args
     int32_t *draft_input;
@@ -82,7 +82,7 @@ struct CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl: ModelLatency {
     int cur_ea_accept_nums_size;
 
     CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl(
-        W4A16GPTQMarlinModelLatencyImpl<T>* model,
+        W4A16GPTQMarlinModelImpl<T>* model,
         int draft_vocab_size,
         int draft_num_hidden_layers,
         int draft_hidden_size,
@@ -103,7 +103,7 @@ struct CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl: ModelLatency {
         bool draft_model_start
     ) {
         this->model = model;
-        this->draft_model = new W4A16GPTQMarlinModelLatencyImpl<T>(
+        this->draft_model = new W4A16GPTQMarlinModelImpl<T>(
             0,
             nullptr,
             draft_vocab_size,

@@ -1,9 +1,9 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model_latency.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle3_latency.cuh"
 
 template<typename T>
-struct Eagle3ImplBaseW4A16GPTQMarlinLatency : ModelLatency {
+struct Eagle3ImplBaseW4A16GPTQMarlinLatency : Model {
     int num_iter;
     int topk_per_iter;
     int tree_size;
@@ -13,7 +13,7 @@ struct Eagle3ImplBaseW4A16GPTQMarlinLatency : ModelLatency {
     int draft_vocab_size;
 
     Embedding<T>* embedding;
-    W4A16GPTQMarlinModelLatencyImpl<T>* model;
+    W4A16GPTQMarlinModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
     LayerEmbed<T>* mid_layer;
     Linear<T> *fc1; // low hidden states
@@ -44,7 +44,7 @@ struct Eagle3ImplBaseW4A16GPTQMarlinLatency : ModelLatency {
     T* tmp_kvcache;
 
     Eagle3ImplBaseW4A16GPTQMarlinLatency(
-        W4A16GPTQMarlinModelLatencyImpl<T>* model,
+        W4A16GPTQMarlinModelImpl<T>* model,
         int draft_hidden_size,
         int draft_intermediate_size,
         int draft_num_attention_heads,
