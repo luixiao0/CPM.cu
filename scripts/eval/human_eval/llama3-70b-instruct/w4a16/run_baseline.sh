@@ -1,6 +1,6 @@
 
-Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-rotation-4bit-128g-pileval-mse-desc-static_group_default_merge
-Model_id="llama-3-8b-instruct"
+Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-70B-Instruct-qqq-rotation-4bit-128g-pileval-mse_merge
+Model_id="llama-3-70b-instruct"
 Bench_name="human_eval"
 
 python3 evaluation/inference_baseline_w4a16_gptq_marlin.py \

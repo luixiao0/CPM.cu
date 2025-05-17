@@ -1,6 +1,6 @@
 
-Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w4a8-gchn-pileval
-Model_id="llama-3-8b-instruct"
+Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-70B-Instruct-w4a8-gchn
+Model_id="llama-3-70b-instruct"
 Bench_name="human_eval"
 
 python3 evaluation/inference_baseline_w4a8_qoq_chn.py \

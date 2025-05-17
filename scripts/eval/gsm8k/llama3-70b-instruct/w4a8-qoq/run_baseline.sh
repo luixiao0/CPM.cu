@@ -1,7 +1,7 @@
 
-Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w4a8-gchn-pileval
-Model_id="llama-3-8b-instruct"
-Bench_name="human_eval"
+Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-70B-Instruct-w4a8-gchn
+Model_id="llama-3-70b-instruct"
+Bench_name="gsm8k"
 
 python3 evaluation/inference_baseline_w4a8_qoq_chn.py \
     --model-path $Model_Path \
@@ -10,4 +10,4 @@ python3 evaluation/inference_baseline_w4a8_qoq_chn.py \
     --memory-limit 0.80 \
     --bench-name $Bench_name \
     --dtype "float16" \
-    --max-new-tokens 512
+    --max-new-tokens 256

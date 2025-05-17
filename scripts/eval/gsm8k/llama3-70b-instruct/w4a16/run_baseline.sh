@@ -1,7 +1,7 @@
 
-Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-rotation-4bit-128g-pileval-mse-desc-static_group_default_merge
-Model_id="llama-3-8b-instruct"
-Bench_name="human_eval"
+Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-70B-Instruct-qqq-rotation-4bit-128g-pileval-mse_merge
+Model_id="llama-3-70b-instruct"
+Bench_name="gsm8k"
 
 python3 evaluation/inference_baseline_w4a16_gptq_marlin.py \
     --model-path $Model_Path \
@@ -10,4 +10,4 @@ python3 evaluation/inference_baseline_w4a16_gptq_marlin.py \
     --memory-limit 0.80 \
     --bench-name $Bench_name \
     --dtype "float16" \
-    --max-new-tokens 512
+    --max-new-tokens 256

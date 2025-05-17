@@ -1,6 +1,6 @@
 
-Model_Path=/home/ydzhang/checkpoints/QQQ/Meta-Llama-3-8B-Instruct-rotation-gptq-mse-pile/Meta-Llama-3-8B-Instruct-merge
-Model_id="llama-3-8b-instruct"
+Model_Path=/home/ydzhang/checkpoints/QQQ/Meta-Llama-3-70B-Instruct-rotation-gptq-pile/Meta-Llama-3-70B-Instruct-merge
+Model_id="llama-3-70b-instruct"
 Bench_name="human_eval"
 
 python3 evaluation/inference_baseline_w4a8_qqq.py \
