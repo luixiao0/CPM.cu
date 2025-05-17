@@ -57,7 +57,7 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
         if self.draft_prefill_sep:
-            C.init_w4a16_gm_spec_w4a16_gm_latency_model(
+            C.init_w4a16_gm_spec_w4a16_gm_dprefill_model(
                 self.drafter_config.vocab_size,
                 self.drafter_config.num_hidden_layers,
                 self.drafter_config.hidden_size,

@@ -8,8 +8,8 @@
 #include "model/w8a8/w8a8_model.cuh"
 #include "model/w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "model/w4a8_qqq/w4a8_qqq_model.cuh"
-#include "model/w4a8_per_chn/w4a8_per_chn_model.cuh"
-#include "model/w4a8_per_group/w4a8_per_group_model.cuh"
+#include "model/w4a8_qoq_chn/w4a8_qoq_chn_model.cuh"
+#include "model/w4a8_qoq_group/w4a8_qoq_group_model.cuh"
 
 
 // eagle
@@ -18,33 +18,31 @@
 #include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin.cuh"
 #include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_rot.cuh"
 #include "model/eagle_base_quant/eagle_base_w4a8_qqq_rot.cuh"
-#include "model/eagle_base_quant/eagle_base_w4a8_per_chn_rot.cuh"
-#include "model/eagle_base_quant/eagle_base_w4a8_per_group_rot.cuh"
+#include "model/eagle_base_quant/eagle_base_w4a8_qoq_chn_rot.cuh"
+#include "model/eagle_base_quant/eagle_base_w4a8_qoq_group_rot.cuh"
 
 // eagle latency
-#include "model/eagle_latency.cuh"
-#include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_latency.cuh"
-#include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_rot_latency.cuh"
+#include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_dprefill.cuh"
+#include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_rot_dprefill.cuh"
 
 // spec model
 #include "model/spec_quant/w4a16_gm_spec_w4a16_gm.cuh"
-#include "model/spec_quant/w4a16_gm_spec_w4a16_gm_latency.cuh"
+#include "model/spec_quant/w4a16_gm_spec_w4a16_gm_dprefill.cuh"
 
-// cascade
-#include "model/cascade_spec_quant/csc_ea_w4a16_gm_spec_w4a16_gm.cuh"
-#include "model/cascade_spec_quant/csc_ea_w4a16_gm_spec_w4a16_gm_latency.cuh"
-#include "model/cascade_spec_quant/csc_ea_w4a16_gm_rot_spec_w4a16_gm.cuh"
-#include "model/cascade_spec_quant/csc_ea_w4a16_gm_rot_spec_w4a16_gm_latency.cuh"
+// hier
+#include "model/hier_spec_quant/hier_ea_w4a16_gm_spec_w4a16_gm.cuh"
+#include "model/hier_spec_quant/hier_ea_w4a16_gm_spec_w4a16_gm_dprefill.cuh"
+#include "model/hier_spec_quant/hier_ea_w4a16_gm_rot_spec_w4a16_gm.cuh"
+#include "model/hier_spec_quant/hier_ea_w4a16_gm_rot_spec_w4a16_gm_dprefill.cuh"
 
 // eagle3
 #include "model/eagle3.cuh"
 #include "model/eagle3_base_quant/eagle3_base_w4a16_gptq_marlin.cuh"
-#include "model/eagle3_latency.cuh"
-#include "model/eagle3_base_quant/eagle3_base_w4a16_gptq_marlin_latency.cuh"
+#include "model/eagle3_base_quant/eagle3_base_w4a16_gptq_marlin_dprefill.cuh"
 
-// cascade ea3
-#include "model/cascade_eagle3_spec_quant/csc_ea3_w4a16_gm_spec_w4a16_gm.cuh"
-#include "model/cascade_eagle3_spec_quant/csc_ea3_w4a16_gm_spec_w4a16_gm_latency.cuh"
+// hier ea3
+#include "model/hier_eagle3_spec_quant/hier_ea3_w4a16_gm_spec_w4a16_gm.cuh"
+#include "model/hier_eagle3_spec_quant/hier_ea3_w4a16_gm_spec_w4a16_gm_dprefill.cuh"
 
 
 #define DTYPE_SWITCH(COND, ...)               \
@@ -203,7 +201,7 @@ void init_w4a8_qqq_base_model(
 
 }
 
-void init_w4a8_per_chn_base_model(
+void init_w4a8_qoq_chn_base_model(
     int64_t memory_limit,
     std::uintptr_t memory_pool,
     int vocab_size,
@@ -222,7 +220,7 @@ void init_w4a8_per_chn_base_model(
     }
     init_resources();
 
-    model = new W4A8PerChnModelImpl<half>(
+    model = new W4A8QoQChnModelImpl<half>(
         memory_limit,
         reinterpret_cast<void*>(memory_pool),
         vocab_size,
@@ -237,7 +235,7 @@ void init_w4a8_per_chn_base_model(
     );
 }
 
-void init_w4a8_per_group_base_model(
+void init_w4a8_qoq_group_base_model(
     int64_t memory_limit,
     std::uintptr_t memory_pool,
     int vocab_size,
@@ -256,7 +254,7 @@ void init_w4a8_per_group_base_model(
     }
     init_resources();
 
-    model = new W4A8PerGroupModelImpl<half>(
+    model = new W4A8QoQGroupModelImpl<half>(
         memory_limit,
         reinterpret_cast<void*>(memory_pool),
         vocab_size,
@@ -369,7 +367,7 @@ void init_eagle_w4a8_qqq_rot_model(
     );
 }
 
-void init_eagle_w4a8_per_chn_rot_model(
+void init_eagle_w4a8_qoq_chn_rot_model(
     int num_layers,
     int num_iter,
     int topk_per_iter,
@@ -379,8 +377,8 @@ void init_eagle_w4a8_per_chn_rot_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new EagleImplBaseW4A8PerChnRot<half>(
-        (W4A8PerChnModelImpl<half>*)model,
+    model = new EagleImplBaseW4A8QoQChnRot<half>(
+        (W4A8QoQChnModelImpl<half>*)model,
         num_layers,
         num_iter,
         topk_per_iter,
@@ -389,7 +387,7 @@ void init_eagle_w4a8_per_chn_rot_model(
 }
 
 
-void init_eagle_w4a8_per_group_rot_model(
+void init_eagle_w4a8_qoq_group_rot_model(
     int num_layers,
     int num_iter,
     int topk_per_iter,
@@ -399,8 +397,8 @@ void init_eagle_w4a8_per_group_rot_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new EagleImplBaseW4A8PerGroupRot<half>(
-        (W4A8PerGroupModelImpl<half>*)model,
+    model = new EagleImplBaseW4A8QoQGroupRot<half>(
+        (W4A8QoQGroupModelImpl<half>*)model,
         num_layers,
         num_iter,
         topk_per_iter,
@@ -410,26 +408,8 @@ void init_eagle_w4a8_per_group_rot_model(
 
 
 // eagle model
-void init_eagle_latency_model(
-    int num_layers,
-    int num_iter,
-    int topk_per_iter,
-    int tree_size,
-    int torch_dtype
-) {
-    DTYPE_SWITCH(torch_dtype, [&] {
-        model = new EagleLatencyImpl<elem_type>(
-            (ModelImpl<elem_type>*)model,
-            num_layers,
-            num_iter,
-            topk_per_iter,
-            tree_size
-        );
-    });
-}
 
-
-void init_eagle_w4a16_gptq_marlin_latency_model(
+void init_eagle_w4a16_gptq_marlin_dprefill_model(
     int num_layers,
     int num_iter,
     int topk_per_iter,
@@ -439,7 +419,7 @@ void init_eagle_w4a16_gptq_marlin_latency_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new EagleImplBaseW4A16GPTQMarlinLatency<half>(
+    model = new EagleImplBaseW4A16GPTQMarlinDraftPrefill<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         num_layers,
         num_iter,
@@ -448,7 +428,7 @@ void init_eagle_w4a16_gptq_marlin_latency_model(
     );
 }
 
-void init_eagle_w4a16_gptq_marlin_rot_latency_model(
+void init_eagle_w4a16_gptq_marlin_rot_dprefill_model(
     int num_layers,
     int num_iter,
     int topk_per_iter,
@@ -458,7 +438,7 @@ void init_eagle_w4a16_gptq_marlin_rot_latency_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new EagleImplBaseW4A16GPTQMarlinRotLatency<half>(
+    model = new EagleImplBaseW4A16GPTQMarlinRotDraftPrefill<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         num_layers,
         num_iter,
@@ -507,7 +487,7 @@ void init_w4a16_gm_spec_w4a16_gm_model(
 }
 
 
-void init_w4a16_gm_spec_w4a16_gm_latency_model(
+void init_w4a16_gm_spec_w4a16_gm_dprefill_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
     int draft_hidden_size,
@@ -526,7 +506,7 @@ void init_w4a16_gm_spec_w4a16_gm_latency_model(
         throw std::invalid_argument("Only half precision is supported for spec model");
     }
     // DTYPE_SWITCH(torch_dtype, [&] {
-    model = new W4A16GMSpecW4A16GMLatencyImpl<half>(
+    model = new W4A16GMSpecW4A16GMDraftPrefillImpl<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_vocab_size,
         draft_num_hidden_layers,
@@ -547,9 +527,8 @@ void init_w4a16_gm_spec_w4a16_gm_latency_model(
 
 
 
-// cascade model
-
-void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model(
+// hier spec model
+void init_hier_eagle_w4a16_gm_spec_w4a16_gm_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
     int draft_hidden_size,
@@ -571,7 +550,7 @@ void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new CascadeEagleW4A16GMSpecW4A16GMImpl<half>(
+    model = new HierEagleW4A16GMSpecW4A16GMImpl<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_vocab_size,
         draft_num_hidden_layers,
@@ -592,7 +571,7 @@ void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model(
     );
 }
 
-void init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
+void init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
     int draft_hidden_size,
@@ -614,7 +593,7 @@ void init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new CascadeEagleW4A16GMRotSpecW4A16GMImpl<half>(
+    model = new HierEagleW4A16GMRotSpecW4A16GMImpl<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_vocab_size,
         draft_num_hidden_layers,
@@ -636,7 +615,7 @@ void init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
 }
 
 
-void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_latency_model(
+void init_hier_eagle_w4a16_gm_spec_w4a16_gm_dprefill_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
     int draft_hidden_size,
@@ -658,7 +637,7 @@ void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_latency_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new CascadeEagleW4A16GMSpecW4A16GMLatencyImpl<half>(
+    model = new HierEagleW4A16GMSpecW4A16GMDraftPrefillImpl<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_vocab_size,
         draft_num_hidden_layers,
@@ -679,7 +658,7 @@ void init_cascade_eagle_w4a16_gm_spec_w4a16_gm_latency_model(
     );
 }
 
-void init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_latency_model(
+void init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_dprefill_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
     int draft_hidden_size,
@@ -701,7 +680,7 @@ void init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_latency_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new CascadeEagleW4A16GMRotSpecW4A16GMLatencyImpl<half>(
+    model = new HierEagleW4A16GMRotSpecW4A16GMDraftPrefillImpl<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_vocab_size,
         draft_num_hidden_layers,
@@ -778,35 +757,8 @@ void init_eagle3_w4a16_gptq_marlin_model(
     );
 }
 
-void init_eagle3_latency_model(
-    int draft_hidden_size,
-    int draft_intermediate_size,
-    int draft_num_attention_heads,
-    int draft_num_key_value_heads,
-    bool load_target_embed,
-    int draft_vocab_size,
-    int num_iter,
-    int topk_per_iter,
-    int tree_size,
-    int torch_dtype
-) {
-    DTYPE_SWITCH(torch_dtype, [&] {
-        model = new Eagle3LatencyImpl<elem_type>(
-            (ModelImpl<elem_type>*)model,
-            draft_hidden_size,
-            draft_intermediate_size,
-            draft_num_attention_heads,
-            draft_num_key_value_heads,
-            load_target_embed,
-            draft_vocab_size,
-            num_iter,
-            topk_per_iter,
-            tree_size
-        );
-    });
-}
 
-void init_eagle3_w4a16_gptq_marlin_latency_model(
+void init_eagle3_w4a16_gptq_marlin_dprefill_model(
     int draft_hidden_size,
     int draft_intermediate_size,
     int draft_num_attention_heads,
@@ -818,7 +770,7 @@ void init_eagle3_w4a16_gptq_marlin_latency_model(
     int tree_size,
     int torch_dtype
 ) {
-    model = new Eagle3ImplBaseW4A16GPTQMarlinLatency<half>(
+    model = new Eagle3ImplBaseW4A16GPTQMarlinDraftPrefill<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_hidden_size,
         draft_intermediate_size,
@@ -832,7 +784,7 @@ void init_eagle3_w4a16_gptq_marlin_latency_model(
     );
 }
 
-void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model(
+void init_hier_eagle3_w4a16_gm_spec_w4a16_gm_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
     int draft_hidden_size,
@@ -859,7 +811,7 @@ void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new CascadeEagle3W4A16GMSpecW4A16GMImpl<half>(
+    model = new HierEagle3W4A16GMSpecW4A16GMImpl<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_vocab_size,
         draft_num_hidden_layers,
@@ -885,7 +837,7 @@ void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model(
     );
 }
 
-void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_latency_model(
+void init_hier_eagle3_w4a16_gm_spec_w4a16_gm_dprefill_model(
     int draft_vocab_size,
     int draft_num_hidden_layers,
     int draft_hidden_size,
@@ -912,7 +864,7 @@ void init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_latency_model(
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
-    model = new CascadeEagle3W4A16GMSpecW4A16GMLatencyImpl<half>(
+    model = new HierEagle3W4A16GMSpecW4A16GMDraftPrefillImpl<half>(
         (W4A16GPTQMarlinModelImpl<half>*)model,
         draft_vocab_size,
         draft_num_hidden_layers,
@@ -993,8 +945,8 @@ PYBIND11_MODULE(C, m) {
     m.def("init_w8a8_base_model", &init_w8a8_base_model, "Init W8A8 base model");
     m.def("init_w4a16_gptq_marlin_base_model", &init_w4a16_gptq_marlin_base_model, "Init W4A16 base model");
     m.def("init_w4a8_qqq_base_model", &init_w4a8_qqq_base_model, "Init W4A8 per group base model");
-    m.def("init_w4a8_per_chn_base_model", &init_w4a8_per_chn_base_model, "Init W4A8 per channel base model");
-    m.def("init_w4a8_per_group_base_model", &init_w4a8_per_group_base_model, "Init W4A8 per group base model");
+    m.def("init_w4a8_qoq_chn_base_model", &init_w4a8_qoq_chn_base_model, "Init W4A8 per channel base model");
+    m.def("init_w4a8_qoq_group_base_model", &init_w4a8_qoq_group_base_model, "Init W4A8 per group base model");
 
     // eagle bind
     m.def("init_eagle_model", &init_eagle_model, "Init eagle model");
@@ -1002,35 +954,33 @@ PYBIND11_MODULE(C, m) {
     m.def("init_eagle_w4a16_gptq_marlin_model", &init_eagle_w4a16_gptq_marlin_model, "Init eagle W4A16 model");
     m.def("init_eagle_w4a16_gptq_marlin_rot_model", &init_eagle_w4a16_gptq_marlin_rot_model, "Init eagle W4A16 model");
     m.def("init_eagle_w4a8_qqq_rot_model", &init_eagle_w4a8_qqq_rot_model, "Init W4A8 per group base model");
-    m.def("init_eagle_w4a8_per_chn_rot_model", &init_eagle_w4a8_per_chn_rot_model, "Init eagle W4A8 per channel model");
-    m.def("init_eagle_w4a8_per_group_rot_model", &init_eagle_w4a8_per_group_rot_model, "Init W4A8 per group base model");
+    m.def("init_eagle_w4a8_qoq_chn_rot_model", &init_eagle_w4a8_qoq_chn_rot_model, "Init eagle W4A8 per channel model");
+    m.def("init_eagle_w4a8_qoq_group_rot_model", &init_eagle_w4a8_qoq_group_rot_model, "Init W4A8 per group base model");
 
-    m.def("init_eagle_latency_model", &init_eagle_latency_model, "Init eagle model");
-    m.def("init_eagle_w4a16_gptq_marlin_latency_model", &init_eagle_w4a16_gptq_marlin_latency_model, "Init eagle W4A16 model");
-    m.def("init_eagle_w4a16_gptq_marlin_rot_latency_model", &init_eagle_w4a16_gptq_marlin_rot_latency_model, "Init eagle W4A16 model");
+    m.def("init_eagle_w4a16_gptq_marlin_dprefill_model", &init_eagle_w4a16_gptq_marlin_dprefill_model, "Init eagle W4A16 model");
+    m.def("init_eagle_w4a16_gptq_marlin_rot_dprefill_model", &init_eagle_w4a16_gptq_marlin_rot_dprefill_model, "Init eagle W4A16 model");
 
     // spec bind
     m.def("init_w4a16_gm_spec_w4a16_gm_model", &init_w4a16_gm_spec_w4a16_gm_model, "Init w4a16 spec v1 model");
-    m.def("init_w4a16_gm_spec_w4a16_gm_latency_model", &init_w4a16_gm_spec_w4a16_gm_latency_model, "Init w4a16 spec v1 model");
+    m.def("init_w4a16_gm_spec_w4a16_gm_dprefill_model", &init_w4a16_gm_spec_w4a16_gm_dprefill_model, "Init w4a16 spec v1 model");
 
 
-    // cascade bind
-    m.def("init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model", &init_cascade_eagle_w4a16_gm_spec_w4a16_gm_model, "init cascade eagle gm spec gm model");
-    m.def("init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model", &init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_model, "init cascade eagle rot gm spec gm model");
-    m.def("init_cascade_eagle_w4a16_gm_spec_w4a16_gm_latency_model", &init_cascade_eagle_w4a16_gm_spec_w4a16_gm_latency_model, "init cascade eagle gm spec gm model");
-    m.def("init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_latency_model", &init_cascade_eagle_w4a16_gm_rot_spec_w4a16_gm_latency_model, "init cascade eagle rot gm spec gm model");
+    // hier spec bind
+    m.def("init_hier_eagle_w4a16_gm_spec_w4a16_gm_model", &init_hier_eagle_w4a16_gm_spec_w4a16_gm_model, "init hier eagle gm spec gm model");
+    m.def("init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_model", &init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_model, "init hier eagle rot gm spec gm model");
+    m.def("init_hier_eagle_w4a16_gm_spec_w4a16_gm_dprefill_model", &init_hier_eagle_w4a16_gm_spec_w4a16_gm_dprefill_model, "init hier eagle gm spec gm model");
+    m.def("init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_dprefill_model", &init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_dprefill_model, "init hier eagle rot gm spec gm model");
     
     // eagle3 
     m.def("init_eagle3_model", &init_eagle3_model, "Init eagle model");
     m.def("init_eagle3_w4a16_gptq_marlin_model", &init_eagle3_w4a16_gptq_marlin_model, "Init eagle model");
 
-    m.def("init_eagle3_latency_model", &init_eagle3_latency_model, "Init eagle model");
-    m.def("init_eagle3_w4a16_gptq_marlin_latency_model", &init_eagle3_w4a16_gptq_marlin_latency_model, "Init eagle model");
+    m.def("init_eagle3_w4a16_gptq_marlin_dprefill_model", &init_eagle3_w4a16_gptq_marlin_dprefill_model, "Init eagle model");
     
 
-    // cascade eagle3
-    m.def("init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model", &init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_model, "Init casacde eagle3 model");
-    m.def("init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_latency_model", &init_cascade_eagle3_w4a16_gm_spec_w4a16_gm_latency_model, "Init casacde eagle3 model");
+    // hier eagle3
+    m.def("init_hier_eagle3_w4a16_gm_spec_w4a16_gm_model", &init_hier_eagle3_w4a16_gm_spec_w4a16_gm_model, "Init casacde eagle3 model");
+    m.def("init_hier_eagle3_w4a16_gm_spec_w4a16_gm_dprefill_model", &init_hier_eagle3_w4a16_gm_spec_w4a16_gm_dprefill_model, "Init casacde eagle3 model");
     
     
     m.def("draft_prefill", &draft_prefill, "draft prefill");

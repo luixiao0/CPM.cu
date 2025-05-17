@@ -25,7 +25,7 @@ class W4A16GPTQMarlinLLM_with_eagle3(W4A16GPTQMarlinLLM_with_tree_drafter):
         self.eagle_config = Eagle3Config.from_pretrained(eagle_path)
 
         if draft_prefill_sep:
-            C.init_eagle3_w4a16_gptq_marlin_latency_model(
+            C.init_eagle3_w4a16_gptq_marlin_dprefill_model(
                 self.eagle_config.draft_hidden_size,
                 self.eagle_config.draft_intermediate_size,
                 self.eagle_config.draft_num_attention_heads,

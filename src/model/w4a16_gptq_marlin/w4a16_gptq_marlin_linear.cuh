@@ -7,7 +7,6 @@
 #include "../../qgemm/gptq_marlin/gptq_marlin.cuh"
 #include "../../qgemm/gptq_marlin/core/scalar_type.hpp"
 
-// weight int8, input int8, output int32
 template <typename T, bool transposed=true, bool has_bias=false>
 struct W4A16GPTQMarlinLinear {
     int dim_in;
@@ -60,7 +59,6 @@ struct W4A16GPTQMarlinLinear {
             throw std::invalid_argument("Unsupported group size");
         }
             
-        // this->num_groups = (dim_in) / group_size;
         this->has_act_order = false;
         
     }

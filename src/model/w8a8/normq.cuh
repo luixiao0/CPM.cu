@@ -581,8 +581,7 @@ struct RMSNormQuantFuseSum {
         dim3 grid(num_tokens);
         dim3 block(std::min(dim, 1024));
         block.x = 32 * ((block.x + 31) / 32);
-        // if (tgt==nullptr) tgt = this->output_scale;
-        // using T = typename FloatTypeConverter<scalar_t>::Type;
+        
         if (use_per_token_quant) {
             // per-token
             generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
@@ -591,13 +590,9 @@ struct RMSNormQuantFuseSum {
             nullptr, eps, num_tokens, dim, output_sum, nullptr, output_scale,
             output, false
             );
-            // input, gamma, beta, normed_output, eps, tokens, hidden_dim, per_tensor_scale, per_token_scale
-            // normed_output_quant, use_shmem
-            // out.data_ptr<int8_t>(), input.data_ptr<scalar_t>(),
-            // weight.data_ptr<scalar_t>(), epsilon, num_tokens, hidden_size);
+            
         } else {
             // per-tensor
-            // not support
             generalLayerNorm_fuse_sum<T, half><<<grid, block, 0, stream.stream>>>(
             input, 
             weight, nullptr,

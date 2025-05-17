@@ -52,7 +52,6 @@ __global__ void quant_kernel_fuse_sum(T *__restrict__ input,
                              scale_type input_sum, 
                              scale_type scale,
                              int num_tokens, int hidden_size) {
-  // TODO: get the sum here.
   const int tid = threadIdx.x;
   const int token_idx = blockIdx.x;
   const int64_t token_idx_mul_hidden_size = token_idx * int64_t(hidden_size);
@@ -100,7 +99,6 @@ struct Quantizer
 {
     int dim;
     int8_t* output;
-    // using ScaleType = typename std::conditional<use_per_token_quant, half *, half>::type;
     half* output_scale;
     
     Quantizer(int dim)
@@ -134,7 +132,6 @@ struct QuantizerFuseSum
 {
     int dim;
     int8_t* output;
-    // using ScaleType = typename std::conditional<use_per_token_quant, half *, half>::type;
     half* output_scale;
     half* output_sum;
 
@@ -156,21 +153,12 @@ struct QuantizerFuseSum
                 T *input,
                 int num_tokens)
     {
-        // 配置线程块和线程网格
+        
         dim3 grid(num_tokens);
         dim3 block(std::min(dim, 1024));
 
-        // 调用核函数
-        // quant_kernel<T, half *, true><<<grid, block, 0, calc_stream>>>(input, output, scale, num_tokens, dim);
         quant_kernel_fuse_sum<T, half *, true><<<grid, block, 0, stream.stream>>>(
         input, output, output_sum, output_scale, num_tokens, dim);
 
-        // 检查内核调用的错误
-        // cudaError_t err = cudaGetLastError();
-        // if (err != cudaSuccess)
-        // {
-        //     printf("CUDA kernel launch error: %s\n", cudaGetErrorString(err));
-        //     assert(false);
-        // }
     }
 };

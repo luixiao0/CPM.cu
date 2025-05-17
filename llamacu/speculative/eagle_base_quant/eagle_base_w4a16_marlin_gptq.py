@@ -28,7 +28,7 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
 
         if self.rotation:
             if self.draft_prefill_sep:
-                C.init_eagle_w4a16_gptq_marlin_rot_latency_model(
+                C.init_eagle_w4a16_gptq_marlin_rot_dprefill_model(
                     self.eagle_config.eagle_num_layers,
                     num_iter,
                     topk_per_iter,
@@ -45,7 +45,7 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
                 )
         else:
             if self.draft_prefill_sep:
-                C.init_eagle_w4a16_gptq_marlin_latency_model(
+                C.init_eagle_w4a16_gptq_marlin_dprefill_model(
                     self.eagle_config.eagle_num_layers,
                     num_iter,
                     topk_per_iter,

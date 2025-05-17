@@ -7,7 +7,6 @@
 // #include "../linear.cuh"
 #include "../../qgemm/w4a8_qqq/w4a8_gemm_qqq.cuh"
 
-// TODO: add group128 support
 template <typename T, bool transposed=true, bool has_bias=false>
 struct W4A8QQQLinear{
     int32_t dim_in;
