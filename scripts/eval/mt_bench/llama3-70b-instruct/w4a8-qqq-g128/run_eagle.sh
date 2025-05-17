@@ -1,6 +1,6 @@
-Model_Path=models/Meta-Llama-3-8B-Instruct-w4a8-qqq-g128
-Eagle_Path=models/EAGLE-LLaMA3-Instruct-8B-on-w4a8-qqq
-Model_id="llama-3-8b-instruct"
+Model_Path=models/Meta-Llama-3-70B-Instruct-w4a8-qqq-g128
+Eagle_Path=models/EAGLE-LLaMA3-Instruct-70B-on-w4a8-qqq
+Model_id="llama-3-70b-instruct"
 Bench_name="mt_bench"
 
 python3 evaluation/inference_eagle_w4a8_qqq.py \
