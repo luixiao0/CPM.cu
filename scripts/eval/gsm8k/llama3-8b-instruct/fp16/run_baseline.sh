@@ -1,5 +1,5 @@
 
-Model_Path=meta-llama/Meta-Llama-3-8B-Instruct
+Model_Path=/home/ydzhang/checkpoints/meta-llama/Meta-Llama-3-8B-Instruct
 Model_id="llama-3-8b-instruct"
 Bench_name="gsm8k"
 

@@ -1,5 +1,5 @@
-Model_Path=models/Meta-Llama-3-70B-Instruct-w4a8-qqq-g128
-Eagle_Path=models/EAGLE-LLaMA3-Instruct-70B-on-w4a8-qqq
+Model_Path=/home/ydzhang/checkpoints/QQQ/Meta-Llama-3-70B-Instruct-rotation-gptq-pile-g128/Meta-Llama-3-70B-Instruct-merge
+Eagle_Path=/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-70B-qqq_rotation
 Model_id="llama-3-70b-instruct"
 Bench_name="mt_bench"
 
@@ -13,4 +13,4 @@ python3 evaluation/inference_eagle_w4a8_qqq.py \
     --dtype "float16" \
     --eagle-num-iter 6 \
     --eagle-topk-per-iter 10 \
-    --eagle-tree-size 60
+    --eagle-tree-size 48

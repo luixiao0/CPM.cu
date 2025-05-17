@@ -1,4 +1,4 @@
-Model_Path=models/Meta-Llama-3-8B-Instruct-w8a8
+Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w8a8-gchn-pileval
 Model_id="llama-3-8b-instruct"
 Bench_name="mt_bench"
 

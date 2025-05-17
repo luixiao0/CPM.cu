@@ -1,5 +1,5 @@
-Model_Path=models/Meta-Llama-3-70B-Instruct-w4a16
-Draft_Path=models/Meta-Llama-3-8B-Instruct-w4a16
+Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-70B-Instruct-qqq-rotation-4bit-128g-pileval-mse_merge
+Draft_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-rotation-4bit-128g-pileval-mse-desc-static_group_default_merge
 Model_id="llama-3-70b-instruct"
 Bench_name="spec_bench"
 

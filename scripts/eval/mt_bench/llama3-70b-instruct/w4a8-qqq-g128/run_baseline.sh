@@ -1,5 +1,5 @@
 
-Model_Path=models/Meta-Llama-3-70B-Instruct-w4a8-qqq-g128
+Model_Path=/home/ydzhang/checkpoints/QQQ/Meta-Llama-3-70B-Instruct-rotation-gptq-pile-g128/Meta-Llama-3-70B-Instruct-merge
 Model_id="llama-3-70b-instruct"
 Bench_name="mt_bench"
 
