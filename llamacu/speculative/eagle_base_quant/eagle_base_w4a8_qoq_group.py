@@ -1,11 +1,11 @@
 from ... import C
 from ..eagle import EagleConfig
-from ..tree_drafter_base_quant.tree_drafter_w4a8_qoq_chn import W4A8QoQChnLLM_with_tree_drafter
+from ..tree_drafter_base_quant.tree_drafter_w4a8_qoq_group import W4A8QoQGroupLLM_with_tree_drafter
 
 import torch
 
 
-class W4A8QoQChnLLM_with_eagle_rot(W4A8QoQChnLLM_with_tree_drafter):
+class W4A8QoQGroupLLM_with_eagle(W4A8QoQGroupLLM_with_tree_drafter):
     def __init__(self,
                  eagle_path,
                  base_path,
@@ -22,7 +22,7 @@ class W4A8QoQChnLLM_with_eagle_rot(W4A8QoQChnLLM_with_tree_drafter):
         self.eagle_path = eagle_path
         self.eagle_config = EagleConfig.from_pretrained(eagle_path)
 
-        C.init_eagle_w4a8_qoq_chn_rot_model(
+        C.init_eagle_w4a8_qoq_group_rot_model(
             self.eagle_config.eagle_num_layers,
             num_iter,
             topk_per_iter,
