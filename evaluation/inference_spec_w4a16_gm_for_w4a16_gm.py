@@ -1,13 +1,18 @@
 import argparse
 import torch
 from fastchat.utils import str_to_torch_dtype
-from evaluation.spec_bench.eval import run_eval
+from evaluation.spec_bench.eval import run_eval as run_eval_spec_bench
+from evaluation.gsm8k.eval import run_eval as run_eval_gsm8k
+from evaluation.humaneval.eval import run_eval as run_eval_humaneval
 from transformers import AutoTokenizer, AutoConfig
 from llamacu.speculative.spec_quant.spec_w4a16_gm_for_w4a16_gm_model import W4A16GMSpecW4A16GM
 
 
 def spec_w4a16_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
-    input_ids = inputs.input_ids.int()
+    if isinstance(inputs, torch.Tensor):
+        input_ids = inputs.int()
+    else:
+        input_ids = inputs.input_ids.int()
 
     prefill_length = len(input_ids[0])
     max_new_tokens = min(max_new_tokens, max_length - prefill_length)
@@ -87,22 +92,11 @@ if __name__ == "__main__":
         help="How many completion choices to generate.",
     )
     parser.add_argument(
-        "--temperature",
-        type=float,
-        default=0.0,
-        help="The temperature for medusa sampling.",
-    )
-    parser.add_argument(
         "--dtype",
         type=str,
         default="float16",
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
-    )
-    parser.add_argument(
-        "--chat-template",
-        type=str,
-        default="llama-2",
     )
     parser.add_argument(
         "--spec-num-iter",
@@ -122,11 +116,19 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    question_file = f"data/{args.bench_name}/question.jsonl"
+    if args.bench_name == "gsm8k":
+        question_file = f"data/gsm8k/gsm8k/main"
+    elif args.bench_name == "human_eval":
+        question_file =  f"data/human_eval/HumanEval.jsonl.gz"
+    else:
+        question_file = f"data/{args.bench_name}/question.jsonl"
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
+        if args.bench_name == "human_eval":
+            answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}/model_output.jsonl"
+        else:
+            answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
 
     print(f"Output to {answer_file}")
     
@@ -155,10 +157,15 @@ if __name__ == "__main__":
     else:
         teminators = [tokenizer.eos_token_id]
 
-    if args.temperature > 0:
-        do_sample = True
+    if args.bench_name == "mt_bench" or args.bench_name == "spec_bench":
+        run_eval = run_eval_spec_bench
+    elif args.bench_name == "gsm8k":
+        run_eval = run_eval_gsm8k
+    elif args.bench_name == "human_eval":
+        run_eval = run_eval_humaneval
     else:
-        do_sample = False
+        raise ValueError(f"Unknown benchmark name: {args.bench_name}")
+
 
     run_eval(
         model=model,
@@ -172,6 +179,5 @@ if __name__ == "__main__":
         max_new_tokens=args.max_new_tokens,
         max_length=max_length,
         num_choices=args.num_choices,
-        chat_template=args.chat_template,
         teminators=teminators,
     )

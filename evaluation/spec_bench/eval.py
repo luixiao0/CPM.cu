@@ -8,7 +8,6 @@ import numpy as np
 import shortuuid
 
 from fastchat.llm_judge.common import load_questions
-from fastchat.model import get_conversation_template
 from tqdm import tqdm
 
 
@@ -40,8 +39,7 @@ def run_eval(
     #         get_model_answers
     #     ).remote
     # else:
-    kwargs.pop('chat_template', 'llama-3')
-    get_answers_func = get_model_answers_hf
+    get_answers_func = get_model_answers
 
 
     # chunk_size = len(questions) // (num_gpus_total // num_gpus_per_model)  # // 2
@@ -69,7 +67,7 @@ def run_eval(
 
 
 @torch.inference_mode()
-def get_model_answers_hf(
+def get_model_answers(
         model,
         tokenizer,
         forward_func,

@@ -13,8 +13,7 @@ import argparse, re
 import numpy as np
 import shortuuid
 
-from fastchat.model import get_conversation_template
-from evalplus.sanitize import sanitize
+from .sanitize import sanitize
 
 
 def entry_point(

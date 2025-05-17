@@ -3,6 +3,7 @@ import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.spec_bench.eval import run_eval as run_eval_spec_bench
 from evaluation.gsm8k.eval import run_eval as run_eval_gsm8k
+from evaluation.humaneval.eval import run_eval as run_eval_humaneval
 from transformers import AutoTokenizer, AutoConfig
 from llamacu.llama_w4a8_qqq import W4A8QQQLLM
 
@@ -99,13 +100,18 @@ if __name__ == "__main__":
 
     if args.bench_name == "gsm8k":
         question_file = f"data/gsm8k/gsm8k/main"
+    elif args.bench_name == "human_eval":
+        question_file =  f"data/human_eval/HumanEval.jsonl.gz"
     else:
         question_file = f"data/{args.bench_name}/question.jsonl"
 
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
+        if args.bench_name == "human_eval":
+            answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}/model_output.jsonl"
+        else:
+            answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
 
     print(f"Output to {answer_file}")
     
@@ -135,6 +141,10 @@ if __name__ == "__main__":
         run_eval = run_eval_spec_bench
     elif args.bench_name == "gsm8k":
         run_eval = run_eval_gsm8k
+    elif args.bench_name == "human_eval":
+        run_eval = run_eval_humaneval
+    else:
+        raise ValueError(f"Unknown benchmark name: {args.bench_name}")
 
     run_eval(
         model=model,

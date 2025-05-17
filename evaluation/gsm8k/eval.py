@@ -200,35 +200,33 @@ def is_correct(model_answer, answer):
 def run_eval(
     model,
     tokenizer,
-    data_path,
     forward_func,
     model_id,
+    question_file,
     answer_file,
     max_new_tokens,
     max_length,
+    **kwarasg
 ):
-    dataset = load_dataset(data_path, split="test")
+    dataset = load_dataset(question_file, split="test")
+    teminators = []
     
     entry = dataset[0]
     warmup_times = 3
     for wm_i in range(warmup_times):
         input_str = build_prompt(entry['question'])
-        if "deepseek" in model_id:
-            messages=[
-                { 'role': 'user', 'content': input_str}
-            ]
-            input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to("cuda")
-        else:
-            input_ids = tokenizer.encode(input_str, return_tensors="pt").to("cuda").view(1, -1)
+        
+        input_ids = tokenizer.encode(input_str, return_tensors="pt").to("cuda").view(1, -1)
 
         prompt_len = input_ids.shape[-1]
         
-        output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
+        output_ids, new_token, step, accept_length_tree, decode_time, *rest = forward_func(
             input_ids,
             model,
             tokenizer,
             max_new_tokens,
             max_length,
+            teminators
         )
         print(f"warmup {wm_i} done")
     
@@ -241,21 +239,16 @@ def run_eval(
         cur_accept_lengths_tree = []
 
         input_str = build_prompt(entry['question'])
-        # TODO: make ouroboros  runnable  and get the lantency as well
-        if "deepseek" in model_id:
-            messages=[
-                { 'role': 'user', 'content': input_str}
-            ]
-            input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to("cuda")
-        else:
-            input_ids = tokenizer.encode(input_str, return_tensors="pt").to("cuda").view(1, -1)
 
-        output_ids, new_token, step, accept_length_tree, decode_time = forward_func(
+        input_ids = tokenizer.encode(input_str, return_tensors="pt").to("cuda").view(1, -1)
+
+        output_ids, new_token, step, accept_length_tree, decode_time, *rest = forward_func(
             input_ids,
             model,
             tokenizer,
             max_new_tokens,
             max_length,
+            teminators
         )
         accept_lengths_tree.extend(accept_length_tree)
 
@@ -283,9 +276,7 @@ def run_eval(
         result.append(is_cor)
         total_new_tokens += new_token
         total_time += decode_time
-        # if cnt == 2:
-        #     break
-        # cnt += 1
+
         print("#Mean accepted tokens: ", np.mean(accept_lengths_tree))
         print("#Accuracy: ", sum(result) / len(result))
         print("#Generate latency: ", total_time / total_new_tokens)
