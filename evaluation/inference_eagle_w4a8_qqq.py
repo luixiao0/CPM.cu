@@ -5,10 +5,10 @@ from evaluation.spec_bench.eval import run_eval as run_eval_spec_bench
 from evaluation.gsm8k.eval import run_eval as run_eval_gsm8k
 from evaluation.humaneval.eval import run_eval as run_eval_humaneval
 from transformers import AutoTokenizer, AutoConfig
-from llamacu.speculative.eagle_base_quant.eagle_base_w4a8_qoq_group_rot import W4A8QoQGroupLLM_with_eagle_rot
+from llamacu.speculative.eagle_base_quant.eagle_base_w4a8_qqq import W4A8QQQLLM_with_eagle
 
 
-def eagle_w4a8_per_group_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
+def eagle_w4a8_qqq_forward(inputs, model, tokenizer, max_new_tokens, max_length, teminators):
     if isinstance(inputs, torch.Tensor):
         input_ids = inputs.int()
     else:
@@ -135,9 +135,9 @@ if __name__ == "__main__":
     
     config = AutoConfig.from_pretrained(args.model_path)
     max_length = min(args.max_length, config.max_position_embeddings)
-    chunk_length = min(args.chunk_length, max_length)
+    chunk_length = min(args.chunk_length, config.max_position_embeddings)
 
-    model = W4A8QoQGroupLLM_with_eagle_rot(
+    model = W4A8QQQLLM_with_eagle(
         base_path=args.model_path,
         eagle_path=args.eagle_path,
         memory_limit=args.memory_limit,
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     run_eval(
         model=model,
         tokenizer=tokenizer,
-        forward_func=eagle_w4a8_per_group_forward,
+        forward_func=eagle_w4a8_qqq_forward,
         model_id=args.model_id,
         question_file=question_file,
         question_begin=args.question_begin,
