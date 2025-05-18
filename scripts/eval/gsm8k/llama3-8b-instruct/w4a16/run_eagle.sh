@@ -1,5 +1,5 @@
-Model_Path=models/Meta-Llama-3-8B-Instruct-w4a16
-Eagle_Path=models/EAGLE-LLaMA3-Instruct-8B-on-w4a16
+Model_Path=/home/ydzhang/checkpoints/AutoGPTQ/Meta-Llama-3-8B-Instruct-rotation-4bit-128g-pileval-mse-desc-static_group_default_merge
+Eagle_Path=/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-8B-w4a8_rotation
 Model_id="llama-3-8b-instruct"
 Bench_name="gsm8k"
 

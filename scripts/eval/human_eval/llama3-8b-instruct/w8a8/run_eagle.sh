@@ -1,4 +1,4 @@
-Model_Path=models/Meta-Llama-3-8B-Instruct-w8a8
+Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-8B-Instruct-w8a8-gchn-pileval
 Eagle_Path=models/EAGLE-LLaMA3-Instruct-8B
 Model_id="llama-3-8b-instruct"
 Bench_name="human_eval"

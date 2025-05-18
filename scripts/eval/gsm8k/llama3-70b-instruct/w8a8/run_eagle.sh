@@ -1,4 +1,4 @@
-Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-70B-Instruct-w8a8-gchn-neuralmagic
+Model_Path=/home/ydzhang/checkpoints/deepcompress/Meta-Llama-3-70B-Instruct-w8a8-gchn
 Eagle_Path=/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-70B
 Model_id="llama-3-70b-instruct"
 Bench_name="gsm8k"
