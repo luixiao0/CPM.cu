@@ -37,6 +37,20 @@ setup(
     packages=find_packages(),
     setup_requires=[
         "pybind11",
+        "psutil",
+        "ninja",
+    ],
+    install_requires=[
+        "transformers==4.46.2",
+        "accelerate==0.26.0",
+        "datasets",
+        "fschat",
+        "openai",
+        "anthropic",
+        "human_eval",
+        "zstandard",
+        "tree_sitter",
+        "tree-sitter-python"
     ],
     ext_modules=[
         CUDAExtension(
@@ -45,11 +59,9 @@ setup(
                 "src/entry.cu",
                 "src/utils.cu",
                 "src/qgemm/w8a8/w8a8_gemm_cuda.cu",
-                "src/qgemm/w4a8_per_chn/w4a8_per_chn_gemm_cuda.cu",
-                "src/qgemm/w4a8_per_group/w4a8_per_group_gemm_cuda.cu",
+                "src/qgemm/w4a8_qoq_chn/w4a8_qoq_chn_gemm_cuda.cu",
+                "src/qgemm/w4a8_qoq_group/w4a8_qoq_group_gemm_cuda.cu",
                 "src/qgemm/w4a8_qqq/w4a8_gemm_qqq.cu",
-                *glob.glob("src/qgemm/exllamav2/cuda/*cu"),
-                *glob.glob("src/qgemm/marlin/*cu"),
                 *glob.glob("src/qgemm/gptq_marlin/*cu"),
                 # *glob.glob("src/flash_attn/src/*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim64_fp16*.cu"),
