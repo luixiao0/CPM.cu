@@ -47,10 +47,7 @@ def speed(jsonl_file, jsonl_file_base, tokenizer, task=None, report=True):
     total_token=0
     speeds0=[]
     for datapoint in data:
-        answer=datapoint["choices"][0]['turns']
-        tokens = 0
-        for i in answer:
-            tokens += (len(tokenizer(i).input_ids) - 1)
+        tokens=sum(datapoint["choices"][0]['new_tokens'])
         times = sum(datapoint["choices"][0]['wall_time'])
         speeds0.append(tokens / times)
         total_time+=times
