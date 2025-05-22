@@ -23,7 +23,8 @@ struct W4A16GPTQMarlinModelImpl: Model {
     Embedding<T>* embedding;
     std::vector<W4A16GPTQMarlinLayer<T>*> layers;
     RMSNorm<T>* norm;
-    Linear<T>* lm_head;
+    LMHead<T>* lm_head;
+    float residual_scale;
 
 
     W4A16GPTQMarlinModelImpl(
@@ -38,7 +39,10 @@ struct W4A16GPTQMarlinModelImpl: Model {
         int head_dim,
         float rms_norm_eps,
         int group_size,
-        int chunk_length
+        int chunk_length,
+        float scale_embed = 1.0f,
+        float scale_lmhead = 1.0f,
+        float scale_residual = 1.0f
     ) {
         this->vocab_size = vocab_size;
         this->num_hidden_layers = num_hidden_layers;
@@ -50,17 +54,18 @@ struct W4A16GPTQMarlinModelImpl: Model {
         this->rms_norm_eps = rms_norm_eps;
 
         this->chunk_length = chunk_length;
-        
+        this->residual_scale = scale_residual;
+
         memory = new Memory(memory_limit, memory_pool);
 
         kv_caches = new KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim);
 
-        embedding = new Embedding<T>(vocab_size, hidden_size);
+        embedding = new Embedding<T>(vocab_size, hidden_size, scale_embed);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new W4A16GPTQMarlinLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size));
+            layers.push_back(new W4A16GPTQMarlinLayer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, residual_scale));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        lm_head = new Linear<T>(hidden_size, vocab_size);
+        lm_head = new LMHead<T>(hidden_size, vocab_size, scale_lmhead);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -121,6 +126,7 @@ struct W4A16GPTQMarlinModelImpl: Model {
             this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_tokens, this->hidden_size, layer_output, this->residual_scale);
         this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
         this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
     }
@@ -137,6 +143,7 @@ struct W4A16GPTQMarlinModelImpl: Model {
             this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_tokens, this->hidden_size, layer_output, this->residual_scale);
         this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
         this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*)output);
     }

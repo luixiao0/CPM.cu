@@ -12,13 +12,11 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
                  num_iter=6,
                  topk_per_iter=10,
                  tree_size=60,
-                 draft_prefill_sep=False,
                  rotation=False,
                  **kwargs):
         super().__init__(
             "eagle", eagle_path, base_path,
             tree_size = tree_size,
-            draft_prefill_sep = draft_prefill_sep,
             **kwargs
         )
 
@@ -27,39 +25,21 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
         self.rotation = rotation
 
         if self.rotation:
-            if self.draft_prefill_sep:
-                C.init_eagle_w4a16_gptq_marlin_rot_dprefill_model(
-                    self.eagle_config.eagle_num_layers,
-                    num_iter,
-                    topk_per_iter,
-                    self.tree_size,
-                    self.dtype_int,
-                )
-            else:
-                C.init_eagle_w4a16_gptq_marlin_rot_model(
-                    self.eagle_config.eagle_num_layers,
-                    num_iter,
-                    topk_per_iter,
-                    self.tree_size,
-                    self.dtype_int,
-                )
+            C.init_eagle_w4a16_gptq_marlin_rot_model(
+                self.eagle_config.eagle_num_layers,
+                num_iter,
+                topk_per_iter,
+                self.tree_size,
+                self.dtype_int,
+            )
         else:
-            if self.draft_prefill_sep:
-                C.init_eagle_w4a16_gptq_marlin_dprefill_model(
-                    self.eagle_config.eagle_num_layers,
-                    num_iter,
-                    topk_per_iter,
-                    self.tree_size,
-                    self.dtype_int,
-                )
-            else:
-                C.init_eagle_w4a16_gptq_marlin_model(
-                    self.eagle_config.eagle_num_layers,
-                    num_iter,
-                    topk_per_iter,
-                    self.tree_size,
-                    self.dtype_int,
-                )
+            C.init_eagle_w4a16_gptq_marlin_model(
+                self.eagle_config.eagle_num_layers,
+                num_iter,
+                topk_per_iter,
+                self.tree_size,
+                self.dtype_int,
+            )
 
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:

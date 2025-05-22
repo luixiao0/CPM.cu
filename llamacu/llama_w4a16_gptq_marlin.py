@@ -5,7 +5,7 @@ import torch
 from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from safetensors.torch import load_file
-import time
+import time, math
 
 dtype_map = {
     torch.float16: 0,
@@ -29,8 +29,8 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         super().__init__()
 
         self.path = path
-        self.tokenizer = AutoTokenizer.from_pretrained(path)
-        self.config = AutoConfig.from_pretrained(path)
+        self.tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
+        self.config = AutoConfig.from_pretrained(path, trust_remote_code=True)
         self.dtype = dtype if dtype is not None else self.config.torch_dtype
         self.dtype_int = dtype_to_int(self.dtype)
         self.cuda_graph = cuda_graph
@@ -44,7 +44,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         
         self.group_size = self.config.quantization_config['group_size']
         print("group size", self.group_size)
-
+        scale_embed = self.config.scale_emb if hasattr(self.config, "scale_emb") else 1.0
+        scale_lmhead = (self.config.dim_model_base / self.config.hidden_size) if hasattr(self.config, "dim_model_base") else 1.0
+        scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers) if hasattr(self.config, "scale_depth") else 1.0
+        print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
         C.init_w4a16_gptq_marlin_base_model(
             self.memory_limit,
             self.memory_pool.data.data_ptr(),
@@ -59,6 +62,9 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             self.group_size,
             self.dtype_int,
             self.chunk_length,
+            scale_embed,
+            scale_lmhead,
+            scale_residual
         )
 
         self.logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
@@ -89,7 +95,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         C.load_model(name, param.data_ptr())
 
         if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
-            self._load("lm_head", param)
+            self._load("lm_head.weight", param)
 
     def _load_from_ckpt(self, path, cls=None):
         supported_suffix_1 = ["bin.index.json", "safetensors.index.json"]

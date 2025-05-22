@@ -41,7 +41,6 @@ class HierEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
                 ea_topk_per_iter=10,
                 tree_size=60,
                 draft_model_start=False,
-                draft_prefill_sep=False,
                 rotation=False,
                 **kwargs):
         
@@ -70,8 +69,6 @@ class HierEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         self.drafter_path = drafter_path
         self.drafter_tokenizer = AutoTokenizer.from_pretrained(drafter_path)
         self.drafter_config = AutoConfig.from_pretrained(drafter_path)
-        self.draft_prefill_sep = draft_prefill_sep
-
         
         self.min_draft_length = min_draft_length
         self.max_draft_length = min_draft_length + ea_num_iter
@@ -95,89 +92,45 @@ class HierEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
         if self.rotation:
-            
-            if self.draft_prefill_sep:
-                C.init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_dprefill_model(
-                    self.drafter_config.vocab_size,
-                    self.drafter_config.num_hidden_layers,
-                    self.drafter_config.hidden_size,
-                    self.drafter_config.intermediate_size,
-                    self.drafter_config.num_attention_heads,
-                    self.drafter_config.num_key_value_heads,
-                    self.drafter_config.head_dim,
-                    self.drafter_config.rms_norm_eps,
-                    self.draft_group_size,
-                    self.min_draft_length,
-                    self.draft_cuda_graph,
-                    self.eagle_config.eagle_num_layers,
-                    self.ea_num_iter,
-                    self.ea_topk_per_iter,
-                    self.tree_size,
-                    self.draft_model_start,
-                    0,
-                )
-            else:
-                C.init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
-                    self.drafter_config.vocab_size,
-                    self.drafter_config.num_hidden_layers,
-                    self.drafter_config.hidden_size,
-                    self.drafter_config.intermediate_size,
-                    self.drafter_config.num_attention_heads,
-                    self.drafter_config.num_key_value_heads,
-                    self.drafter_config.head_dim,
-                    self.drafter_config.rms_norm_eps,
-                    self.draft_group_size,
-                    self.min_draft_length,
-                    self.draft_cuda_graph,
-                    self.eagle_config.eagle_num_layers,
-                    self.ea_num_iter,
-                    self.ea_topk_per_iter,
-                    self.tree_size,
-                    self.draft_model_start,
-                    0,
-                )
-                
+            C.init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
+                self.drafter_config.vocab_size,
+                self.drafter_config.num_hidden_layers,
+                self.drafter_config.hidden_size,
+                self.drafter_config.intermediate_size,
+                self.drafter_config.num_attention_heads,
+                self.drafter_config.num_key_value_heads,
+                self.drafter_config.head_dim,
+                self.drafter_config.rms_norm_eps,
+                self.draft_group_size,
+                self.min_draft_length,
+                self.draft_cuda_graph,
+                self.eagle_config.eagle_num_layers,
+                self.ea_num_iter,
+                self.ea_topk_per_iter,
+                self.tree_size,
+                self.draft_model_start,
+                0,
+            )
         else:
-            if self.draft_prefill_sep:
-                C.init_hier_eagle_w4a16_gm_spec_w4a16_gm_dprefill_model(
-                    self.drafter_config.vocab_size,
-                    self.drafter_config.num_hidden_layers,
-                    self.drafter_config.hidden_size,
-                    self.drafter_config.intermediate_size,
-                    self.drafter_config.num_attention_heads,
-                    self.drafter_config.num_key_value_heads,
-                    self.drafter_config.head_dim,
-                    self.drafter_config.rms_norm_eps,
-                    self.draft_group_size,
-                    self.min_draft_length,
-                    self.draft_cuda_graph,
-                    self.eagle_config.eagle_num_layers,
-                    self.ea_num_iter,
-                    self.ea_topk_per_iter,
-                    self.tree_size,
-                    self.draft_model_start,
-                    0,
-                )
-            else:
-                C.init_hier_eagle_w4a16_gm_spec_w4a16_gm_model(
-                    self.drafter_config.vocab_size,
-                    self.drafter_config.num_hidden_layers,
-                    self.drafter_config.hidden_size,
-                    self.drafter_config.intermediate_size,
-                    self.drafter_config.num_attention_heads,
-                    self.drafter_config.num_key_value_heads,
-                    self.drafter_config.head_dim,
-                    self.drafter_config.rms_norm_eps,
-                    self.draft_group_size,
-                    self.min_draft_length,
-                    self.draft_cuda_graph,
-                    self.eagle_config.eagle_num_layers,
-                    self.ea_num_iter,
-                    self.ea_topk_per_iter,
-                    self.tree_size,
-                    self.draft_model_start,
-                    0,
-                )
+            C.init_hier_eagle_w4a16_gm_spec_w4a16_gm_model(
+                self.drafter_config.vocab_size,
+                self.drafter_config.num_hidden_layers,
+                self.drafter_config.hidden_size,
+                self.drafter_config.intermediate_size,
+                self.drafter_config.num_attention_heads,
+                self.drafter_config.num_key_value_heads,
+                self.drafter_config.head_dim,
+                self.drafter_config.rms_norm_eps,
+                self.draft_group_size,
+                self.min_draft_length,
+                self.draft_cuda_graph,
+                self.eagle_config.eagle_num_layers,
+                self.ea_num_iter,
+                self.ea_topk_per_iter,
+                self.tree_size,
+                self.draft_model_start,
+                0,
+            )
     
     # def load_from_hf(self):
     #     self._load_from_ckpt(self.eagle_path, cls=self.tree_drafter_type)
@@ -222,7 +175,7 @@ class HierEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
             C.load_model(f"{cls}.{name}", param.data_ptr())
 
             if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
-                self._load("lm_head", param, cls)
+                self._load("lm_head.weight", param, cls)
         else:
             super()._load(name, param, dtype)
     
@@ -323,8 +276,4 @@ class HierEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         decode_time = time.time() - start_time
         ea_acc_nums = self.draft_ea_accept_list[0].item()
         tokens = tokens[:i+1].tolist()
-        if self.draft_prefill_sep:
-            draft_latency = draft_end_time - draft_start_time
-            return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone(), draft_latency
-        else:
-            return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()
+        return tokens, accept_lengths, model_step, decode_time, self.draft_ea_accept_list[1:1+ea_acc_nums].clone()

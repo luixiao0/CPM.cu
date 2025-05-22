@@ -1,85 +1,80 @@
 import torch
 from llamacu.llama import LLM
-from llamacu.speculative import LLM_with_medusa, LLM_with_eagle
-from llamacu.speculative.medusa_choices import *
+from llamacu.llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from llamacu.speculative import LLM_with_eagle
+from llamacu.speculative.eagle_base_quant.eagle_base_w4a16_marlin_gptq import W4A16GPTQMarlinLLM_with_eagle
 from transformers import AutoTokenizer
-from triton.testing import do_bench
-from fastchat.model import get_conversation_template
+import time
+import numpy as np
 
-# path = "../../models/vicuna-7b-v1.3"
-# medusa_path = "../../models/medusa/medusa-vicuna-7b-v1.3"
-# eagle_path = "../../models/eagle-vicuna-7b-v1.3"
-path = "/home/ydzhang/checkpoints/meta-llama/Meta-Llama-3-8B-Instruct"
-# path = "/home/ydzhang/checkpoints/lmsys/vicuna-7b-v1.3"
-medusa_path = "/home/ydzhang/checkpoints/predibase/Meta-Llama-3-8B-Instruct-medusa-full"
-eagle_path = "/home/ydzhang/checkpoints/yuhuili/EAGLE-LLaMA3-Instruct-8B"
+quant = False
+# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_llamaformat"
+path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_marlin"
+# path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
+# path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
+eagle_path = ""
 dtype = torch.float16
 cuda_graph = True
+chunk_length = 2048
 num_generate = 512
-model_type = ["base", "medusa", "eagle"][0]
-Bench = True
+model_type = "base"
 
-# prompt = "Beijing is the"
-messages = [
-            {"role": "system",
-             "content": "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."},
-        ]
+def make_input(digits, a = 2500, b = 4000):
+    head = "There is a pass key hidden in the context. Find it and remember it. I will quiz you about it later. "
+    before = "The sky is blue. The tree is green. The flower is red. The sun is yellow. " * a
+    needle = f"The pass key is {digits}. Remember it. The pass key is {digits}"
+    after = "The sky is blue. The tree is green. The flower is red. The sun is yellow. " * b
+    query = "Now, give me the exact number of the pass key. The pass key is "
+    return head + before + needle + after + query
+# prompt = make_input(681725493, 2000, 4000) # 120k
+# prompt = make_input(681725493, 1000, 2000) # 60k
+# prompt = make_input(681725493, 500, 1000) # 30k
+prompt = "Beijing is the"
+tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
-question = "Draft a professional email seeking your supervisor's feedback on the 'Quarterly Financial Report' you prepared. Ask specifically about the data analysis, presentation style, and the clarity of conclusions drawn. Keep the email short and to the point."
-messages.append({
-                "role": "user",
-                "content": question
-            })
-tokenizer = AutoTokenizer.from_pretrained(path)
-
-
-# conv = get_conversation_template("vicuna")
-# conv.message = []
-# conv.append_message(conv.roles[0], question)
-# conv.append_message(conv.roles[1], None)
-# prompt = conv.get_prompt()
-
-prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()
 num_tokens = input_ids.numel()
-num_generate = 512
 
 position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1, num_tokens)
 
-# teminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
 teminators = [tokenizer.eos_token_id]
 
-if model_type == "medusa":
-    llm = LLM_with_medusa(medusa_path, path, dtype=dtype, memory_limit=0.8, medusa_num_heads=3, medusa_choices=eval('mc_sim_7b_31'))
-    our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
-elif model_type == "eagle":
-    llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, topk_per_iter=10)
-    our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
+if quant:
+    if model_type == "eagle":
+        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=6, tree_size=60, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
+    else:
+        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.8, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
-    llm = LLM(path, dtype=dtype, memory_limit=0.4)
-    our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
+    if model_type == "eagle":
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, topk_per_iter=10, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
+    else:
+        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()
 llm.load_from_hf()
 
+torch.cuda.synchronize()
+st = time.time()
 gen_result = our_generate()
-gen_result1 = our_generate()
+torch.cuda.synchronize()
+et = time.time()
+decode_time = gen_result[-1]
+prefill_time = et - st - decode_time
 
 if model_type == "medusa" or model_type == "eagle":
-    import numpy as np
-    m_output = our_generate()
-    print(tokenizer.decode(m_output[0]))
-    print("Mean acc:", np.mean(m_output[1]))
+    print(tokenizer.decode(gen_result[0]))
+    print("Mean acc:", np.mean(gen_result[1]))
 else:
-    # print(tokenizer.decode(our_generate()))
-    print(gen_result[0])
-    out_str = tokenizer.decode(gen_result[0])
-    print(out_str)
-    print("=========================================")
-    out_str1 = tokenizer.decode(gen_result1[0])
-    print(out_str1)
-    print("=========================================")
-    print(out_str1 == out_str)
+    print(tokenizer.decode(gen_result[0]))
 
-# if Bench:
-#     print("decode speed:", f"{num_generate / do_bench(our_generate, warmup=10, rep=1000) * 1000} tok/s")
+print("prefill length:", input_ids.shape[1])
+print("prefill time:", prefill_time)
+print("prefill tokens/s:", input_ids.shape[1] / prefill_time)
+print("decode length:", len(gen_result[0]))
+print("decode time:", decode_time)
+print("decode tokens/s:", len(gen_result[0]) / decode_time)

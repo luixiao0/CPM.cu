@@ -145,7 +145,6 @@ if __name__ == "__main__":
         cuda_graph=args.cuda_graph,
         draft_num=args.spec_num_iter,
         draft_cuda_graph=args.draft_cuda_graph,
-        draft_prefill_sep=args.draft_prefill_sep,
     )
     model.init_storage()
     model.load_from_hf()

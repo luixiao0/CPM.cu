@@ -44,7 +44,8 @@ struct ModelImpl : Model {
     Embedding<T>* embedding;
     std::vector<Layer<T>*> layers;
     RMSNorm<T>* norm;
-    Linear<T>* lm_head;
+    LMHead<T>* lm_head;
+    float residual_scale;
 
     ModelImpl(
         int64_t memory_limit,
@@ -57,7 +58,10 @@ struct ModelImpl : Model {
         int num_key_value_heads,
         int head_dim,
         float rms_norm_eps,
-        int chunk_length
+        int chunk_length,
+        float scale_embed = 1.0f,
+        float scale_lmhead = 1.0f,
+        float scale_residual = 1.0f
     ) {
         this->vocab_size = vocab_size;
         this->num_hidden_layers = num_hidden_layers;
@@ -69,17 +73,18 @@ struct ModelImpl : Model {
         this->rms_norm_eps = rms_norm_eps;
 
         this->chunk_length = chunk_length;
+        this->residual_scale = scale_residual;
         
         memory = new Memory(memory_limit, memory_pool);
 
         kv_caches = new KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim);
 
-        embedding = new Embedding<T>(vocab_size, hidden_size);
+        embedding = new Embedding<T>(vocab_size, hidden_size, scale_embed);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps));
+            layers.push_back(new Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, residual_scale));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
-        lm_head = new Linear<T>(hidden_size, vocab_size);
+        lm_head = new LMHead<T>(hidden_size, vocab_size, scale_lmhead);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -140,6 +145,7 @@ struct ModelImpl : Model {
             this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_tokens, this->hidden_size, layer_output, this->residual_scale);
         this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
         this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
     }
@@ -156,6 +162,7 @@ struct ModelImpl : Model {
             this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_tokens, this->hidden_size, layer_output, this->residual_scale);
         this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
         this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*)output);
     }
@@ -163,54 +170,6 @@ struct ModelImpl : Model {
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         this->embedding->prefill(calc_stream, num_tokens, input);
         decode_embed(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output);
-    }
-
-    // eagle-3 hidden states
-    void prefill_embed_eagle3_states(int32_t num_tokens, int32_t num_history_tokens, T* embed, int32_t* position_ids, void* output, T* low_states, T* mid_states, T* high_states) {
-        T* layer_output = nullptr;
-        for (int i = 0; i < num_hidden_layers; i++) {
-            if (i==2){
-                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i], low_states);
-            } else if (i == num_hidden_layers/2){
-                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i], mid_states);
-            } else if (i == num_hidden_layers-3){
-                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i], high_states);
-            } else {
-                this->layers[i]->prefill(num_tokens, num_history_tokens, embed, layer_output, position_ids, this->kv_caches->caches[i]);
-            }
-            layer_output = this->layers[i]->output;
-        }
-        this->norm->prefill(calc_stream, num_tokens, embed, layer_output);
-        this->lm_head->prefill(calc_stream, 1, this->norm->output + (num_tokens - 1) * hidden_size, (T*)output);
-    }
-
-    void prefill_eagle3_states(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output, void* low_states, void* mid_states, void* high_states) {
-        this->embedding->prefill(calc_stream, num_tokens, input);
-        prefill_embed_eagle3_states(num_tokens, num_history_tokens, this->embedding->output, position_ids, output, (T*)low_states, (T*)mid_states, (T*)high_states);
-    }
-
-    void decode_embed_eagle3_states(int32_t num_tokens, int32_t padded_length, T* embed, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output, T* low_states, T* mid_states, T* high_states) {
-        Mask mask(mask_2d, num_tokens, num_tokens);
-        T* layer_output = nullptr;
-        for (int i = 0; i < num_hidden_layers; i++) {
-            if (i==2){
-                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i], low_states);
-            } else if (i == num_hidden_layers/2){
-                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i], mid_states);
-            } else if (i == num_hidden_layers-3){
-                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i], high_states);
-            } else {
-                this->layers[i]->decode(num_tokens, padded_length, this->embedding->output, layer_output, position_ids, cache_length, mask, this->kv_caches->caches[i]);
-            }
-            layer_output = this->layers[i]->output;
-        }
-        this->norm->prefill(calc_stream, num_tokens, this->embedding->output, layer_output);
-        this->lm_head->prefill(calc_stream, num_tokens, this->norm->output, (T*)output);
-    }
-
-    void decode_eagle3_states(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output, void* low_states, void* mid_states, void* high_states) {
-        this->embedding->prefill(calc_stream, num_tokens, input);
-        decode_embed_eagle3_states(num_tokens, padded_length, this->embedding->output, position_ids, cache_length, mask_2d, output, (T*)low_states, (T*)mid_states, (T*)high_states);
     }
 
     void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; }

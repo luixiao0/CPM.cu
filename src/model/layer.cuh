@@ -11,10 +11,14 @@ struct Layer {
     Attention<T> *attn;
     FFN<T> *ffn;
     T* output;
+    int hidden_size;
+    float residual_scale;
 
-    Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
+    Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float residual_scale = 1.0) {
         this->attn = new Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps);
         this->ffn = new GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps);
+        this->hidden_size = hidden_size;
+        this->residual_scale = residual_scale;
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -40,6 +44,9 @@ struct Layer {
     }
 
     void prefill(int32_t num_tokens, int32_t num_history_tokens, T* input, T* prev_output, int32_t* position_ids, KVCache<T>* kv_cache, T* prev_layer_states=nullptr) {
+        if (prev_output != nullptr) {
+            elementwise_scale(calc_stream, num_tokens, this->hidden_size, prev_output, this->residual_scale);
+        }
         this->attn->prefill(calc_stream, num_tokens, num_history_tokens, input, prev_output, position_ids, kv_cache);
         if (prev_layer_states != nullptr) {
             cudaMemcpyAsync(
@@ -50,10 +57,14 @@ struct Layer {
                 calc_stream.stream
             );
         }
+        elementwise_scale(calc_stream, num_tokens, this->hidden_size, this->attn->output, this->residual_scale);
         this->ffn->prefill(calc_stream, num_tokens, input, this->attn->output);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache, T* prev_layer_states=nullptr) {
+        if (prev_output != nullptr) {
+            elementwise_scale(calc_stream, num_tokens, this->hidden_size, prev_output, this->residual_scale);
+        }
         this->attn->decode(calc_stream, num_tokens, padded_length, input, prev_output, position_ids, cache_length, mask, kv_cache);
         if (prev_layer_states != nullptr) {
             cudaMemcpyAsync(
@@ -64,6 +75,7 @@ struct Layer {
                 calc_stream.stream
             );
         }
+        elementwise_scale(calc_stream, num_tokens, this->hidden_size, this->attn->output, this->residual_scale);
         this->ffn->decode(calc_stream, num_tokens, input, this->attn->output);
     }
 };

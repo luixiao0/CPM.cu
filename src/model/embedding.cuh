@@ -26,10 +26,12 @@ struct Embedding {
     int hidden_size;
     T* weight;
     T* output;
+    float embed_scale;
 
-    Embedding(int vocab_size, int hidden_size) {
+    Embedding(int vocab_size, int hidden_size, float embed_scale = 1.0f) {
         this->vocab_size = vocab_size;
         this->hidden_size = hidden_size;
+        this->embed_scale = embed_scale;
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -46,5 +48,6 @@ struct Embedding {
 
     void prefill(const Stream& stream, int32_t num_tokens, int32_t* input) {
         embedding(stream, num_tokens, this->hidden_size, input, this->weight, this->output);
+        elementwise_scale(stream, num_tokens, this->hidden_size, this->output, this->embed_scale);
     }
 };

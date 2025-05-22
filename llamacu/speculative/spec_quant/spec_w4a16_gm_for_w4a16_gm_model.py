@@ -28,7 +28,6 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
                  base_path: str,
                  draft_num: int,
                  draft_cuda_graph: bool,
-                 draft_prefill_sep=False,
                   **kwargs):
         super().__init__(base_path, **kwargs)
         
@@ -47,8 +46,6 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         self.draft_parent = torch.tensor([], dtype=torch.int32, device="cuda")
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
 
-        self.draft_prefill_sep = draft_prefill_sep
-
         self.draft_prefill_logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
         # self.draft_prefill_logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         # self.logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
@@ -56,36 +53,20 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
         
-        if self.draft_prefill_sep:
-            C.init_w4a16_gm_spec_w4a16_gm_dprefill_model(
-                self.drafter_config.vocab_size,
-                self.drafter_config.num_hidden_layers,
-                self.drafter_config.hidden_size,
-                self.drafter_config.intermediate_size,
-                self.drafter_config.num_attention_heads,
-                self.drafter_config.num_key_value_heads,
-                self.drafter_config.head_dim,
-                self.drafter_config.rms_norm_eps,
-                self.draft_group_size,
-                self.draft_num,
-                self.draft_cuda_graph,
-                self.dtype_int,
-            )
-        else:
-            C.init_w4a16_gm_spec_w4a16_gm_model(
-                self.drafter_config.vocab_size,
-                self.drafter_config.num_hidden_layers,
-                self.drafter_config.hidden_size,
-                self.drafter_config.intermediate_size,
-                self.drafter_config.num_attention_heads,
-                self.drafter_config.num_key_value_heads,
-                self.drafter_config.head_dim,
-                self.drafter_config.rms_norm_eps,
-                self.draft_group_size,
-                self.draft_num,
-                self.draft_cuda_graph,
-                self.dtype_int,
-            )
+        C.init_w4a16_gm_spec_w4a16_gm_model(
+            self.drafter_config.vocab_size,
+            self.drafter_config.num_hidden_layers,
+            self.drafter_config.hidden_size,
+            self.drafter_config.intermediate_size,
+            self.drafter_config.num_attention_heads,
+            self.drafter_config.num_key_value_heads,
+            self.drafter_config.head_dim,
+            self.drafter_config.rms_norm_eps,
+            self.draft_group_size,
+            self.draft_num,
+            self.draft_cuda_graph,
+            self.dtype_int,
+        )
     
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:
@@ -109,7 +90,7 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
             C.load_model(f"{cls}.{name}", param.data_ptr())
 
             if "embed_tokens" in name and hasattr(self.config, "tie_word_embeddings") and self.config.tie_word_embeddings:
-                self._load("lm_head", param, cls)
+                self._load("lm_head.weight", param, cls)
         else:
             super()._load(name, param, dtype)
     
@@ -203,8 +184,4 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         decode_time = time.time() - start_time
         tokens = tokens[:1+i].tolist()
 
-        if self.draft_prefill_sep:
-            draft_latency = draft_prefill_end_time - draft_prefill_start_time
-            return tokens, accept_lengths, model_step, decode_time, draft_latency
-        else:
-            return tokens, accept_lengths, model_step, decode_time
+        return tokens, accept_lengths, model_step, decode_time

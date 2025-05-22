@@ -78,3 +78,24 @@ struct Linear {
         }
     }
 };
+
+template <typename T>
+struct LMHead : Linear<T> {
+    T* tmp_hidden_size;
+    float head_scale;
+
+    LMHead(int dim_in, int dim_out, float head_scale = 1.0) : Linear<T>(dim_in, dim_out) {
+        this->head_scale = head_scale;
+    }
+
+    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        offset = Linear<T>::init_output_ptr(memory, num_tokens, offset);
+        offset = memory->allocate((void**)&this->tmp_hidden_size, offset, num_tokens * this->dim_in * sizeof(T));
+        return offset;
+    }
+
+    void prefill(const Stream& stream, int32_t num_tokens, T* input, T* tgt=nullptr, bool inplace=false) {
+        elementwise_scale(stream, num_tokens, this->dim_in, input, head_scale, tmp_hidden_size);
+        Linear<T>::prefill(stream, num_tokens, tmp_hidden_size, tgt, inplace);
+    }
+};

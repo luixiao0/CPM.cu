@@ -182,7 +182,6 @@ if __name__ == "__main__":
         ea_num_iter=args.eagle_num_iter,
         ea_topk_per_iter=args.eagle_topk_per_iter,
         tree_size=args.eagle_tree_size,
-        draft_prefill_sep=args.draft_prefill_sep,
         rotation=args.quant_rotation,
     )
     model.init_storage()
