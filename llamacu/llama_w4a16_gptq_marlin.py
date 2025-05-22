@@ -71,6 +71,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
 
     def init_storage(self):
         self.max_total_length = C.init_storage()
+        print("max supported length under current memory limit: ", self.max_total_length)
 
     def _load(self, name, param, dtype=None, cls=None):
         # if ".q_proj." in name or ".k_proj." in name or ".v_proj." in name or ".gate_proj." in name or ".up_proj." in name:

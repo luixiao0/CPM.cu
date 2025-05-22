@@ -7,10 +7,10 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
-quant = False
+quant = True
 # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_llamaformat"
-path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_marlin"
+# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
 eagle_path = ""
@@ -27,10 +27,10 @@ def make_input(digits, a = 2500, b = 4000):
     after = "The sky is blue. The tree is green. The flower is red. The sun is yellow. " * b
     query = "Now, give me the exact number of the pass key. The pass key is "
     return head + before + needle + after + query
-# prompt = make_input(681725493, 2000, 4000) # 120k
+prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
-prompt = "Beijing is the"
+# prompt = "Beijing is the"
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
 input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()
