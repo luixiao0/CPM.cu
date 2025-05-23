@@ -1,6 +1,6 @@
-Model_Path=meta-llama/Meta-Llama-3-8B-Instruct
-Quant_Path=quant_models/Meta-Llama-3-8B-Instruct-w4a16
-Output_Path=models/Meta-Llama-3-8B-Instruct-w4a16
+Model_Path=/yourpath/minicpm4_mupformat
+Quant_Path=/yourpath/minicpm4_autogptq
+Output_Path=/yourpath/minicpm4_marlin
 
 
 python model_convert/convert_w4a16.py \
