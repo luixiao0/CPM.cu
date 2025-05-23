@@ -53,7 +53,7 @@ struct MiniCPM4Attention {
         int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
         
         memory->allocate((void**)&this->attn_output, offset);
-        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float)); // TODO minicpm4 support larger num_splits
         int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
 
@@ -112,7 +112,9 @@ struct MiniCPM4Attention {
             -1,
             -1,
             0,
-            stream.stream
+            stream.stream,
+            nullptr, //this->q_proj->output, // TODO minicpm4 fake blockmask now
+            3072 // TODO minicpm4 fake block_window_size now
         );
 
         // flash attention and put output to attn_norm->output
@@ -167,7 +169,9 @@ struct MiniCPM4Attention {
             -1,
             -1,
             0,
-            stream.stream
+            stream.stream,
+            nullptr, //this->q_proj->output, // TODO minicpm4 fake blockmask now
+            3072 // TODO minicpm4 fake block_window_size now
         );
 
         // flash attention and put output to attn_norm->output

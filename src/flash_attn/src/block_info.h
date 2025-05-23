@@ -34,6 +34,12 @@ struct BlockInfo {
         return sum_s_k == -1 ? bidb * batch_stride + leftpad_k * row_stride : uint32_t(sum_s_k + leftpad_k) * row_stride;
     }
 
+
+    template <typename index_t>
+    inline __device__ index_t blockmask_q_offset(const index_t m_block_dim, const int bidb) const {
+        return sum_s_q == -1 ? bidb * (actual_seqlen_q / m_block_dim) : uint32_t(sum_s_q) / m_block_dim;
+    }
+
     const int sum_s_q;
     const int sum_s_k;
     const int actual_seqlen_q;

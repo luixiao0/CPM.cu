@@ -225,22 +225,18 @@ void mha_fwd_kvcache(
     int window_size_left,
     int window_size_right,
     const float softcap,
-    cudaStream_t stream
+    cudaStream_t stream,
+    uint64_t* blockmask = nullptr,
+    int block_window_size = 0
 ) {
     // causal=true is the same as causal=false in this case
     if (seqlen_q == 1) { is_causal = false; }
     if (is_causal) { window_size_right = 0; }
 
-    // TODO ignore this for now
-    // // Faster to transpose q from (b, 1, (nheads_kv ngroups), d) to (b, ngroups, nheads_kv, d) in this case
-    // // H/t Daniel Haziza
-    // const int seqlenq_ngroups_swapped = seqlen_q == 1 && num_heads > num_heads_k && window_size_left < 0 && window_size_right < 0 && head_size_og % 8 == 0 && !alibi_slopes_.has_value();
-    // if (seqlenq_ngroups_swapped) {
-    //     const int ngroups = num_heads / num_heads_k;
-    //     q = q.reshape({batch_size, num_heads_k, ngroups, head_size_og}).transpose(1, 2);
-    //     seqlen_q = ngroups;
-    //     num_heads = num_heads_k;
-    // }
+    if (blockmask != nullptr) {
+        seqlen_q *= 16;
+        num_heads /= 16;
+    }
 
     if (window_size_left >= seqlen_k) { window_size_left = -1; }
     if (window_size_right >= seqlen_k) { window_size_right = -1; }
@@ -271,6 +267,19 @@ void mha_fwd_kvcache(
                      softcap
                      );
 
+    params.blockmask = blockmask;
+    if (blockmask != nullptr) {
+        params.m_block_dim = 16;
+        params.n_block_dim = 64;
+        params.num_k_heads = 2;
+        params.num_blocks_m = (seqlen_q + 16 - 1) / 16;
+        params.num_blocks_n = (seqlen_k + 64 - 1) / 64;
+        params.block_window_size = block_window_size;
+    } else {
+        params.m_block_dim = 1;
+        params.n_block_dim = 1;
+    }
+
     params.mask_2d = mask.ptr;
     params.mask_q_range = mask.mask_q_range;
     params.mask_k_range = mask.mask_k_range;
@@ -287,16 +296,10 @@ void mha_fwd_kvcache(
     if (seqlens_k != nullptr) {
         params.cu_seqlens_k = seqlens_k;
         params.is_seqlens_k_cumulative = false;
-        params.num_splits = 4; // TODO 4 for decode
+        params.num_splits = 4; // TODO minicpm4 cheange this 
     } else {
         params.num_splits = 1;
     }
 
-    run_mha_fwd(params, stream);
-
-    // TODO ignore this for now
-    // if (seqlenq_ngroups_swapped) {
-    //     out = out.transpose(1, 2).reshape({batch_size, 1, num_heads_k * seqlen_q, head_size_og});
-    //     softmax_lse = softmax_lse.reshape({batch_size, num_heads_k * seqlen_q, 1});
-    // }
+    run_mha_fwd(params, stream, true);
 }
