@@ -616,7 +616,7 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
     int n_block_max = std::min(cute::ceil_div(binfo.actual_seqlen_k, kBlockN), (n_split_idx + 1) * n_blocks_per_split);
     if (Is_causal || Is_local) {
         n_block_max = std::min(n_block_max,
-                               cute::ceil_div((m_block + 1) * kBlockM + binfo.actual_seqlen_k - binfo.actual_seqlen_q + params.window_size_right, kBlockN));
+                               cute::ceil_div((m_block + 1) * kBlockM / params.m_block_dim + binfo.actual_seqlen_k - (binfo.actual_seqlen_q / params.m_block_dim) + params.window_size_right, kBlockN));
     }
     if (n_block_min >= n_block_max) {  // This also covers the case where n_block_max <= 0
         // We exit early and write 0 to gOaccum and -inf to gLSEaccum.
@@ -920,7 +920,7 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
     flash::Softmax<2 * size<1>(acc_o)> softmax;
 
     const float alibi_slope = !Has_alibi ? 0.0f : reinterpret_cast<float *>(params.alibi_slopes_ptr)[bidb * params.alibi_slopes_batch_stride + bidh] / params.scale_softmax;
-    flash::Mask<Is_causal, Is_local, Has_alibi, /*Mask_2d=*/true> mask(binfo.actual_seqlen_k, binfo.actual_seqlen_q, params.window_size_left, params.window_size_right, alibi_slope, params.mask_2d, params.mask_q_range, params.mask_k_range);
+    flash::Mask<Is_causal, Is_local, Has_alibi, /*Mask_2d=*/true> mask(binfo.actual_seqlen_k, binfo.actual_seqlen_q, params.window_size_left, params.window_size_right, alibi_slope, params.mask_2d, params.mask_q_range, params.mask_k_range, params.m_block_dim);
     fwdIterator blockmask(params, binfo, kBlockM, kBlockN, bidb, bidh, m_block, n_block_min, n_block_max);
     int next_block_idx = blockmask.max_no_larger(n_block_max-1);
     int leap = 0;
