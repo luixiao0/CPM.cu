@@ -220,6 +220,22 @@ struct Mask {
         }
     };
 
+    template <typename Engine, typename Layout>
+    __forceinline__ __device__ void all_mask(Tensor<Engine, Layout> &tensor_) {
+        static_assert(Layout::rank == 3, "Only support 3D Tensor");
+        static_assert(decltype(size<0>(tensor_))::value == 4, "First dimension must be 4");
+        Tensor tensor = make_tensor(tensor_.data(), flash::convert_layout_acc_rowcol(tensor_.layout()));
+        #pragma unroll
+        for (int nj = 0; nj < size<1, 1>(tensor); ++nj) {
+            #pragma unroll
+            for (int j = 0; j < size<1, 0>(tensor); ++j) {
+                #pragma unroll
+                for (int mi = 0; mi < size<0>(tensor); ++mi) {
+                    tensor(mi, make_coord(j, nj)) = -INFINITY;
+                }
+            }
+        }
+    };
 };
 
 } // namespace flash

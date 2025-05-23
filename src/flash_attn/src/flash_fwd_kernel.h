@@ -17,10 +17,97 @@
 #include "mask.h"
 #include "dropout.h"
 #include "rotary.h"
+#include "flash_blockmask.h"
 
 namespace flash {
 
 using namespace cute;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+__forceinline__ __device__ float minusinf_to_zero(float &input) {
+    if (input == -INFINITY) {
+        return 0;
+    } else {
+        return input;
+    }
+}
+
+template<int thr_offset, typename Engine0, typename Layout0, typename Operator>
+__forceinline__ __device__  void thread_element_wise_reduce_(Tensor<Engine0, Layout0> &tensor, Operator &op) {
+    static_assert(Layout0::rank == 2, "Only support 2D Tensor");
+    #pragma unroll
+    for (int mi = 0; mi < size<0>(tensor); mi++) {
+        #pragma unroll
+        for (int ni = 0; ni < size<1>(tensor); ni++) {
+            tensor(mi, ni) = op(
+                minusinf_to_zero(tensor(mi, ni)), 
+                __shfl_xor_sync(uint32_t(-1), minusinf_to_zero(tensor(mi, ni)), thr_offset)
+            );
+        }
+    }
+}
+
+template <typename Element, typename E1, typename L1, typename E2, typename L2>
+__forceinline__ __device__ void hdim16_reduce(
+    Tensor<E1, L1> &acc_S, 
+    Tensor<E2, L2> &g_Sh,
+    const int col_idx_offset_,
+    const int row_idx_offset_,
+    const int warp_row_stride) {
+
+    // Reshape tensor_ from (MMA=4, MMA_M, MMA_N) (or (_2,_2),_2,_16) for D=32) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
+    auto tensor = make_tensor(acc_S.data(), flash::convert_layout_acc_rowcol(acc_S.layout()));
+    const int warp_id = threadIdx.x / 32;
+    const int lane_id = threadIdx.x % 32;
+    // const int col_idx_offset = col_idx_offset_ + (lane_id % 4) * 2;
+    // const int row_idx_offset = row_idx_offset_ + warp_id * 16 + lane_id / 4;
+    const int col_idx_offset = 0 + (lane_id % 4) * 2;
+    const int row_idx_offset = 0 + warp_id * 16 + lane_id / 4;
+
+    // step 1: 线程内部求和 (v0 + v2)
+    using TensorT = decltype(make_tensor<float>(Shape< Int<size<0, 1>(tensor)>, Int<size<1>(tensor)> >{}));
+    TensorT v02;
+    clear(v02);
+    #pragma unroll
+    for (int mi = 0; mi < size<0, 1>(tensor); ++mi) {
+        #pragma unroll
+        for (int nj = 0; nj < size<1, 1>(tensor); ++nj) {
+            #pragma unroll
+            for (int j = 0; j < size<1, 0>(tensor); ++j) {
+                const int col_idx_v02 = j * size<1, 1>(tensor) + nj;
+                const float v0 = minusinf_to_zero(tensor(make_coord(0, mi), make_coord(j, nj)));
+                const float v2 = minusinf_to_zero(tensor(make_coord(1, mi), make_coord(j, nj)));
+                v02(mi, col_idx_v02) = v0 + v2;
+            }
+        }
+    }
+
+    // step 2: warp 内部蝶形求和
+    SumOp<float> sum_op;
+    thread_element_wise_reduce_<16>(v02, sum_op);
+    thread_element_wise_reduce_<8> (v02, sum_op);
+    thread_element_wise_reduce_<4> (v02, sum_op);
+
+    // step 3: copy 到 global mem
+    cutlass::NumericConverter<Element, float> converter;
+    if (lane_id < 4) {
+        #pragma unroll
+        for (int mi = 0; mi < size<0, 1>(tensor); ++mi) {
+            const int row_idx_base = row_idx_offset + mi * warp_row_stride;
+            #pragma unroll
+            for (int nj = 0; nj < size<1, 1>(tensor); ++nj) {
+                const int col_idx_base = col_idx_offset + nj * 8;
+                #pragma unroll
+                for (int j = 0; j < size<1, 0>(tensor); ++j) {
+                    const int col_idx = col_idx_base + j;
+                    const int col_idx_v02 = j * size<1, 1>(tensor) + nj;
+                    g_Sh(row_idx_base/16, col_idx) = converter(v02(mi, col_idx_v02)); // ignore /16 since it's too slow
+                }
+            }
+        }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -834,7 +921,9 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
 
     const float alibi_slope = !Has_alibi ? 0.0f : reinterpret_cast<float *>(params.alibi_slopes_ptr)[bidb * params.alibi_slopes_batch_stride + bidh] / params.scale_softmax;
     flash::Mask<Is_causal, Is_local, Has_alibi, /*Mask_2d=*/true> mask(binfo.actual_seqlen_k, binfo.actual_seqlen_q, params.window_size_left, params.window_size_right, alibi_slope, params.mask_2d, params.mask_q_range, params.mask_k_range);
-
+    fwdIterator blockmask(params, binfo, kBlockM, kBlockN, bidb, bidh, m_block, n_block_min, n_block_max);
+    int next_block_idx = blockmask.max_no_larger(n_block_max-1);
+    int leap = 0;
     // For performance reason, we separate out two kinds of iterations:
     // those that need masking on S, and those that don't.
     // We need masking on S for the very last block when K and V has length not multiple of kBlockN.
@@ -848,6 +937,7 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
         : ((Is_even_MN && Is_causal) ? cute::ceil_div(kBlockM, kBlockN) : cute::ceil_div(kBlockM, kBlockN) + 1);
     #pragma unroll
     for (int masking_step = 0; masking_step < n_masking_steps; ++masking_step, --n_block) {
+        const bool skip = (n_block != next_block_idx);
         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
         clear(acc_s);
         flash::cp_async_wait<0>();
@@ -873,34 +963,41 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
         }
         cute::cp_async_fence();
 
-        flash::gemm(
-            acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
-            smem_thr_copy_Q, smem_thr_copy_K
-        );
-        // if (cute::thread0()) { print(acc_s); }
-        if constexpr (Is_softcap){
-            flash::apply_softcap(acc_s, params.softcap);
+        if (!skip) {
+            flash::gemm(
+                acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
+                smem_thr_copy_Q, smem_thr_copy_K
+            );
+            // if (cute::thread0()) { print(acc_s); }
+            if constexpr (Is_softcap){
+                flash::apply_softcap(acc_s, params.softcap);
+            }
+
+            mask.template apply_mask<Is_causal, Is_even_MN>(
+                acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
+            );
+
+            next_block_idx = blockmask.max_no_larger(n_block-1);
+        } else {
+            mask.all_mask(acc_s);
         }
-
-
-        mask.template apply_mask<Is_causal, Is_even_MN>(
-            acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
-        );
 
         flash::cp_async_wait<0>();
         __syncthreads();
         // if (tidx == 0 && blockIdx.y == 0 && blockIdx.z == 0) { print(tVsV); }
         // __syncthreads();
 
-        if (n_block > n_block_min) {
+        leap = (masking_step + 1 == n_masking_steps) ? n_block - next_block_idx : 1;
+
+        if (n_block > n_block_min && next_block_idx != -1) {
             // Advance gK
             if (block_table == nullptr) {
-                tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+                tKgK.data() = tKgK.data() + (-int(kBlockN * leap * params.k_row_stride));
             } else {
                 const int block_table_idx_cur = n_block * kBlockN / params.page_block_size;
                 const int block_table_offset_cur = n_block * kBlockN - block_table_idx_cur * params.page_block_size;
-                const int block_table_idx_next = (n_block - 1) * kBlockN / params.page_block_size;
-                const int block_table_offset_next =(n_block - 1) * kBlockN - block_table_idx_next * params.page_block_size;
+                const int block_table_idx_next = (n_block - leap) * kBlockN / params.page_block_size;
+                const int block_table_offset_next =(n_block - leap) * kBlockN - block_table_idx_next * params.page_block_size;
                 tKgK.data() = tKgK.data() + (block_table[block_table_idx_next] - block_table[block_table_idx_cur]) * params.k_batch_stride + (block_table_offset_next - block_table_offset_cur) * params.k_row_stride;
             }
             flash::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
@@ -915,13 +1012,15 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
             : softmax.template softmax_rescale_o</*Is_first=*/false, /*Check_inf=*/Is_causal || Is_local || !Is_even_MN>(acc_s, acc_o, params.scale_softmax_log2);
         // if (cute::thread0()) { print(scores_max); print(scores_sum); print(scores); }
 
-        // Convert acc_s from fp32 to fp16/bf16
-        Tensor rP = flash::convert_type<Element>(acc_s);
-        // Reshape rP from (MMA=4, MMA_M, MMA_N) to ((4, 2), MMA_M, MMA_N / 2)
-        // if using m16n8k16 or (4, MMA_M, MMA_N) if using m16n8k8.
-        Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_acc_Aregs<Kernel_traits::TiledMma>(rP.layout()));
+        if (!skip) {
+            // Convert acc_s from fp32 to fp16/bf16
+            Tensor rP = flash::convert_type<Element>(acc_s);
+            // Reshape rP from (MMA=4, MMA_M, MMA_N) to ((4, 2), MMA_M, MMA_N / 2)
+            // if using m16n8k16 or (4, MMA_M, MMA_N) if using m16n8k8.
+            Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_acc_Aregs<Kernel_traits::TiledMma>(rP.layout()));
 
-        flash::gemm_rs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
+            flash::gemm_rs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
+        }
 
         // This check is at the end of the loop since we always have at least 1 iteration
         if (n_masking_steps > 1 && n_block <= n_block_min) {
@@ -930,18 +1029,22 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
         }
     }
 
+    leap = n_block - next_block_idx + 1;
+
     // These are the iterations where we don't need masking on S
-    for (; n_block >= n_block_min; --n_block) {
+    for (n_block = next_block_idx; n_block != -1 && n_block >= n_block_min; n_block = next_block_idx) {
+        next_block_idx = blockmask.max_no_larger(n_block - 1);
+
         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
         clear(acc_s);
         flash::cp_async_wait<0>();
         __syncthreads();
         // Advance gV
         if (block_table == nullptr) {
-            tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
+            tVgV.data() = tVgV.data() + (-int(kBlockN * leap * params.v_row_stride));
         } else {
-            const int block_table_idx_cur = (n_block + 1) * kBlockN / params.page_block_size;
-            const int block_table_offset_cur = (n_block + 1) * kBlockN - block_table_idx_cur * params.page_block_size;
+            const int block_table_idx_cur = (n_block + leap) * kBlockN / params.page_block_size;
+            const int block_table_offset_cur = (n_block + leap) * kBlockN - block_table_idx_cur * params.page_block_size;
             const int block_table_idx_next = n_block * kBlockN / params.page_block_size;
             const int block_table_offset_next = n_block * kBlockN - block_table_idx_next * params.page_block_size;
             tVgV.data() = tVgV.data() + (block_table[block_table_idx_next] - block_table[block_table_idx_cur]) * params.v_batch_stride + (block_table_offset_next - block_table_offset_cur) * params.v_row_stride;
@@ -959,15 +1062,17 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
 
         flash::cp_async_wait<0>();
         __syncthreads();
-        if (n_block > n_block_min) {
+
+        leap = n_block - next_block_idx;        
+        if (next_block_idx != -1) {
             // Advance gK
             if (block_table == nullptr) {
-                tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+                tKgK.data() = tKgK.data() + (-int(kBlockN * leap * params.k_row_stride));
             } else {
                 const int block_table_idx_cur = n_block * kBlockN / params.page_block_size;
                 const int block_table_offset_cur = n_block * kBlockN - block_table_idx_cur * params.page_block_size;
-                const int block_table_idx_next = (n_block - 1) * kBlockN / params.page_block_size;
-                const int block_table_offset_next = (n_block - 1) * kBlockN - block_table_idx_next * params.page_block_size;
+                const int block_table_idx_next = (n_block - leap) * kBlockN / params.page_block_size;
+                const int block_table_offset_next = (n_block - leap) * kBlockN - block_table_idx_next * params.page_block_size;
                 tKgK.data() = tKgK.data() + (block_table[block_table_idx_next] - block_table[block_table_idx_cur]) * params.k_batch_stride + (block_table_offset_next - block_table_offset_cur) * params.k_row_stride;
             }
             flash::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
@@ -1111,11 +1216,10 @@ inline __device__ void combine_attn_seqk_parallel(const Params &params) {
     using index_t = typename Kernel_traits::index_t;
     constexpr int kMaxSplits = 1 << Log_max_splits;
     constexpr int kHeadDim = Kernel_traits::kHeadDim;
-    constexpr int kNThreads = Kernel_traits::kNThreads;
+    constexpr int kNThreads = 128;
 
     static_assert(kMaxSplits <= 128, "kMaxSplits must be <= 128");
     static_assert(kBlockM == 4 || kBlockM == 8 || kBlockM == 16 || kBlockM == 32, "kBlockM must be 4, 8, 16 or 32");
-    static_assert(kNThreads == 128, "We assume that each block has 128 threads");
 
     // Shared memory.
     // kBlockM + 1 instead of kBlockM to reduce bank conflicts.

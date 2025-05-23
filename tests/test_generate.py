@@ -7,17 +7,17 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
-quant = True
+quant = False
 # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_llamaformat"
-# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = True
 chunk_length = 2048
-num_generate = 512
+num_generate = 128
 model_type = "base"
 
 def make_input(digits, a = 2500, b = 4000):
