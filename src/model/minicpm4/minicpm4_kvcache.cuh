@@ -62,6 +62,7 @@ __global__ void meanpooling_64_kernel(int left, int dim, T* compressed, const T*
 
 template <typename T>
 void meanpooling(const Stream& stream, int left, int right, int dim, T* compressed, const T* k_cache, int stride) {
+    if (left == right) return;
     if (stride == 16) {
         meanpooling_16_kernel<<<right-left, 1024, 0, stream.stream>>>(left, dim, compressed, k_cache);
     } else if (stride == 64) {
@@ -82,6 +83,7 @@ struct MiniCPM4KVCache : KVCache<T> {
     MiniCPM4KVCache(int dim, RotaryEmbedding<T> *rotary_embedding) : KVCache<T>(dim, rotary_embedding) {
         c1_stride = 16;
         c2_stride = 64;
+        assert(this->dim % 32 == 0);
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int32_t num_c1, int32_t num_c2, int64_t offset) {
@@ -97,10 +99,10 @@ struct MiniCPM4KVCache : KVCache<T> {
     void compress(const Stream& stream) {
         int prev_pos, cur_pos;
         prev_pos = max((this->prev_kv_length - c1_stride) / c1_stride, 0);
-        cur_pos = (this->next_kv_length - c1_stride) / c1_stride;
+        cur_pos = max((this->next_kv_length - c1_stride) / c1_stride, 0);
         meanpooling(stream, prev_pos, cur_pos, this->dim, this->c1_cache, this->k_cache, c1_stride);
         prev_pos = max((this->prev_kv_length - c2_stride) / c2_stride, 0);
-        cur_pos = (this->next_kv_length - c2_stride) / c2_stride;
+        cur_pos = max((this->next_kv_length - c2_stride) / c2_stride, 0);
         meanpooling(stream, prev_pos, cur_pos, this->dim, this->c2_cache, this->k_cache, c2_stride);
     }
 };
