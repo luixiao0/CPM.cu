@@ -7,17 +7,17 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
-quant = True
-# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_llamaformat"
-# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+apply_sparse = True
+quant = False
+path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = True
 chunk_length = 2048
-num_generate = 512
+num_generate = 128
 model_type = "base"
 
 def make_input(digits, a = 2500, b = 4000):
@@ -42,17 +42,17 @@ teminators = [tokenizer.eos_token_id]
 
 if quant:
     if model_type == "eagle":
-        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=6, tree_size=60, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.8, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, topk_per_iter=10, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()

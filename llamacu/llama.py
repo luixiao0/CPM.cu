@@ -25,6 +25,9 @@ class LLM(torch.nn.Module):
                  chunk_length: int = 1024,
                  dtype: torch.dtype = None,
                  cuda_graph: bool = False,
+                 apply_sparse: bool = True,
+                 block_window_size: int = 32,
+                 sparse_topk_k: int = 32,
     ):
         super().__init__()
 
@@ -45,23 +48,46 @@ class LLM(torch.nn.Module):
         scale_lmhead = (self.config.dim_model_base / self.config.hidden_size) if hasattr(self.config, "dim_model_base") else 1.0
         scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers) if hasattr(self.config, "scale_depth") else 1.0
         print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
-        C.init_base_model(
-            self.memory_limit,
-            self.memory_pool.data.data_ptr(),
-            self.config.vocab_size,
-            self.config.num_hidden_layers,
-            self.config.hidden_size,
-            self.config.intermediate_size,
-            self.config.num_attention_heads,
-            self.config.num_key_value_heads,
-            self.config.head_dim,
-            self.config.rms_norm_eps,
-            self.dtype_int,
-            self.chunk_length,
-            scale_embed,
-            scale_lmhead,
-            scale_residual
-        )
+
+        if apply_sparse:
+            assert chunk_length <= block_window_size * 64, f"chunk_length should be less than {block_window_size * 64}"
+            C.init_minicpm4_model(
+                self.memory_limit,
+                self.memory_pool.data.data_ptr(),
+                self.config.vocab_size,
+                self.config.num_hidden_layers,
+                self.config.hidden_size,
+                self.config.intermediate_size,
+                self.config.num_attention_heads,
+                self.config.num_key_value_heads,
+                self.config.head_dim,
+                self.config.rms_norm_eps,
+                self.dtype_int,
+                self.chunk_length,
+                scale_embed,
+                scale_lmhead,
+                scale_residual,
+                block_window_size,
+                sparse_topk_k,
+            )
+        else:
+            C.init_base_model(
+                self.memory_limit,
+                self.memory_pool.data.data_ptr(),
+                self.config.vocab_size,
+                self.config.num_hidden_layers,
+                self.config.hidden_size,
+                self.config.intermediate_size,
+                self.config.num_attention_heads,
+                self.config.num_key_value_heads,
+                self.config.head_dim,
+                self.config.rms_norm_eps,
+                self.dtype_int,
+                self.chunk_length,
+                scale_embed,
+                scale_lmhead,
+                scale_residual,
+            )
 
         self.logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
 

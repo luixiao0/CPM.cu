@@ -6,7 +6,7 @@
 // base model
 #include "model/model.cuh"
 #include "model/w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
-
+#include "model/minicpm4/minicpm4_model.cuh"
 
 // eagle
 #include "model/eagle.cuh"
@@ -69,6 +69,50 @@ void init_base_model(
             scale_embed,
             scale_lmhead,
             scale_residual
+        );
+    });
+
+}
+
+void init_minicpm4_model(
+    int64_t memory_limit,
+    std::uintptr_t memory_pool,
+    int vocab_size,
+    int num_hidden_layers,
+    int hidden_size,
+    int intermediate_size,
+    int num_attention_heads,
+    int num_key_value_heads,
+    int head_dim,
+    float rms_norm_eps,
+    int torch_dtype,
+    int chunk_length,
+    float scale_embed,
+    float scale_lmhead,
+    float scale_residual,
+    int block_window_size,
+    int sparse_topk_k
+) {
+    init_resources();
+
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new MiniCPM4Impl<elem_type>(
+            memory_limit,
+            reinterpret_cast<void*>(memory_pool),
+            vocab_size,
+            num_hidden_layers,
+            hidden_size,
+            intermediate_size,
+            num_attention_heads,
+            num_key_value_heads,
+            head_dim,
+            rms_norm_eps,
+            chunk_length,
+            scale_embed,
+            scale_lmhead,
+            scale_residual,
+            block_window_size,
+            sparse_topk_k
         );
     });
 
@@ -351,6 +395,7 @@ int verify_and_fix(int num_tokens, std::uintptr_t pred, std::uintptr_t gt, std::
 PYBIND11_MODULE(C, m) {
     // base bind
     m.def("init_base_model", &init_base_model, "Init base model");
+    m.def("init_minicpm4_model", &init_minicpm4_model, "Init minicpm4 model");
     m.def("init_w4a16_gptq_marlin_base_model", &init_w4a16_gptq_marlin_base_model, "Init W4A16 base model");
 
     // eagle bind

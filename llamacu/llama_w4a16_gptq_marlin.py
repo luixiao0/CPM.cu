@@ -39,6 +39,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         self.memory_pool = torch.nn.Parameter(torch.empty(self.memory_limit, dtype=torch.uint8, device="cuda"), requires_grad=False)
 
         self.chunk_length = chunk_length
+        assert chunk_length <= 2048, "chunk_length should be less than 2048"
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
         
