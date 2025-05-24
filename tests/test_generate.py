@@ -7,16 +7,20 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
+sink_window_size = 1
+block_window_size = 1 # TODO minicpm4 should be 32
+sparse_topk = 32 
 apply_sparse = True
 quant = False
-path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
 # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = True
-chunk_length = 2048
+chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
 num_generate = 128
 model_type = "base"
 
@@ -30,6 +34,7 @@ def make_input(digits, a = 2500, b = 4000):
 prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
+# prompt = make_input(681725493, 100, 200) # 6k
 # prompt = "Beijing is the"
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
@@ -52,7 +57,7 @@ else:
         llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse)
+        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()

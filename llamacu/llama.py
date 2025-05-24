@@ -26,6 +26,7 @@ class LLM(torch.nn.Module):
                  dtype: torch.dtype = None,
                  cuda_graph: bool = False,
                  apply_sparse: bool = True,
+                 sink_window_size: int = 1,
                  block_window_size: int = 32,
                  sparse_topk_k: int = 32,
     ):
@@ -50,7 +51,7 @@ class LLM(torch.nn.Module):
         print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
 
         if apply_sparse:
-            assert chunk_length <= block_window_size * 64, f"chunk_length should be less than {block_window_size * 64}"
+            # assert chunk_length <= block_window_size * 64, f"chunk_length should be less than {block_window_size * 64}" # TODO minicpm4 this assert is required
             C.init_minicpm4_model(
                 self.memory_limit,
                 self.memory_pool.data.data_ptr(),
@@ -67,6 +68,7 @@ class LLM(torch.nn.Module):
                 scale_embed,
                 scale_lmhead,
                 scale_residual,
+                sink_window_size,
                 block_window_size,
                 sparse_topk_k,
             )

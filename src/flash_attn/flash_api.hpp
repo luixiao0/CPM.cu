@@ -201,6 +201,90 @@ int set_params_splitkv(const int batch_size, const int num_heads, const int head
     return num_splits;
 }
 
+void mha_fwd_stage1(
+    bool is_bf16,
+    int batch_size,
+    int seqlen_q,
+    int seqlen_k,
+    int seqlen_knew,
+    int num_heads,
+    int num_heads_k,
+    int head_size,
+    void* q,                    // batch_size x seqlen_q x num_heads x head_size
+    void* kcache,               // batch_size x seqlen_k x num_heads_k x head_size
+    void* vcache,               // batch_size x seqlen_k x num_heads_k x head_size
+    int* seqlens_k,             // batch_size
+    void* p,                    // batch_size x seqlen_q x seqlen_k
+    const float softmax_scale,
+    bool is_causal,
+    int window_size_left,
+    int window_size_right,
+    const float softcap,
+    cudaStream_t stream,
+    int& q_round,
+    int& k_round
+) {
+    // causal=true is the same as causal=false in this case
+    if (seqlen_q == 1) { is_causal = false; }
+    if (is_causal) { window_size_right = 0; }
+
+    seqlen_q *= 16;
+    num_heads /= 16;
+
+    if (window_size_left >= seqlen_k) { window_size_left = -1; }
+    if (window_size_right >= seqlen_k) { window_size_right = -1; }
+
+    auto round_multiple = [](int x, int m) { return (x + m - 1) / m * m; };
+    const int head_size_rounded = head_size <= 192 ? round_multiple(head_size, 32) : 256;
+    const int seqlen_q_rounded = round_multiple(seqlen_q, 128);
+    const int seqlen_k_rounded = round_multiple(seqlen_k, 128);
+
+    q_round = seqlen_q_rounded / 16;
+    k_round = seqlen_k_rounded;
+
+    Flash_fwd_params params;
+    set_params_fprop(params,
+                     is_bf16,
+                     batch_size,
+                     seqlen_q, seqlen_k,
+                     seqlen_q_rounded, seqlen_k_rounded,
+                     num_heads, num_heads_k,
+                     head_size, head_size_rounded,
+                     q, kcache, vcache, nullptr,
+                     /*cu_seqlens_q_d=*/nullptr,
+                     /*cu_seqlens_k_d=*/nullptr,
+                     /*seqused_k=*/nullptr,
+                     /*p_ptr=*/p,
+                     /*softmax_lse=*/nullptr,
+                     /*p_dropout=*/0.f,
+                     softmax_scale,
+                     window_size_left,
+                     window_size_right,
+                     softcap
+                     );
+
+    params.blockmask = nullptr;
+    params.m_block_dim = 16;
+    params.n_block_dim = 1;
+
+    params.mask_2d = nullptr;
+    params.mask_q_range = 0;
+    params.mask_k_range = 0;
+
+    params.rotary_dim = 0;
+
+    params.page_block_size = 1;
+
+    params.alibi_slopes_ptr = nullptr;
+
+    if (seqlens_k != nullptr) {
+        params.cu_seqlens_k = seqlens_k;
+        params.is_seqlens_k_cumulative = false;
+    }
+    params.num_splits = 1;
+
+    run_mha_fwd(params, stream, true);
+}
 
 void mha_fwd_kvcache(
     bool is_bf16,

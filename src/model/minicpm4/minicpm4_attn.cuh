@@ -3,6 +3,26 @@
 #include "minicpm4_kvcache.cuh"
 
 template <typename T>
+void debug_print(T* arr, int q, int k) {
+    T* h_arr = new T[2 * q * k];
+    cudaMemcpy(h_arr, arr, 2 * q * k * sizeof(T), cudaMemcpyDeviceToHost);
+    printf("head = 0\n");
+    for (int i = 0; i < q; i++) if (i <= 2 || i >= q-3) {
+        for (int j = 0; j < k; j++) {
+            printf("%f ", float(h_arr[i * k + j]));
+        }
+        printf("\n");
+    }
+    printf("head = 1\n");
+    for (int i = 0; i < q; i++) if (i <= 2 || i >= q-3) {
+        for (int j = 0; j < k; j++) {
+            printf("%f ", float(h_arr[i * k + j]));
+        }
+        printf("\n");
+    }
+}
+
+template <typename T>
 struct MiniCPM4Attention {
     int hidden_size;
     int num_attention_heads;
@@ -18,10 +38,10 @@ struct MiniCPM4Attention {
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
 
+    int sink_window_size;
     int block_window_size;
-    int sparse_topk_k;
 
-    MiniCPM4Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int block_window_size, int sparse_topk_k) {
+    MiniCPM4Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int sink_window_size, int block_window_size) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
@@ -34,8 +54,8 @@ struct MiniCPM4Attention {
         this->v_proj = new Linear<T>(hidden_size, num_key_value_heads * head_dim);
         this->o_proj = new Linear<T>(hidden_size, num_attention_heads * head_dim);
 
+        this->sink_window_size = sink_window_size;
         this->block_window_size = block_window_size;
-        this->sparse_topk_k = sparse_topk_k;
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -89,6 +109,77 @@ struct MiniCPM4Attention {
         this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, v_cache);
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
 
+        if (num_history_tokens == 0) {
+            kv_cache->init();
+        } else {
+            kv_cache->compress(stream);
+        }
+
+        uint64_t fakeblock; // TODO minicpm4 fake blockmask now
+        uint64_t *blockmask = nullptr;
+        if (kv_cache->c1_len > 0) {
+            int q_round, k_round, out_len;
+            // mha_fwd_stage1(
+            //     TypeTraits<T>::type_code()==1,
+            //     1,
+            //     num_tokens,
+            //     kv_cache->c1_len,
+            //     num_tokens,
+            //     this->num_attention_heads,
+            //     this->num_key_value_heads,
+            //     this->head_dim,
+            //     this->q_proj->output,
+            //     kv_cache->c1_cache,
+            //     kv_cache->c2_cache,
+            //     nullptr,
+            //     kv_cache->stage1_score,
+            //     rsqrtf(float(this->head_dim)),
+            //     false,
+            //     -1,
+            //     -1,
+            //     0,
+            //     stream.stream,
+            //     q_round,
+            //     k_round
+            // );
+            // maxpooling_func(
+            //     stream.stream,
+            //     kv_cache->stage1_score,
+            //     kv_cache->pool_score,
+            //     this->num_attention_heads,
+            //     num_tokens,
+            //     q_round,
+            //     k_round,
+            //     kv_cache->next_kv_length,
+            //     this->sink_window_size,
+            //     this->block_window_size,
+            //     out_len
+            // );
+            // kv_cache->topk_func->prefill(
+            //     stream,
+            //     2*num_tokens,
+            //     kv_cache->pool_score,
+            //     out_len
+            // );
+            // topk_to_uint64_func(
+            //     stream.stream,
+            //     kv_cache->topk_func->topk_pos,
+            //     kv_cache->blockmask,
+            //     2*num_tokens,
+            //     kv_cache->topk_func->top,
+            //     num_history_tokens+num_tokens // TODO minicpm4 decode should be padded length
+            // );
+            // TODO minicpm4 delete these
+            // printf("num_tokens: %d, q_round: %d, k_round: %d, num_history_tokens: %d, out_len: %d, prev_kv_length: %d, next_kv_length: %d, c1_len: %d, c2_len: %d\n", num_tokens, q_round, k_round, num_history_tokens, out_len, kv_cache->prev_kv_length, kv_cache->next_kv_length, kv_cache->c1_len, kv_cache->c2_len);
+            // debug_print(kv_cache->stage1_score, q_round, k_round);
+            // debug_print(kv_cache->pool_score, num_tokens, out_len);
+            // printf("topk_pos\n");
+            // debug_print(kv_cache->topk_func->topk_pos, num_tokens, kv_cache->topk_func->top);
+            // printf("topk_val\n");
+            // debug_print(kv_cache->topk_func->topk_val, num_tokens, kv_cache->topk_func->top);
+        }
+        blockmask = &fakeblock;
+
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -113,19 +204,13 @@ struct MiniCPM4Attention {
             -1,
             0,
             stream.stream,
-            nullptr, //this->q_proj->output, // TODO minicpm4 fake blockmask now
+            blockmask,
             3072 // TODO minicpm4 fake block_window_size now
         );
 
         // flash attention and put output to attn_norm->output
         this->o_proj->prefill(stream, num_tokens, this->attn_output);
 
-        if (num_history_tokens != 0) {
-            kv_cache->compress(stream);
-        } else {
-            kv_cache->next_kv_length = 0;
-        }
-        kv_cache->prev_kv_length = kv_cache->next_kv_length;
         kv_cache->next_kv_length = kv_cache->next_kv_length + num_tokens;
     }
 
@@ -145,6 +230,8 @@ struct MiniCPM4Attention {
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
+
+        kv_cache->compress(stream);
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
@@ -170,15 +257,13 @@ struct MiniCPM4Attention {
             -1,
             0,
             stream.stream,
-            nullptr, //this->q_proj->output, // TODO minicpm4 fake blockmask now
+            nullptr, // TODO minicpm4 fake blockmask now
             3072 // TODO minicpm4 fake block_window_size now
         );
 
         // flash attention and put output to attn_norm->output
         this->o_proj->prefill(stream, num_tokens, this->attn_output);
 
-        kv_cache->compress(stream);
-        kv_cache->prev_kv_length = kv_cache->next_kv_length;
         kv_cache->next_kv_length = kv_cache->next_kv_length + 1; // TODO minicpm4 eagle verify should -1 + acceptlength
     }
 };
