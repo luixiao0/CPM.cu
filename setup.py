@@ -5,8 +5,28 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
 def append_nvcc_threads(nvcc_extra_args):
-    nvcc_threads = os.getenv("NVCC_THREADS") or "4"
+    nvcc_threads = os.getenv("NVCC_THREADS") or "16"
     return nvcc_extra_args + ["--threads", nvcc_threads]
+
+def get_all_headers():
+    """获取所有头文件，用于依赖跟踪"""
+    header_patterns = [
+        "src/**/*.h",
+        "src/**/*.hpp", 
+        "src/**/*.cuh",
+        "src/**/*.cu",  # 包含 .cu 文件作为依赖
+        "src/cutlass/include/**/*.h",
+        "src/cutlass/include/**/*.hpp",
+        "src/flash_attn/**/*.h",
+        "src/flash_attn/**/*.hpp",
+        "src/flash_attn/**/*.cuh",
+    ]
+    
+    headers = []
+    for pattern in header_patterns:
+        headers.extend(glob.glob(os.path.join(this_dir, pattern), recursive=True))
+    
+    return headers
 
 class NinjaBuildExtension(BuildExtension):
     def __init__(self, *args, **kwargs) -> None:
@@ -28,6 +48,9 @@ class NinjaBuildExtension(BuildExtension):
         super().__init__(*args, **kwargs)
 
 arch = "80"
+
+# 获取所有头文件用于依赖跟踪
+all_headers = get_all_headers()
 
 setup(
     name='llamacu',
@@ -58,6 +81,7 @@ setup(
             sources = [
                 "src/entry.cu",
                 "src/utils.cu",
+                "src/perf.cu",
                 "src/qgemm/w8a8/w8a8_gemm_cuda.cu",
                 "src/qgemm/w4a8_qoq_chn/w4a8_qoq_chn_gemm_cuda.cu",
                 "src/qgemm/w4a8_qoq_group/w4a8_qoq_group_gemm_cuda.cu",
@@ -84,6 +108,8 @@ setup(
                         "--use_fast_math",
                         "-gencode", f"arch=compute_{arch},code=sm_{arch}",
                         f"-D_ARCH{arch}",
+                        # 添加依赖文件生成选项
+                        "-MMD", "-MP",
                     ]
                 ),
             },
@@ -91,6 +117,7 @@ setup(
                 f"{this_dir}/src/flash_attn",
                 f"{this_dir}/src/flash_attn/src",
                 f"{this_dir}/src/cutlass/include",
+                f"{this_dir}/src/",
             ],
         )
     ],

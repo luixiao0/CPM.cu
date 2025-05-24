@@ -3,6 +3,7 @@
 
 #include "utils.cuh"
 #include "trait.cuh"
+#include "perf.cuh"
 // base model
 #include "model/model.cuh"
 #include "model/w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
@@ -140,6 +141,7 @@ void init_w4a16_gptq_marlin_base_model(
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
     }
     init_resources();
+    perf_init();
 
     model = new W4A16GPTQMarlinModelImpl<half>(
         memory_limit,
@@ -392,6 +394,10 @@ int verify_and_fix(int num_tokens, std::uintptr_t pred, std::uintptr_t gt, std::
     return model->verify(num_tokens, reinterpret_cast<int32_t*>(pred), reinterpret_cast<int32_t*>(gt), reinterpret_cast<int32_t*>(position_ids), reinterpret_cast<int32_t*>(cache_length), reinterpret_cast<uint64_t*>(attn_mask), reinterpret_cast<int32_t*>(tree_parent));
 }
 
+void print_perf_summary() {
+    perf_summary();
+}
+
 PYBIND11_MODULE(C, m) {
     // base bind
     m.def("init_base_model", &init_base_model, "Init base model");
@@ -418,4 +424,5 @@ PYBIND11_MODULE(C, m) {
     m.def("decode", &decode, "Decode");
     m.def("draft", &draft, "Draft");
     m.def("verify_and_fix", &verify_and_fix, "Verify and fix");
+    m.def("print_perf_summary", &print_perf_summary, "Print perf summary");
 } 

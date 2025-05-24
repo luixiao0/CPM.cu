@@ -219,3 +219,6 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         torch.cuda.synchronize()
         decode_time = time.time() - start_time
         return tokens, decode_time
+
+    def print_perf_summary(self):
+        C.print_perf_summary()

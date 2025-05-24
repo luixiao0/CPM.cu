@@ -15,7 +15,7 @@ path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
 # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
 eagle_path = ""
 dtype = torch.float16
-cuda_graph = True
+cuda_graph = False
 chunk_length = 2048
 num_generate = 128
 model_type = "base"
@@ -72,9 +72,11 @@ if model_type == "medusa" or model_type == "eagle":
 else:
     print(tokenizer.decode(gen_result[0]))
 
-print("prefill length:", input_ids.shape[1])
-print("prefill time:", prefill_time)
-print("prefill tokens/s:", input_ids.shape[1] / prefill_time)
-print("decode length:", len(gen_result[0]))
-print("decode time:", decode_time)
-print("decode tokens/s:", len(gen_result[0]) / decode_time)
+print(f"prefill length: {input_ids.shape[1]}")
+print(f"prefill time: {prefill_time} s")
+print(f"prefill tokens/s: {input_ids.shape[1] / prefill_time}")
+print(f"decode length: {len(gen_result[0])}")
+print(f"decode time: {decode_time} s")
+print(f"decode tokens/s: {len(gen_result[0]) / decode_time}")
+
+llm.print_perf_summary()
