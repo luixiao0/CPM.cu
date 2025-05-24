@@ -233,6 +233,8 @@ struct MiniCPM4Attention {
 
         kv_cache->compress(stream);
 
+        uint64_t fakeblock; // TODO minicpm4 fake blockmask now
+        uint64_t *blockmask = &fakeblock;
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -257,7 +259,7 @@ struct MiniCPM4Attention {
             -1,
             0,
             stream.stream,
-            nullptr, // TODO minicpm4 fake blockmask now
+            blockmask, // TODO minicpm4 fake blockmask now
             3072 // TODO minicpm4 fake block_window_size now
         );
 
