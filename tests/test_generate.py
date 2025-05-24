@@ -7,12 +7,31 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
-apply_sparse = False
-quant = False
-path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
-# path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
-# path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
+apply_sparse = True
+apply_quant = False
+
+if apply_sparse:
+    block_window_size = 2048
+    sparse_topk_k = 0
+    # block_window_size = 32
+    # sparse_topk_k = 32
+else:
+    block_window_size = 0
+    sparse_topk_k = 0
+
+if apply_quant and apply_sparse:
+    exit(-1)
+elif not apply_quant and apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
+elif apply_quant and not apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
+elif not apply_quant and not apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
+else:
+    exit(-1)
+
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = False
@@ -27,9 +46,10 @@ def make_input(digits, a = 2500, b = 4000):
     after = "The sky is blue. The tree is green. The flower is red. The sun is yellow. " * b
     query = "Now, give me the exact number of the pass key. The pass key is "
     return head + before + needle + after + query
-prompt = make_input(681725493, 2000, 4000) # 120k
+
+# prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1000, 2000) # 60k
-# prompt = make_input(681725493, 500, 1000) # 30k
+prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = "Beijing is the"
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
@@ -40,7 +60,7 @@ position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1
 
 teminators = [tokenizer.eos_token_id]
 
-if quant:
+if apply_quant:
     if model_type == "eagle":
         llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
@@ -52,7 +72,7 @@ else:
         llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, block_window_size=2048, sparse_topk_k=0)
+        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()

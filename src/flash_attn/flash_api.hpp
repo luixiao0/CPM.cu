@@ -132,7 +132,7 @@ void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream, bool force_split
     FP16_SWITCH(!params.is_bf16, [&] {
         HEADDIM_SWITCH(params.d, [&] {
             BOOL_SWITCH(params.is_causal, Is_causal, [&] {
-                if (params.num_splits == 1 && !force_split_kernel) {  // If we don't set it num_splits == 0
+                if (params.num_splits <= 1 && !force_split_kernel) {  // If we don't set it num_splits == 0
                     run_mha_fwd_<elem_type, kHeadDim, Is_causal>(params, stream);
                 } else {
                     run_mha_fwd_splitkv_dispatch<elem_type, kHeadDim, Is_causal>(params, stream);
@@ -233,13 +233,9 @@ void mha_fwd_kvcache(
     if (seqlen_q == 1) { is_causal = false; }
     if (is_causal) { window_size_right = 0; }
 
-    if (blockmask != nullptr) {
+    if (blockmask != nullptr || block_window_size > 0) {
         seqlen_q *= 16;
         num_heads /= 16;
-    }
-    else {
-        // seqlen_q *= 16;
-        // num_heads /= 16;
     }
 
     if (window_size_left >= seqlen_k) { window_size_left = -1; }
@@ -272,7 +268,7 @@ void mha_fwd_kvcache(
                      );
 
     params.blockmask = blockmask;
-    if (blockmask != nullptr) {
+    if (blockmask != nullptr || block_window_size > 0) {
         params.m_block_dim = 16;
         params.n_block_dim = 64;
         params.num_k_heads = 2;
@@ -282,12 +278,6 @@ void mha_fwd_kvcache(
     } else {
         params.m_block_dim = 1;
         params.n_block_dim = 1;
-        // params.m_block_dim = 16;
-        // params.n_block_dim = 64;
-        // params.num_k_heads = 2;
-        // params.num_blocks_m = (seqlen_q + 16 - 1) / 16;
-        // params.num_blocks_n = (seqlen_k + 64 - 1) / 64;
-        // params.block_window_size = block_window_size;
     }
 
     params.mask_2d = mask.ptr;

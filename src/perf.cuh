@@ -13,16 +13,14 @@
 #include <cuda_profiler_api.h>
 #endif
 
-// #define DISABLE_PERF
-// 性能测量开关，可以通过编译时定义DISABLE_PERF来禁用
-#ifndef DISABLE_PERF
+// #define ENABLE_PERF
+// 性能测量开关，可以通过编译时定义ENABLE_PERF来启用
+#ifdef ENABLE_PERF
 #define PERF_ENABLED 1
 #else
 #define PERF_ENABLED 0
 #endif
 
-#if PERF_ENABLED
-// 统一的性能数据结构
 struct PerfData {
     std::chrono::high_resolution_clock::time_point start_time;
     double total_time = 0.0;
@@ -43,6 +41,8 @@ struct PerfData {
     }
 #endif
 };
+
+#if PERF_ENABLED
 
 // 前向声明 - 在perf.cpp中实现
 std::unordered_map<std::string, PerfData>& get_perf_data();
@@ -289,13 +289,6 @@ std::unordered_map<std::string, PerfData>& get_perf_data();
     } perf_scope_##label
 
 #else // PERF_ENABLED (即性能测量被禁用时)
-
-// 当性能测量被禁用时，PerfData 可以是一个空结构体
-struct PerfData {};
-
-// 同样需要 get_perf_data 的声明
-// 其实现 (在 perf.cu中) 将会创建一个 std::unordered_map<std::string, PerfData (空结构)>
-std::unordered_map<std::string, PerfData>& get_perf_data();
 
 // 当性能测量被禁用时，所有宏都变成空操作
 #define perf_init() do {} while(0)

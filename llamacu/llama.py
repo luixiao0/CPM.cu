@@ -25,7 +25,6 @@ class LLM(torch.nn.Module):
                  chunk_length: int = 1024,
                  dtype: torch.dtype = None,
                  cuda_graph: bool = False,
-                 apply_sparse: bool = True,
                  block_window_size: int = 32,
                  sparse_topk_k: int = 32,
     ):
@@ -49,7 +48,7 @@ class LLM(torch.nn.Module):
         scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers) if hasattr(self.config, "scale_depth") else 1.0
         print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
 
-        if apply_sparse:
+        if block_window_size > 0 or sparse_topk_k > 0:
             assert chunk_length <= block_window_size * 64, f"chunk_length should be less than {block_window_size * 64}"
             C.init_minicpm4_model(
                 self.memory_limit,

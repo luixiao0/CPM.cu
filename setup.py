@@ -5,7 +5,7 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
 def append_nvcc_threads(nvcc_extra_args):
-    nvcc_threads = os.getenv("NVCC_THREADS") or "4"
+    nvcc_threads = os.getenv("NVCC_THREADS") or "16"
     return nvcc_extra_args + ["--threads", nvcc_threads]
 
 def get_all_headers():

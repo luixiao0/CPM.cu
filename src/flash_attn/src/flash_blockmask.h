@@ -33,10 +33,14 @@ class fwdIterator{
 
         const int q_block_idx = loop_step_idx + cache_seqlen_k;
         this->k_window_right = q_block_idx / n_block_dim;
-        this->k_window_left = this->k_window_right - params.block_window_size + 1;
+        this->k_window_left = max(0, this->k_window_right - params.block_window_size + 1);
     }
 
     __device__ int max_no_larger(int target) const {
+        if (blockmask_ptr == nullptr && k_window_left > k_window_right) {
+            return target;
+        }
+
         if(max_block_idx == 0){
             return -1;
         };
