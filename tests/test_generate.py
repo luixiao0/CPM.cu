@@ -7,7 +7,7 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
-apply_sparse = True
+apply_sparse = False
 quant = False
 path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
 # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
