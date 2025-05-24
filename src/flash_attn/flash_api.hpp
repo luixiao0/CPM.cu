@@ -238,8 +238,8 @@ void mha_fwd_kvcache(
         num_heads /= 16;
     }
     else {
-        seqlen_q *= 16;
-        num_heads /= 16;
+        // seqlen_q *= 16;
+        // num_heads /= 16;
     }
 
     if (window_size_left >= seqlen_k) { window_size_left = -1; }
@@ -280,14 +280,14 @@ void mha_fwd_kvcache(
         params.num_blocks_n = (seqlen_k + 64 - 1) / 64;
         params.block_window_size = block_window_size;
     } else {
-        // params.m_block_dim = 1;
-        // params.n_block_dim = 1;
-        params.m_block_dim = 16;
-        params.n_block_dim = 64;
-        params.num_k_heads = 2;
-        params.num_blocks_m = (seqlen_q + 16 - 1) / 16;
-        params.num_blocks_n = (seqlen_k + 64 - 1) / 64;
-        params.block_window_size = block_window_size;
+        params.m_block_dim = 1;
+        params.n_block_dim = 1;
+        // params.m_block_dim = 16;
+        // params.n_block_dim = 64;
+        // params.num_k_heads = 2;
+        // params.num_blocks_m = (seqlen_q + 16 - 1) / 16;
+        // params.num_blocks_n = (seqlen_k + 64 - 1) / 64;
+        // params.block_window_size = block_window_size;
     }
 
     params.mask_2d = mask.ptr;
