@@ -91,7 +91,6 @@ struct W4A16GPTQMarlinLayer {
             );
         }
         elementwise_scale(calc_stream, num_tokens, this->hidden_size, this->attn->output, this->residual_scale);
-        static int decode_ffn_count = 0;
         cuda_perf_start_on_stream_f(DECODE_FFN, calc_stream.stream);
         this->ffn->decode(calc_stream, num_tokens, input, this->attn->output, a_tmp, c_tmp);
         cuda_perf_stop_on_stream_f(DECODE_FFN, calc_stream.stream);

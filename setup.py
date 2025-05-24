@@ -5,7 +5,7 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
 def append_nvcc_threads(nvcc_extra_args):
-    nvcc_threads = os.getenv("NVCC_THREADS") or "16"
+    nvcc_threads = os.getenv("NVCC_THREADS") or "4"
     return nvcc_extra_args + ["--threads", nvcc_threads]
 
 def get_all_headers():
@@ -14,7 +14,6 @@ def get_all_headers():
         "src/**/*.h",
         "src/**/*.hpp", 
         "src/**/*.cuh",
-        "src/**/*.cu",  # 包含 .cu 文件作为依赖
         "src/cutlass/include/**/*.h",
         "src/cutlass/include/**/*.hpp",
         "src/flash_attn/**/*.h",
@@ -24,7 +23,13 @@ def get_all_headers():
     
     headers = []
     for pattern in header_patterns:
-        headers.extend(glob.glob(os.path.join(this_dir, pattern), recursive=True))
+        abs_headers = glob.glob(os.path.join(this_dir, pattern), recursive=True)
+        # 转换为相对路径
+        rel_headers = [os.path.relpath(h, this_dir) for h in abs_headers]
+        headers.extend(rel_headers)
+    
+    # 过滤掉不存在的文件（检查绝对路径但返回相对路径）
+    headers = [h for h in headers if os.path.exists(os.path.join(this_dir, h))]
     
     return headers
 
