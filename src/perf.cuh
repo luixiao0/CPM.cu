@@ -13,7 +13,7 @@
 #include <cuda_profiler_api.h>
 #endif
 
-// #define ENABLE_PERF
+//#define ENABLE_PERF
 // 性能测量开关，可以通过编译时定义ENABLE_PERF来启用
 #ifdef ENABLE_PERF
 #define PERF_ENABLED 1
@@ -110,10 +110,10 @@ std::unordered_map<std::string, PerfData>& get_perf_data();
         auto& data = get_perf_data()[#label]; \
         if (data.is_running && data.type == "CUDA" && data.events_created) { \
             cudaEventRecord(data.stop_event); \
-            /* cudaEventSynchronize(data.stop_event); */ \
-            /* float elapsed_time; */ \
-            /* cudaEventElapsedTime(&elapsed_time, data.start_event, data.stop_event); */ \
-            /* data.total_time += elapsed_time; */ \
+            cudaEventSynchronize(data.stop_event); \
+            float elapsed_time; \
+            cudaEventElapsedTime(&elapsed_time, data.start_event, data.stop_event); \
+            data.total_time += elapsed_time; \
             data.count++; \
             data.is_running = false; \
         } \
@@ -147,8 +147,6 @@ std::unordered_map<std::string, PerfData>& get_perf_data();
         } \
         if (!data.is_running) { \
             cudaEventRecord(data.start_event, stream_val); \
-            cudaError_t err_start = cudaGetLastError(); \
-            if (err_start != cudaSuccess) std::cerr << "CUDA error after start_event record for " << #label << ": " << cudaGetErrorString(err_start) << std::endl; \
             data.is_running = true; \
         } \
     } while(0)
@@ -162,8 +160,6 @@ std::unordered_map<std::string, PerfData>& get_perf_data();
             float elapsed_time; \
             cudaEventElapsedTime(&elapsed_time, data.start_event, data.stop_event); \
             data.total_time += elapsed_time; \
-            cudaError_t err_stop = cudaGetLastError(); \
-            if (err_stop != cudaSuccess) std::cerr << "CUDA error after stop_event record for " << #label << ": " << cudaGetErrorString(err_stop) << std::endl; \
             data.count++; \
             data.is_running = false; \
         } \
@@ -231,28 +227,6 @@ std::unordered_map<std::string, PerfData>& get_perf_data();
         } \
         std::cout << "============================" << std::endl; \
     } while(0)
-            // if (data.type == "CUDA" && data.events_created && data.count > 0 && data.is_running == false) { \
-                float elapsed_ms_float; \
-                cudaError_t status = cudaEventElapsedTime(&elapsed_ms_float, data.start_event, data.stop_event); \
-                if (status == cudaSuccess) { \
-                    const float MAX_REASONABLE_POSITIVE_MS = 60000.0f; /* 1 分钟, 改为60秒，更严格一些 */ \
-                    if (std::isnan(elapsed_ms_float) || elapsed_ms_float < 0.0f || elapsed_ms_float > MAX_REASONABLE_POSITIVE_MS) { \
-                        /* 不再打印到cerr避免干扰，或者只在非常详细的调试模式下打印 */ \
-                        /* std::cerr << "Warning: Invalid CUDA event time for label " << name << " (val: " << elapsed_ms_float << "). Setting to -1.0." << std::endl; */ \
-                        data.total_time = -1.0; /* 统一的无效/错误标记 */ \
-                    } else { \
-                        data.total_time = elapsed_ms_float; \
-                    } \
-                } else { \
-                    /* std::cerr << "Error: cudaEventElapsedTime failed for label " << name << ": " << cudaGetErrorString(status) << std::endl; */ \
-                    data.total_time = -1.0; /* 统一的无效/错误标记 */ \
-                    if (data.events_created) { \
-                        cudaEventDestroy(data.start_event); \
-                        cudaEventDestroy(data.stop_event); \
-                        data.events_created = false; \
-                    } \
-                } \
-            } \
 
 // 获取指定标签的总时间（毫秒）
 #define perf_get_total_time(label) \
