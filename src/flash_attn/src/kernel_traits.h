@@ -137,11 +137,16 @@ struct Flash_fwd_kernel_traits : public Base {
                         Layout<Shape<_1, _8>>{}));  // Val layout, 8 vals per store
 
     using GmemLayoutAtomOaccum = std::conditional_t<
-        kBlockKSmem == 32,
-        Layout<Shape <_16, _8>,  // Thread layout, 8 threads per row
+        kNThreads == 32,  // Special case for 1 warp (splitkv scenario)
+        Layout<Shape <_4, _8>,   // 4 rows x 8 cols = 32 threads, matches combine kernel
                Stride< _8, _1>>,
-        Layout<Shape <_8, _16>,  // Thread layout, 16 threads per row
-               Stride< _16, _1>>
+        std::conditional_t<
+            kBlockKSmem == 32,
+            Layout<Shape <_16, _8>,  // Thread layout, 8 threads per row
+                   Stride< _8, _1>>,
+            Layout<Shape <_8, _16>,  // Thread layout, 16 threads per row
+                   Stride< _16, _1>>
+        >
     >;
     using GmemTiledCopyOaccum = decltype(
         make_tiled_copy(Copy_Atom<DefaultCopy, ElementAccum>{},
