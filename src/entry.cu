@@ -91,6 +91,7 @@ void init_minicpm4_model(
     float scale_embed,
     float scale_lmhead,
     float scale_residual,
+    int sink_window_size,
     int block_window_size,
     int sparse_topk_k
 ) {
@@ -112,6 +113,7 @@ void init_minicpm4_model(
             scale_embed,
             scale_lmhead,
             scale_residual,
+            sink_window_size,
             block_window_size,
             sparse_topk_k
         );

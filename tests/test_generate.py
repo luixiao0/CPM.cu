@@ -11,31 +11,20 @@ apply_sparse = True
 apply_quant = False
 
 if apply_sparse:
+    sink_window_size = 1
     block_window_size = 2048
     sparse_topk_k = 0
     # block_window_size = 32
     # sparse_topk_k = 32
 else:
+    sink_window_size = 0
     block_window_size = 0
     sparse_topk_k = 0
-
-if apply_quant and apply_sparse:
-    exit(-1)
-elif not apply_quant and apply_sparse:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
-elif apply_quant and not apply_sparse:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
-    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
-elif not apply_quant and not apply_sparse:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
-else:
-    exit(-1)
 
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = False
-chunk_length = 2048
+chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
 num_generate = 128
 model_type = "base"
 
@@ -51,6 +40,20 @@ def make_input(digits, a = 2500, b = 4000):
 # prompt = make_input(681725493, 1000, 2000) # 60k
 prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = "Beijing is the"
+
+if apply_quant and apply_sparse:
+    exit(-1)
+elif not apply_quant and apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
+elif apply_quant and not apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
+elif not apply_quant and not apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
+else:
+    exit(-1)
+
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
 input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()
@@ -72,7 +75,7 @@ else:
         llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
+        llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()
@@ -93,10 +96,10 @@ else:
     print(tokenizer.decode(gen_result[0]))
 
 print(f"prefill length: {input_ids.shape[1]}")
-print(f"prefill time: {prefill_time} s")
-print(f"prefill tokens/s: {input_ids.shape[1] / prefill_time}")
+print(f"prefill time: {prefill_time:.2f} s")
+print(f"prefill tokens/s: {input_ids.shape[1] / prefill_time:.2f}")
 print(f"decode length: {len(gen_result[0])}")
-print(f"decode time: {decode_time} s")
-print(f"decode tokens/s: {len(gen_result[0]) / decode_time}")
+print(f"decode time: {decode_time:.2f} s")
+print(f"decode tokens/s: {len(gen_result[0]) / decode_time:.2f}")
 
 llm.print_perf_summary()

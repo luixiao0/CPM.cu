@@ -41,6 +41,7 @@ struct MiniCPM4Impl : Model {
         float scale_embed = 1.0f,
         float scale_lmhead = 1.0f,
         float scale_residual = 1.0f,
+        int sink_window_size = 1,
         int block_window_size = 32,
         int sparse_topk_k = 32
     ) {
@@ -58,11 +59,11 @@ struct MiniCPM4Impl : Model {
         
         memory = new Memory(memory_limit, memory_pool);
 
-        kv_caches = new MiniCPM4KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim);
+        kv_caches = new MiniCPM4KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim, sparse_topk_k);
 
         embedding = new Embedding<T>(vocab_size, hidden_size, scale_embed);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new MiniCPM4Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, residual_scale, block_window_size, sparse_topk_k));
+            layers.push_back(new MiniCPM4Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, residual_scale, sink_window_size, block_window_size));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         lm_head = new LMHead<T>(hidden_size, vocab_size, scale_lmhead);
@@ -93,7 +94,7 @@ struct MiniCPM4Impl : Model {
     int init_storage() {
         init_weight_ptr(memory);
         int64_t kv_cache_offset = init_output_ptr(memory, chunk_length, memory->model_offset);
-        kv_cache_offset = kv_caches->init_output_ptr(memory, kv_cache_offset);
+        kv_cache_offset = kv_caches->init_output_ptr(memory, chunk_length, kv_cache_offset);
         return this->kv_caches->budget;
     }
 
