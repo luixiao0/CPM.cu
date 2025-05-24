@@ -94,6 +94,7 @@ setup(
                 *glob.glob("src/flash_attn/src/*hdim128_bf16*.cu"),
             ],
             libraries=["cublas"],
+            depends=all_headers,
             extra_compile_args={
                 "cxx": ["-O3", "-std=c++17"],
                 "nvcc": append_nvcc_threads(

@@ -1,6 +1,5 @@
 #pragma once
 #include "../attn.cuh"
-#include "perf.cuh"
 #include "w4a16_gptq_marlin_linear.cuh"
 
 

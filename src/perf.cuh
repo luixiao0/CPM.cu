@@ -13,7 +13,7 @@
 #include <cuda_profiler_api.h>
 #endif
 
-#define DISABLE_PERF
+// #define DISABLE_PERF
 // 性能测量开关，可以通过编译时定义DISABLE_PERF来禁用
 #ifndef DISABLE_PERF
 #define PERF_ENABLED 1
