@@ -86,7 +86,6 @@ class fwdIterator{
             }
         }
 
-        assert(result == -1);
         if (target > k_window_right && result <= k_window_right && k_window_left <= k_window_right)
             return k_window_right;
         
