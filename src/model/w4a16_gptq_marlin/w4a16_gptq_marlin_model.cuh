@@ -113,10 +113,10 @@ struct W4A16GPTQMarlinModelImpl: Model {
                 int layer_idx = std::stoi(matches[1]);
                 layers[layer_idx]->load_to_storage(matches[2], ptr);
             } else {
-                throw std::invalid_argument("Unsupported name (layer_idx not found): " + name);
+                throw std::invalid_argument("Model Layer Unsupported name (layer_idx not found): " + name);
             }
         } else {
-            throw std::invalid_argument("Unsupported name " + name);
+            throw std::invalid_argument("Model Unsupported name " + name);
         }
     }
 

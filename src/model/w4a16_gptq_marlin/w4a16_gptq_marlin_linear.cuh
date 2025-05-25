@@ -93,7 +93,7 @@ struct W4A16GPTQMarlinLinear {
         } else if (name.find("bias") != std::string::npos) {
             cudaMemcpy((void*)bias, ptr, dim_out * sizeof(T), cudaMemcpyHostToDevice);
         } else {
-            throw std::invalid_argument("Unsupported name " + name);
+            throw std::invalid_argument("Linear Unsupported name " + name);
         }
     }
 

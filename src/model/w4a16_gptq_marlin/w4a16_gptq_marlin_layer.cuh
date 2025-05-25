@@ -48,7 +48,7 @@ struct W4A16GPTQMarlinLayer {
         } else if (name.find("mlp") != std::string::npos || name.find("post_attention_layernorm") != std::string::npos) {
             this->ffn->load_to_storage(name, ptr);
         } else {
-            throw std::invalid_argument("Unsupported name " + name);
+            throw std::invalid_argument("Layer Unsupported name " + name);
         }
     }
 

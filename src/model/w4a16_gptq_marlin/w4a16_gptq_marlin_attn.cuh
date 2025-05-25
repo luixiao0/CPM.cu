@@ -70,7 +70,7 @@ struct W4A16GPTQMarlinAttention {
         } else if (name.find("input_layernorm") != std::string::npos) {
             this->attn_norm->load_to_storage(name, ptr);
         } else {
-            throw std::invalid_argument("Unsupported name " + name);
+            throw std::invalid_argument("Attn Unsupported name " + name);
         }
     }
 

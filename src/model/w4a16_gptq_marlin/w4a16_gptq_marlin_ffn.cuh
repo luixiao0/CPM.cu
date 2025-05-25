@@ -51,7 +51,7 @@ struct W4A16GPTQMarlinGatedFFN {
         } else if (name.find("post_attention_layernorm") != std::string::npos) {
             this->ffn_norm->load_to_storage(name, ptr);
         } else {
-            throw std::invalid_argument("Unsupported name " + name);
+            throw std::invalid_argument("FFN Unsupported name " + name);
         }
     }
 
