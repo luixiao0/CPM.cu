@@ -255,8 +255,65 @@ struct MiniCPM4Attention {
 
         kv_cache->compress(stream);
 
-        uint64_t fakeblock; // TODO minicpm4 fake blockmask now
-        uint64_t *blockmask = &fakeblock;
+        uint64_t fakeblock;
+        uint64_t *blockmask = nullptr;
+        if (kv_cache->c1_len > 0) {
+            int q_round, k_round, out_len;
+            mha_fwd_stage1(
+                TypeTraits<T>::type_code()==1,
+                1,
+                num_tokens,
+                kv_cache->c1_len,
+                num_tokens,
+                this->num_attention_heads,
+                this->num_key_value_heads,
+                this->head_dim,
+                this->q_proj->output,
+                kv_cache->c1_cache,
+                kv_cache->c2_cache,
+                nullptr,
+                kv_cache->stage1_score,
+                rsqrtf(float(this->head_dim)),
+                false,
+                -1,
+                -1,
+                0,
+                stream.stream,
+                q_round,
+                k_round
+            );
+            maxpooling_func(
+                stream.stream,
+                kv_cache->stage1_score,
+                kv_cache->pool_score,
+                this->num_key_value_heads,
+                num_tokens,
+                q_round,
+                k_round,
+                kv_cache->next_kv_length,
+                this->sink_window_size,
+                this->block_window_size,
+                out_len
+            );
+            kv_cache->topk_func->prefill(
+                stream,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->pool_score,
+                out_len
+            );
+            topk_to_uint64_func(
+                stream.stream,
+                kv_cache->topk_func->topk_pos,
+                kv_cache->blockmask,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->topk_func->top,
+                padded_length
+            );
+            blockmask = kv_cache->blockmask;
+        } else {
+            blockmask = &fakeblock;
+        }
+
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -281,8 +338,8 @@ struct MiniCPM4Attention {
             -1,
             0,
             stream.stream,
-            blockmask, // TODO minicpm4 fake blockmask now
-            3072 // TODO minicpm4 fake block_window_size now
+            blockmask,
+            this->block_window_size
         );
 
         // flash attention and put output to attn_norm->output
