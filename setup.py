@@ -71,6 +71,7 @@ setup(
     install_requires=[
         "transformers==4.46.2",
         "accelerate==0.26.0",
+        "torch"
         "datasets",
         "fschat",
         "openai",
