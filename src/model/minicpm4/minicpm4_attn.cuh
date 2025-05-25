@@ -4,22 +4,32 @@
 
 template <typename T>
 void debug_print(T* arr, int q, int k) {
-    T* h_arr = new T[2 * q * k];
-    cudaMemcpy(h_arr, arr, 2 * q * k * sizeof(T), cudaMemcpyDeviceToHost);
-    printf("head = 0\n");
+    T* h_arr = new T[q * k];
+    cudaMemcpy(h_arr, arr, q * k * sizeof(T), cudaMemcpyDeviceToHost);
     for (int i = 0; i < q; i++) if (i <= 2 || i >= q-3) {
+        float value;
         for (int j = 0; j < k; j++) {
-            printf("%f ", float(h_arr[i * k + j]));
+            value = float(h_arr[i * k + j]);
+            printf("%f ", value);
+            if (isnan(value)) {
+                printf("NaN detected, exiting.\n");
+                exit(0);
+            }
         }
         printf("\n");
     }
-    printf("head = 1\n");
-    for (int i = 0; i < q; i++) if (i <= 2 || i >= q-3) {
-        for (int j = 0; j < k; j++) {
-            printf("%f ", float(h_arr[i * k + j]));
-        }
-        printf("\n");
-    }
+    // printf("head = 1\n");
+    // for (int i = 0; i < q; i++) if (i <= 2 || i >= q-3) {
+    //     for (int j = 0; j < k; j++) {
+    //         float value = float(h_arr[q * k + i * k + j]);
+    //         printf("%f ", value);
+    //         if (isnan(value)) {
+    //             printf("NaN detected, exiting.\n");
+    //             exit(0);
+    //         }
+    //     }
+    //     printf("\n");
+    // }
 }
 
 template <typename T>
@@ -119,66 +129,67 @@ struct MiniCPM4Attention {
         uint64_t *blockmask = nullptr;
         if (kv_cache->c1_len > 0) {
             int q_round, k_round, out_len;
-            // mha_fwd_stage1(
-            //     TypeTraits<T>::type_code()==1,
-            //     1,
-            //     num_tokens,
-            //     kv_cache->c1_len,
-            //     num_tokens,
-            //     this->num_attention_heads,
-            //     this->num_key_value_heads,
-            //     this->head_dim,
-            //     this->q_proj->output,
-            //     kv_cache->c1_cache,
-            //     kv_cache->c2_cache,
-            //     nullptr,
-            //     kv_cache->stage1_score,
-            //     rsqrtf(float(this->head_dim)),
-            //     false,
-            //     -1,
-            //     -1,
-            //     0,
-            //     stream.stream,
-            //     q_round,
-            //     k_round
-            // );
-            // maxpooling_func(
-            //     stream.stream,
-            //     kv_cache->stage1_score,
-            //     kv_cache->pool_score,
-            //     this->num_attention_heads,
-            //     num_tokens,
-            //     q_round,
-            //     k_round,
-            //     kv_cache->next_kv_length,
-            //     this->sink_window_size,
-            //     this->block_window_size,
-            //     out_len
-            // );
-            // kv_cache->topk_func->prefill(
-            //     stream,
-            //     2*num_tokens,
-            //     kv_cache->pool_score,
-            //     out_len
-            // );
-            // topk_to_uint64_func(
-            //     stream.stream,
-            //     kv_cache->topk_func->topk_pos,
-            //     kv_cache->blockmask,
-            //     2*num_tokens,
-            //     kv_cache->topk_func->top,
-            //     num_history_tokens+num_tokens // TODO minicpm4 decode should be padded length
-            // );
+            mha_fwd_stage1(
+                TypeTraits<T>::type_code()==1,
+                1,
+                num_tokens,
+                kv_cache->c1_len,
+                num_tokens,
+                this->num_attention_heads,
+                this->num_key_value_heads,
+                this->head_dim,
+                this->q_proj->output,
+                kv_cache->c1_cache,
+                kv_cache->c2_cache,
+                nullptr,
+                kv_cache->stage1_score,
+                rsqrtf(float(this->head_dim)),
+                false,
+                -1,
+                -1,
+                0,
+                stream.stream,
+                q_round,
+                k_round
+            );
+            maxpooling_func(
+                stream.stream,
+                kv_cache->stage1_score,
+                kv_cache->pool_score,
+                this->num_key_value_heads,
+                num_tokens,
+                q_round,
+                k_round,
+                kv_cache->next_kv_length,
+                this->sink_window_size,
+                this->block_window_size,
+                out_len
+            );
+            kv_cache->topk_func->prefill(
+                stream,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->pool_score,
+                out_len
+            );
+            topk_to_uint64_func(
+                stream.stream,
+                kv_cache->topk_func->topk_pos,
+                kv_cache->blockmask,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->topk_func->top,
+                num_history_tokens+num_tokens // TODO minicpm4 decode should be padded length
+            );
             // TODO minicpm4 delete these
             // printf("num_tokens: %d, q_round: %d, k_round: %d, num_history_tokens: %d, out_len: %d, prev_kv_length: %d, next_kv_length: %d, c1_len: %d, c2_len: %d\n", num_tokens, q_round, k_round, num_history_tokens, out_len, kv_cache->prev_kv_length, kv_cache->next_kv_length, kv_cache->c1_len, kv_cache->c2_len);
-            // debug_print(kv_cache->stage1_score, q_round, k_round);
-            // debug_print(kv_cache->pool_score, num_tokens, out_len);
+            // debug_print(kv_cache->stage1_score, 2*q_round, k_round);
+            // debug_print(kv_cache->pool_score, 2*num_tokens, out_len);
+            // debug_print(kv_cache->c1_cache, kv_cache->c1_len, kv_cache->dim);
             // printf("topk_pos\n");
-            // debug_print(kv_cache->topk_func->topk_pos, num_tokens, kv_cache->topk_func->top);
+            // debug_print(kv_cache->topk_func->topk_pos, 2*num_tokens, kv_cache->topk_func->top);
             // printf("topk_val\n");
             // debug_print(kv_cache->topk_func->topk_val, num_tokens, kv_cache->topk_func->top);
+            blockmask = kv_cache->blockmask;
         }
-        blockmask = &fakeblock;
 
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,

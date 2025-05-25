@@ -34,6 +34,9 @@ def make_input(digits, a = 2500, b = 4000):
 prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
+# prompt = make_input(681725493, 400, 800) # 24k
+# prompt = make_input(681725493, 300, 600) # 18k
+# prompt = make_input(681725493, 200, 400) # 12k
 # prompt = make_input(681725493, 100, 200) # 6k
 # prompt = "Beijing is the"
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
@@ -72,10 +75,10 @@ decode_time = gen_result[-1]
 prefill_time = et - st - decode_time
 
 if model_type == "medusa" or model_type == "eagle":
-    print(tokenizer.decode(gen_result[0]))
+    print(tokenizer.decode(gen_result[0]).strip())
     print("Mean acc:", np.mean(gen_result[1]))
 else:
-    print(tokenizer.decode(gen_result[0]))
+    print(tokenizer.decode(gen_result[0]).strip())
 
 print("prefill length:", input_ids.shape[1])
 print("prefill time:", prefill_time)
