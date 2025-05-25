@@ -40,6 +40,7 @@ class fwdIterator{
         if(max_block_idx == 0){
             return -1;
         };
+        if (target < 0) return -1;
         
         if (k_window_left <= target && target <= k_window_right){
             return target;
