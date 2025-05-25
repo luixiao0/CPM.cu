@@ -3,23 +3,38 @@
 #include "minicpm4_kvcache.cuh"
 
 template <typename T>
-void debug_print(T* arr, int q, int k) {
-    T* h_arr = new T[2 * q * k];
-    cudaMemcpy(h_arr, arr, 2 * q * k * sizeof(T), cudaMemcpyDeviceToHost);
-    printf("head = 0\n");
-    for (int i = 0; i < q; i++) if (i <= 2 || i >= q-3) {
-        for (int j = 0; j < k; j++) {
-            printf("%f ", float(h_arr[i * k + j]));
+void debug_print(std::string name, T* arr, int n, int m) {
+    FILE* fp = fopen(name.c_str(), "w");
+    T* h_arr = new T[n * m];
+    cudaMemcpy(h_arr, arr, n * m * sizeof(T), cudaMemcpyDeviceToHost);
+    fprintf(fp, "%d %d\n", n, m);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            float value = float(h_arr[i * m + j]);
+            fprintf(fp, "%f ", value);
         }
-        printf("\n");
+        fprintf(fp, "\n");
     }
-    printf("head = 1\n");
-    for (int i = 0; i < q; i++) if (i <= 2 || i >= q-3) {
-        for (int j = 0; j < k; j++) {
-            printf("%f ", float(h_arr[i * k + j]));
+    fclose(fp);
+    delete[] h_arr;
+}
+
+template <>
+void debug_print(std::string name, uint64_t* arr, int n, int m) {
+    FILE* fp = fopen(name.c_str(), "w");
+    uint64_t* h_arr = new uint64_t[n * m];
+    cudaMemcpy(h_arr, arr, n * m * sizeof(uint64_t), cudaMemcpyDeviceToHost);
+    fprintf(fp, "%d %d\n", n, m);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            for (int k = 0; k < 64; k++) {
+                fprintf(fp, "%d", (h_arr[i * m + j] >> k) & 1);
+            }
         }
-        printf("\n");
+        fprintf(fp, "\n");
     }
+    fclose(fp);
+    delete[] h_arr;
 }
 
 template <typename T>
@@ -119,65 +134,71 @@ struct MiniCPM4Attention {
 
         uint64_t *blockmask = nullptr;
         if (kv_cache->c1_len > 0) {
-            // int q_round, k_round, out_len;
-            // mha_fwd_stage1(
-            //     TypeTraits<T>::type_code()==1,
-            //     1,
-            //     num_tokens,
-            //     kv_cache->c1_len,
-            //     num_tokens,
-            //     this->num_attention_heads,
-            //     this->num_key_value_heads,
-            //     this->head_dim,
-            //     this->q_proj->output,
-            //     kv_cache->c1_cache,
-            //     kv_cache->c2_cache,
-            //     nullptr,
-            //     kv_cache->stage1_score,
-            //     rsqrtf(float(this->head_dim)),
-            //     false,
-            //     -1,
-            //     -1,
-            //     0,
-            //     stream.stream,
-            //     q_round,
-            //     k_round
-            // );
-            // maxpooling_func(
-            //     stream.stream,
-            //     kv_cache->stage1_score,
-            //     kv_cache->pool_score,
-            //     this->num_attention_heads,
-            //     num_tokens,
-            //     q_round,
-            //     k_round,
-            //     kv_cache->next_kv_length,
-            //     this->sink_window_size,
-            //     this->block_window_size,
-            //     out_len
-            // );
-            // kv_cache->topk_func->prefill(
-            //     stream,
-            //     2*num_tokens,
-            //     kv_cache->pool_score,
-            //     out_len
-            // );
-            // topk_to_uint64_func(
-            //     stream.stream,
-            //     kv_cache->topk_func->topk_pos,
-            //     kv_cache->blockmask,
-            //     2*num_tokens,
-            //     kv_cache->topk_func->top,
-            //     num_history_tokens+num_tokens // TODO minicpm4 decode should be padded length
-            // );
-            // TODO minicpm4 delete these
-            // printf("num_tokens: %d, q_round: %d, k_round: %d, num_history_tokens: %d, out_len: %d, prev_kv_length: %d, next_kv_length: %d, c1_len: %d, c2_len: %d\n", num_tokens, q_round, k_round, num_history_tokens, out_len, kv_cache->prev_kv_length, kv_cache->next_kv_length, kv_cache->c1_len, kv_cache->c2_len);
-            // debug_print(kv_cache->stage1_score, q_round, k_round);
-            // debug_print(kv_cache->pool_score, num_tokens, out_len);
-            // printf("topk_pos\n");
-            // debug_print(kv_cache->topk_func->topk_pos, num_tokens, kv_cache->topk_func->top);
-            // printf("topk_val\n");
-            // debug_print(kv_cache->topk_func->topk_val, num_tokens, kv_cache->topk_func->top);
+            int q_round, k_round, out_len;
+            mha_fwd_stage1(
+                TypeTraits<T>::type_code()==1,
+                1,
+                num_tokens,
+                kv_cache->c1_len,
+                num_tokens,
+                this->num_attention_heads,
+                this->num_key_value_heads,
+                this->head_dim,
+                this->q_proj->output,
+                kv_cache->c1_cache,
+                kv_cache->c2_cache,
+                nullptr,
+                kv_cache->stage1_score,
+                rsqrtf(float(this->head_dim)),
+                false,
+                -1,
+                -1,
+                0,
+                stream.stream,
+                q_round,
+                k_round
+            );
+            maxpooling_func(
+                stream.stream,
+                kv_cache->stage1_score,
+                kv_cache->pool_score,
+                this->num_key_value_heads,
+                num_tokens,
+                q_round,
+                k_round,
+                kv_cache->next_kv_length,
+                this->sink_window_size,
+                this->block_window_size,
+                out_len
+            );
+            kv_cache->topk_func->prefill(
+                stream,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->pool_score,
+                out_len
+            );
+            topk_to_uint64_func(
+                stream.stream,
+                kv_cache->topk_func->topk_pos,
+                kv_cache->blockmask,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->topk_func->top,
+                num_history_tokens+num_tokens // TODO minicpm4 decode should be padded length
+            );
+            blockmask = kv_cache->blockmask;
+
+            // if (num_history_tokens == 8192) {
+            //     printf("num_history_tokens: %d, num_tokens: %d\n", num_history_tokens, num_tokens);
+            //     debug_print("q.txt", this->q_proj->output, num_tokens, this->hidden_size);
+            //     debug_print("k_cache.txt", kv_cache->k_cache, num_history_tokens, this->hidden_size/16);
+            //     debug_print("v_cache.txt", kv_cache->v_cache, num_history_tokens, this->hidden_size/16);
+            //     debug_print("c1_cache.txt", kv_cache->c1_cache, kv_cache->c1_len, this->hidden_size/16);
+            //     debug_print("stage1_score.txt", kv_cache->stage1_score, 2*q_round, k_round);
+            //     debug_print("pool_score.txt", kv_cache->pool_score, 2*num_tokens, out_len);
+            //     debug_print("topk.txt", kv_cache->topk_func->topk_pos, 2*num_tokens, kv_cache->topk_func->top);
+            //     debug_print("blockmask.txt", blockmask, 2*num_tokens, ((num_history_tokens+num_tokens+63)/64+63)/64);
+            //     exit(0);
+            // }
         }
 
         cuda_perf_start_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
@@ -205,7 +226,7 @@ struct MiniCPM4Attention {
             -1,
             0,
             stream.stream,
-            blockmask, //this->q_proj->output, // TODO minicpm4 fake blockmask now
+            blockmask,
             this->block_window_size
         );
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
@@ -236,8 +257,61 @@ struct MiniCPM4Attention {
         kv_cache->compress(stream);
 
         uint64_t *blockmask = nullptr;
+        if (kv_cache->c1_len > 0) {
+            int q_round, k_round, out_len;
+            mha_fwd_stage1(
+                TypeTraits<T>::type_code()==1,
+                1,
+                num_tokens,
+                kv_cache->c1_len,
+                num_tokens,
+                this->num_attention_heads,
+                this->num_key_value_heads,
+                this->head_dim,
+                this->q_proj->output,
+                kv_cache->c1_cache,
+                kv_cache->c2_cache,
+                nullptr,
+                kv_cache->stage1_score,
+                rsqrtf(float(this->head_dim)),
+                false,
+                -1,
+                -1,
+                0,
+                stream.stream,
+                q_round,
+                k_round
+            );
+            maxpooling_func(
+                stream.stream,
+                kv_cache->stage1_score,
+                kv_cache->pool_score,
+                this->num_key_value_heads,
+                num_tokens,
+                q_round,
+                k_round,
+                kv_cache->next_kv_length,
+                this->sink_window_size,
+                this->block_window_size,
+                out_len
+            );
+            kv_cache->topk_func->prefill(
+                stream,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->pool_score,
+                out_len
+            );
+            topk_to_uint64_func(
+                stream.stream,
+                kv_cache->topk_func->topk_pos,
+                kv_cache->blockmask,
+                this->num_key_value_heads*num_tokens,
+                kv_cache->topk_func->top,
+                padded_length
+            );
+            blockmask = kv_cache->blockmask;
+        }
 
-        cuda_perf_start_on_stream_f(DECODE_ATTN_CORE, stream.stream);
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -262,7 +336,7 @@ struct MiniCPM4Attention {
             -1,
             0,
             stream.stream,
-            blockmask, //this->q_proj->output, // TODO minicpm4 fake blockmask now
+            blockmask,
             this->block_window_size
         );
         cuda_perf_stop_on_stream_f(DECODE_ATTN_CORE, stream.stream);

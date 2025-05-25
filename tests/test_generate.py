@@ -12,10 +12,10 @@ apply_quant = False
 
 if apply_sparse:
     sink_window_size = 1
-    block_window_size = 2048
-    sparse_topk_k = 0
-    # block_window_size = 32
-    # sparse_topk_k = 32
+    # block_window_size = 2048
+    # sparse_topk_k = 0
+    block_window_size = 32
+    sparse_topk_k = 32
 else:
     sink_window_size = 0
     block_window_size = 0
@@ -37,8 +37,9 @@ def make_input(digits, a = 2500, b = 4000):
     return head + before + needle + after + query
 
 # prompt = make_input(681725493, 2000, 4000) # 120k
+prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
-prompt = make_input(681725493, 500, 1000) # 30k
+# prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = "Beijing is the"
 
 if apply_quant and apply_sparse:
@@ -90,10 +91,10 @@ decode_time = gen_result[-1]
 prefill_time = et - st - decode_time
 
 if model_type == "medusa" or model_type == "eagle":
-    print(tokenizer.decode(gen_result[0]))
+    print(tokenizer.decode(gen_result[0]).strip())
     print("Mean acc:", np.mean(gen_result[1]))
 else:
-    print(tokenizer.decode(gen_result[0]))
+    print(tokenizer.decode(gen_result[0]).strip())
 
 print(f"prefill length: {input_ids.shape[1]}")
 print(f"prefill time: {prefill_time:.2f} s")
