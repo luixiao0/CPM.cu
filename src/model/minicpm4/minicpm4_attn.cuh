@@ -126,6 +126,8 @@ struct MiniCPM4Attention {
         this->v_proj->prefill(stream, num_tokens, this->attn_norm->output, v_cache);
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, k_cache, position_ids);
 
+        cuda_perf_start_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
+        cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE1, stream.stream);
         if (num_history_tokens == 0) {
             kv_cache->init();
         } else {
@@ -200,8 +202,9 @@ struct MiniCPM4Attention {
             //     exit(0);
             // }
         }
+        cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE1, stream.stream);
 
-        cuda_perf_start_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
+        cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE2, stream.stream);
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -229,6 +232,7 @@ struct MiniCPM4Attention {
             blockmask,
             this->block_window_size
         );
+        cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE2, stream.stream);
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
 
         // flash attention and put output to attn_norm->output
@@ -251,6 +255,9 @@ struct MiniCPM4Attention {
         k = q + num_tokens * this->num_attention_heads * this->head_dim;
         v = k + num_tokens * this->num_key_value_heads * this->head_dim;
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
+
+        cuda_perf_start_on_stream_f(DECODE_ATTN_CORE, stream.stream);
+        cuda_perf_start_on_stream_f(DECODE_ATTN_STAGE1, stream.stream);
 
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
 
@@ -311,7 +318,9 @@ struct MiniCPM4Attention {
             );
             blockmask = kv_cache->blockmask;
         }
+        cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE1, stream.stream);
 
+        cuda_perf_start_on_stream_f(DECODE_ATTN_STAGE2, stream.stream);
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -339,6 +348,7 @@ struct MiniCPM4Attention {
             blockmask,
             this->block_window_size
         );
+        cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE2, stream.stream);
         cuda_perf_stop_on_stream_f(DECODE_ATTN_CORE, stream.stream);
 
         // flash attention and put output to attn_norm->output
