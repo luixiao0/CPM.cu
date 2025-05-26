@@ -9,6 +9,7 @@ import numpy as np
 
 apply_sparse = True
 apply_quant = False
+model_type = "base"
 
 if apply_sparse:
     sink_window_size = 1
@@ -21,12 +22,11 @@ else:
     block_window_size = 0
     sparse_topk_k = 0
 
-eagle_path = ""
+eagle_path = "/data1/liyx/Models/EAGLE-LLaMA3-Instruct-8B"
 dtype = torch.float16
 cuda_graph = False
 chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
 num_generate = 128
-model_type = "base"
 
 def make_input(digits, a = 2500, b = 4000):
     head = "There is a pass key hidden in the context. Find it and remember it. I will quiz you about it later. "
@@ -40,6 +40,7 @@ def make_input(digits, a = 2500, b = 4000):
 prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
+# prompt = make_input(681725493, 10, 50)
 # prompt = "Beijing is the"
 
 if apply_quant and apply_sparse:
@@ -48,10 +49,9 @@ elif not apply_quant and apply_sparse:
     path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
 elif apply_quant and not apply_sparse:
     path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
-    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
 elif not apply_quant and not apply_sparse:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-    # path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
+    # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+    path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
 else:
     exit(-1)
 
@@ -69,11 +69,11 @@ if apply_quant:
         llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.8, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.45, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
