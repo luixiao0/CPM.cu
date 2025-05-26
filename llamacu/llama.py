@@ -25,9 +25,9 @@ class LLM(torch.nn.Module):
                  chunk_length: int = 1024,
                  dtype: torch.dtype = None,
                  cuda_graph: bool = False,
-                 sink_window_size: int = 1,
-                 block_window_size: int = 32,
-                 sparse_topk_k: int = 32,
+                 sink_window_size: int = 0,
+                 block_window_size: int = 0,
+                 sparse_topk_k: int = 0,
     ):
         super().__init__()
 
