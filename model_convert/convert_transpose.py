@@ -11,9 +11,9 @@ args = parser.parse_args()
 model = torch.load(f"{args.model_path}/pytorch_model.bin")
 
 for name in list(model.keys()):
-    if ".q_proj.weight" in name:
-        print(f"Processing {name}")
-        model[name] = model[name].view(2, 16, 128, -1).transpose(0, 1).reshape(4096, -1).contiguous()
+    # if ".q_proj.weight" in name:
+    #     print(f"Processing {name}")
+    #     model[name] = model[name].view(2, 16, 128, -1).transpose(0, 1).reshape(4096, -1).contiguous()
     if ".o_proj.weight" in name:
         print(f"Processing {name}")
         model[name] = model[name].view(-1, 2, 16, 128).transpose(1, 2).reshape(-1, 4096).contiguous()
