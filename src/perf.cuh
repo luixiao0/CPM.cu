@@ -13,7 +13,7 @@
 #include <cuda_profiler_api.h>
 #endif
 
-//#define ENABLE_PERF
+// #define ENABLE_PERF
 // 性能测量开关，可以通过编译时定义ENABLE_PERF来启用
 #ifdef ENABLE_PERF
 #define PERF_ENABLED 1
@@ -190,19 +190,19 @@ std::unordered_map<std::string, PerfData>& get_perf_data();
         cudaDeviceSynchronize(); /* 在总结前同步所有CUDA操作 */ \
         auto& perf_data = get_perf_data(); \
         std::cout << "\n=== Performance Summary ===" << std::endl; \
-        std::cout << std::left << std::setw(20) << "Label" \
+        std::cout << std::left << std::setw(30) << "Label" \
                   << std::setw(8) << "Type" \
                   << std::setw(8) << "Count" \
                   << std::setw(15) << "Total(ms)" \
                   << std::setw(15) << "Average(ms)" << std::endl; \
-        std::cout << std::string(66, '-') << std::endl; \
+        std::cout << std::string(76, '-') << std::endl; \
         \
         for (auto& pair : perf_data) { \
             const auto& name = pair.first; \
             auto& data = pair.second; \
             if (data.count > 0) { \
                 double avg = (data.count > 0) ? (data.total_time / data.count) : 0.0; \
-                std::cout << std::left << std::setw(20) << name \
+                std::cout << std::left << std::setw(30) << name \
                           << std::setw(8) << data.type \
                           << std::setw(8) << data.count \
                           << std::setw(15) << std::fixed << std::setprecision(3) << data.total_time \
@@ -221,7 +221,7 @@ std::unordered_map<std::string, PerfData>& get_perf_data();
         if (has_cuda) { \
             size_t free_mem, total_mem; \
             cuda_get_memory_usage(free_mem, total_mem); \
-            std::cout << std::string(66, '-') << std::endl; \
+            std::cout << std::string(76, '-') << std::endl; \
             std::cout << "GPU Memory: " << (total_mem - free_mem) / (1024*1024) << "MB used / " \
                       << total_mem / (1024*1024) << "MB total" << std::endl; \
         } \
