@@ -11,6 +11,10 @@ cudaGraphExec_t graphExec;
 
 void init_resources() {
   if (initialized) return;
+  
+  // 初始化signal处理器
+  init_signal_handlers();
+  
   cudaCheck(cudaStreamCreate(&calc_stream.stream));
   cublasCheck(cublasCreate(&calc_stream.cublas_handle));
   cublasCheck(cublasSetStream(calc_stream.cublas_handle, calc_stream.stream));

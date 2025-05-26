@@ -133,6 +133,7 @@ setup(
             sources = [
                 "src/entry.cu",
                 "src/utils.cu",
+                "src/signal_handler.cu",
                 "src/perf.cu",
                 "src/qgemm/w8a8/w8a8_gemm_cuda.cu",
                 "src/qgemm/w4a8_qoq_chn/w4a8_qoq_chn_gemm_cuda.cu",
@@ -145,7 +146,7 @@ setup(
                 # *glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"),
                 *glob.glob("src/flash_attn/src/*hdim128_bf16*.cu"),
             ],
-            libraries=["cublas"],
+            libraries=["cublas", "dl"],
             depends=all_headers,
             extra_compile_args={
                 "cxx": cxx_args,
