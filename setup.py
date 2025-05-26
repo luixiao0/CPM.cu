@@ -8,6 +8,49 @@ def append_nvcc_threads(nvcc_extra_args):
     nvcc_threads = os.getenv("NVCC_THREADS") or "16"
     return nvcc_extra_args + ["--threads", nvcc_threads]
 
+def get_compile_args():
+    """根据是否为debug模式返回不同的编译参数"""
+    debug_mode = os.getenv("LLAMACU_DEBUG", "0").lower() in ("1", "true", "yes")
+    perf_mode = os.getenv("LLAMACU_PERF", "0").lower() in ("1", "true", "yes")
+    
+    # 公共编译参数
+    common_cxx_args = ["-std=c++17"]
+    common_nvcc_args = [
+        "-std=c++17",
+        "-U__CUDA_NO_HALF_OPERATORS__",
+        "-U__CUDA_NO_HALF_CONVERSIONS__",
+        "-U__CUDA_NO_HALF2_OPERATORS__",
+        "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
+        "--expt-relaxed-constexpr",
+        "--expt-extended-lambda",
+    ]
+    
+    if debug_mode:
+        print("Debug mode enabled (LLAMACU_DEBUG=1)")
+        cxx_args = common_cxx_args + ["-g", "-O0", "-DDEBUG"]
+        nvcc_base_args = common_nvcc_args + [
+            "-g", "-G", "-O0",
+            "-DDEBUG",
+            "-DCUDA_DEBUG",
+        ]
+    else:
+        print("Release mode enabled")
+        cxx_args = common_cxx_args + ["-O3"]
+        nvcc_base_args = common_nvcc_args + [
+            "-O3",
+            "--use_fast_math",
+        ]
+    
+    # 添加性能测试控制
+    if perf_mode:
+        print("Performance monitoring enabled (LLAMACU_PERF=1)")
+        cxx_args.append("-DENABLE_PERF")
+        nvcc_base_args.append("-DENABLE_PERF")
+    else:
+        print("Performance monitoring disabled (LLAMACU_PERF=0)")
+    
+    return cxx_args, nvcc_base_args
+
 def get_all_headers():
     """获取所有头文件，用于依赖跟踪"""
     header_patterns = [
@@ -57,6 +100,9 @@ arch = "80"
 # 获取所有头文件用于依赖跟踪
 all_headers = get_all_headers()
 
+# 获取编译参数
+cxx_args, nvcc_base_args = get_compile_args()
+
 setup(
     name='llamacu',
     version='0.0.0',
@@ -71,7 +117,7 @@ setup(
     install_requires=[
         "transformers==4.46.2",
         "accelerate==0.26.0",
-        "torch"
+        "torch",
         "datasets",
         "fschat",
         "openai",
@@ -102,17 +148,9 @@ setup(
             libraries=["cublas"],
             depends=all_headers,
             extra_compile_args={
-                "cxx": ["-O3", "-std=c++17"],
+                "cxx": cxx_args,
                 "nvcc": append_nvcc_threads(
-                    [
-                        "-O3", "-std=c++17",
-                        "-U__CUDA_NO_HALF_OPERATORS__",
-                        "-U__CUDA_NO_HALF_CONVERSIONS__",
-                        "-U__CUDA_NO_HALF2_OPERATORS__",
-                        "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
-                        "--expt-relaxed-constexpr",
-                        "--expt-extended-lambda",
-                        "--use_fast_math",
+                    nvcc_base_args + [
                         "-gencode", f"arch=compute_{arch},code=sm_{arch}",
                         f"-D_ARCH{arch}",
                         # 添加依赖文件生成选项
