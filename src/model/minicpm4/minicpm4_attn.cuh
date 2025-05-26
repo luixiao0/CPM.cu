@@ -137,6 +137,7 @@ struct MiniCPM4Attention {
         uint64_t *blockmask = nullptr;
         if (kv_cache->c1_len > 0) {
             int q_round, k_round, out_len;
+            cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(
                 TypeTraits<T>::type_code()==1,
                 1,
@@ -160,6 +161,7 @@ struct MiniCPM4Attention {
                 q_round,
                 k_round
             );
+            cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE1_CORE, stream.stream);
             maxpooling_func(
                 stream.stream,
                 kv_cache->stage1_score,
