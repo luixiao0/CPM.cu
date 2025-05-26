@@ -13,10 +13,7 @@ sparse_topk = 32
 apply_sparse = True
 quant = False
 path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed_v2"
 # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
-# path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct"
-# path = "/home/test/test01/zwl/models/Meta-Llama-3-8B-Instruct-GPTQ-Marlin"
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = True
@@ -31,9 +28,9 @@ def make_input(digits, a = 2500, b = 4000):
     after = "The sky is blue. The tree is green. The flower is red. The sun is yellow. " * b
     query = "Now, give me the exact number of the pass key. The pass key is "
     return head + before + needle + after + query
-# prompt = make_input(681725493, 2000, 4000) # 120k
+prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1500, 3000) # 90k
-prompt = make_input(681725493, 1000, 2000) # 60k
+# prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = make_input(681725493, 400, 800) # 24k
 # prompt = make_input(681725493, 300, 600) # 18k
