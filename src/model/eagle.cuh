@@ -251,6 +251,8 @@ struct EagleImpl : Model {
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1;
     Linear<T> *fc2;
+    RMSNorm<T> *input_norm1;
+    RMSNorm<T> *input_norm2;
     functions::TopK<T>* topk_func;
     functions::TopK<T>* topk_func_2;
 
@@ -273,7 +275,8 @@ struct EagleImpl : Model {
         int num_layers,
         int num_iter,
         int topk_per_iter,
-        int tree_size
+        int tree_size,
+        bool use_norm = false
     ) {
         this->model = model;
         this->num_layers = num_layers;
@@ -285,6 +288,15 @@ struct EagleImpl : Model {
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);
         fc1 = new Linear<T, true, true>(this->model->hidden_size, this->model->hidden_size);
         fc2 = new Linear<T>(this->model->hidden_size, this->model->hidden_size);
+        if (use_norm) {
+            printf("use_norm: %d\n", use_norm);
+            input_norm1 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
+            input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
+        }
+        else {
+            input_norm1 = nullptr;
+            input_norm2 = nullptr;
+        }
         for (int i = 0; i < num_layers; i++) {
             layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps));
         }
@@ -296,6 +308,10 @@ struct EagleImpl : Model {
     void init_weight_ptr(Memory* memory) {
         fc1->init_weight_ptr(memory);
         fc2->init_weight_ptr(memory);
+        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+            input_norm1->init_weight_ptr(memory);
+            input_norm2->init_weight_ptr(memory);
+        }
         for (int i = 0; i < num_layers; i++) {
             layers[i]->init_weight_ptr(memory);
         }
@@ -306,6 +322,10 @@ struct EagleImpl : Model {
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         offset = fc1->init_output_ptr(memory, num_tokens, offset);
         offset = fc2->init_output_ptr(memory, num_tokens, offset);
+        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+            offset = input_norm1->init_output_ptr(memory, num_tokens, offset);
+            offset = input_norm2->init_output_ptr(memory, num_tokens, offset);
+        }
         int64_t layer_end = 0;
         for (int i = 0; i < num_layers; i++) {
             layer_end = layers[i]->init_output_ptr(memory, num_tokens, offset);
@@ -350,6 +370,10 @@ struct EagleImpl : Model {
                 fc1->load_to_storage(name, ptr);
             } else if (name.substr(0, 9) == "eagle.fc2") {
                 fc2->load_to_storage(name, ptr);
+            } else if (name.find("eagle.input_norm1") != std::string::npos) {
+                input_norm1->load_to_storage(name, ptr);
+            } else if (name.find("eagle.input_norm2") != std::string::npos) {
+                input_norm2->load_to_storage(name, ptr);
             } else {
                 std::regex layer_regex("eagle\\.layers\\.(\\d+)\\.(.*)");
                 std::smatch matches;
@@ -367,8 +391,15 @@ struct EagleImpl : Model {
 
     void eagle_prefill(int num_history_tokens) {
         cudaMemcpy(this->prev_embed + (num_prev - 1) * this->model->hidden_size, this->model->embedding->output, this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-        this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+            this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
+            this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
+            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+        } else {
+            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
@@ -379,8 +410,15 @@ struct EagleImpl : Model {
     }
 
     void eagle_decode(int32_t* cache_length) {
-        this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+            this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
+            this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
+            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+        } else {
+            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
@@ -441,8 +479,15 @@ struct EagleImpl : Model {
         for (int d = 1; d < this->num_iter; ++d) {
             add(calc_stream, 1, this->eagle_cache_length, topk_per_iter);
             this->model->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
-            this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
-            this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+            if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+                this->input_norm1->prefill(calc_stream, topk_per_iter, this->model->embedding->output, nullptr);
+                this->input_norm2->prefill(calc_stream, topk_per_iter, this->fc1->output, nullptr);
+                this->fc1->prefill(calc_stream, topk_per_iter, this->input_norm1->output);
+                this->fc2->prefill(calc_stream, topk_per_iter, this->input_norm2->output);
+            } else {
+                this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
+                this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+            }
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
             T* layer_output = nullptr;
             for (int i = 0; i < num_layers; i++) {

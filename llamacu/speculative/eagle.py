@@ -20,6 +20,7 @@ class LLM_with_eagle(LLM_with_tree_drafter):
                  num_iter=6,
                  topk_per_iter=10,
                  tree_size=60,
+                 use_norm=False,
                  **kwargs):
         super().__init__(
             "eagle", eagle_path, base_path,
@@ -36,6 +37,7 @@ class LLM_with_eagle(LLM_with_tree_drafter):
             topk_per_iter,
             self.tree_size,
             self.dtype_int,
+            use_norm
         )
 
     def _load(self, name, param, dtype=None, cls=None):

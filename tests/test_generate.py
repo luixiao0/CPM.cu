@@ -7,9 +7,16 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
-apply_sparse = True
+test_minicpm4 = True
+model_type = "eagle"
 apply_quant = False
-model_type = "base"
+apply_sparse = False
+
+if test_minicpm4:
+    eagle_use_norm = True
+else:
+    apply_sparse = False
+    eagle_use_norm = False
 
 if apply_sparse:
     sink_window_size = 1
@@ -22,7 +29,10 @@ else:
     block_window_size = 0
     sparse_topk_k = 0
 
-eagle_path = "/data1/liyx/Models/EAGLE-LLaMA3-Instruct-8B"
+if test_minicpm4:
+    eagle_path = "/data1/liyx/eagle_0526/job_35949"
+else:
+    eagle_path = "/data1/liyx/Models/EAGLE-LLaMA3-Instruct-8B"
 dtype = torch.float16
 cuda_graph = False
 chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
@@ -37,11 +47,11 @@ def make_input(digits, a = 2500, b = 4000):
     return head + before + needle + after + query
 
 # prompt = make_input(681725493, 2000, 4000) # 120k
-prompt = make_input(681725493, 1500, 3000) # 90k
+# prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = make_input(681725493, 10, 50)
-# prompt = "Beijing is the"
+prompt = "Beijing is the"
 
 if apply_quant and apply_sparse:
     exit(-1)
@@ -50,8 +60,10 @@ elif not apply_quant and apply_sparse:
 elif apply_quant and not apply_sparse:
     path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
 elif not apply_quant and not apply_sparse:
-    # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-    path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
+    if test_minicpm4:   
+        path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+    else:
+        path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
 else:
     exit(-1)
 
@@ -73,7 +85,7 @@ if apply_quant:
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph, use_norm=eagle_use_norm)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)

@@ -171,7 +171,8 @@ void init_eagle_model(
     int num_iter,
     int topk_per_iter,
     int tree_size,
-    int torch_dtype
+    int torch_dtype,
+    bool use_norm
 ) {
     DTYPE_SWITCH(torch_dtype, [&] {
         model = new EagleImpl<elem_type>(
@@ -179,7 +180,8 @@ void init_eagle_model(
             num_layers,
             num_iter,
             topk_per_iter,
-            tree_size
+            tree_size,
+            use_norm
         );
     });
 }
