@@ -12,11 +12,8 @@ model_type = "eagle"
 apply_quant = False
 apply_sparse = False
 
-if test_minicpm4:
-    eagle_use_norm = True
-else:
+if not test_minicpm4:
     apply_sparse = False
-    eagle_use_norm = False
 
 if apply_sparse:
     sink_window_size = 1
@@ -37,7 +34,7 @@ else:
 dtype = torch.float16
 cuda_graph = False
 chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
-num_generate = 1024
+num_generate = 128
 
 if apply_quant and apply_sparse:
     exit(-1)
@@ -48,6 +45,7 @@ elif apply_quant and not apply_sparse:
 elif not apply_quant and not apply_sparse:
     if test_minicpm4:   
         # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+        # path = "/data1/liyx/eagle_0526/job_33952_step_17300"
         path = "/data1/liyx/eagle_0526/job_33952_step_17300_llamaformat"
     else:
         path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
@@ -62,21 +60,24 @@ def make_input(digits, a = 2500, b = 4000):
     query = "Now, give me the exact number of the pass key. The pass key is "
     return head + before + needle + after + query
 
+prompt = None
 # prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = make_input(681725493, 10, 50)
 # prompt = "Beijing is the"
-# prompt = "北京有哪些好玩的地方"
+prompt_content = "北京有哪些好玩的地方"
 
-with open("prompt.txt", "r") as f:
-    prompt_content = f.read()
+# with open("prompt.txt", "r") as f:
+#     prompt_content = f.read()
 
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
-prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt_content}], tokenize=False, add_generation_prompt=True)
+if prompt is None:
+    prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt_content}], tokenize=False, add_generation_prompt=True)
 input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()
+print(f"input_ids: {input_ids}")
 num_tokens = input_ids.numel()
 
 position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1, num_tokens)
@@ -92,8 +93,7 @@ if apply_quant:
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        # llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=1, topk_per_iter=8, tree_size=8, chunk_length=chunk_length, cuda_graph=cuda_graph, use_norm=eagle_use_norm)
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph, use_norm=eagle_use_norm)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, topk_per_iter=10, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
