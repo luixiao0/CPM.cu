@@ -9,7 +9,7 @@ import numpy as np
 
 sink_window_size = 1
 block_window_size = 32
-sparse_topk = 32 
+sparse_topk = 64 
 apply_sparse = True
 quant = False
 path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
