@@ -316,7 +316,7 @@ struct EagleImpl : Model {
         for (int i = 0; i < num_layers; i++) {
             layers[i]->init_weight_ptr(memory);
         }
-        layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
+        // layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
         kv_caches->rotary_embedding = this->model->kv_caches->rotary_embedding;
     }
 
@@ -436,7 +436,7 @@ struct EagleImpl : Model {
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->model->embedding->prefill(calc_stream, num_tokens, input);
         if (num_history_tokens > 0) {
-            this->eagle_prefill(this->num_history_tokens);
+            this->eagle_prefill(num_history_tokens);
         }
 
         cudaMemcpy(this->prev_embed, this->model->embedding->output + this->model->hidden_size, (num_tokens - 1) * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);

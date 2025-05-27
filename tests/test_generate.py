@@ -30,13 +30,29 @@ else:
     sparse_topk_k = 0
 
 if test_minicpm4:
-    eagle_path = "/data1/liyx/eagle_0526/job_35949"
+    # eagle_path = "/data1/liyx/eagle_0526/job_35949"
+    eagle_path = "/data1/liyx/eagle_0526/job_35949_llamaformat"
 else:
     eagle_path = "/data1/liyx/Models/EAGLE-LLaMA3-Instruct-8B"
 dtype = torch.float16
 cuda_graph = False
 chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
-num_generate = 128
+num_generate = 1024
+
+if apply_quant and apply_sparse:
+    exit(-1)
+elif not apply_quant and apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
+elif apply_quant and not apply_sparse:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+elif not apply_quant and not apply_sparse:
+    if test_minicpm4:   
+        # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+        path = "/data1/liyx/eagle_0526/job_33952_step_17300_llamaformat"
+    else:
+        path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
+else:
+    exit(-1)
 
 def make_input(digits, a = 2500, b = 4000):
     head = "There is a pass key hidden in the context. Find it and remember it. I will quiz you about it later. "
@@ -51,24 +67,15 @@ def make_input(digits, a = 2500, b = 4000):
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = make_input(681725493, 10, 50)
-prompt = "Beijing is the"
+# prompt = "Beijing is the"
+# prompt = "北京有哪些好玩的地方"
 
-if apply_quant and apply_sparse:
-    exit(-1)
-elif not apply_quant and apply_sparse:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
-elif apply_quant and not apply_sparse:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
-elif not apply_quant and not apply_sparse:
-    if test_minicpm4:   
-        path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-    else:
-        path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
-else:
-    exit(-1)
+with open("prompt.txt", "r") as f:
+    prompt_content = f.read()
 
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
+prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt_content}], tokenize=False, add_generation_prompt=True)
 input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()
 num_tokens = input_ids.numel()
 
@@ -85,7 +92,8 @@ if apply_quant:
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph, use_norm=eagle_use_norm)
+        # llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=1, topk_per_iter=8, tree_size=8, chunk_length=chunk_length, cuda_graph=cuda_graph, use_norm=eagle_use_norm)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph, use_norm=eagle_use_norm)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
@@ -93,6 +101,8 @@ else:
 
 llm.init_storage()
 llm.load_from_hf()
+
+print(f"Input token number is {input_ids.shape[1]}")
 
 torch.cuda.synchronize()
 st = time.time()
