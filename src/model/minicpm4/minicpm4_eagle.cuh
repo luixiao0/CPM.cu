@@ -14,6 +14,7 @@ struct MiniCPM4EagleImpl : Model {
     int topk_per_iter;
     int tree_size;
     int total_tried;
+    float residual_scale;
     bool use_input_norm;
     bool use_attn_norm;
 
@@ -47,6 +48,7 @@ struct MiniCPM4EagleImpl : Model {
         int num_iter,
         int topk_per_iter,
         int tree_size,
+        float residual_scale = 1.0f,
         bool use_input_norm = true,
         bool use_attn_norm = true
     ) {
@@ -56,6 +58,7 @@ struct MiniCPM4EagleImpl : Model {
         this->topk_per_iter = topk_per_iter;
         this->tree_size = tree_size;
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
+        this->residual_scale = residual_scale;
         this->use_input_norm = use_input_norm;
         this->use_attn_norm = use_attn_norm;
 
@@ -67,7 +70,7 @@ struct MiniCPM4EagleImpl : Model {
             input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
         }
         for (int i = 0; i < num_layers; i++) {
-            layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps));
+            layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, this->residual_scale));
         }
 
         topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
@@ -181,6 +184,7 @@ struct MiniCPM4EagleImpl : Model {
             this->layers[i]->prefill(num_prev, num_history_tokens, this->fc2->output, layer_output, this->eagle_position_ids, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_prev, this->model->hidden_size, layer_output, this->residual_scale);
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
     }
 
@@ -200,6 +204,7 @@ struct MiniCPM4EagleImpl : Model {
             this->layers[i]->decode(num_prev, this->eagle_padded_length, this->fc2->output, layer_output, this->eagle_position_ids, cache_length, Mask(nullptr), this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_prev, this->model->hidden_size, layer_output, this->residual_scale);
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
     }
 
@@ -269,6 +274,7 @@ struct MiniCPM4EagleImpl : Model {
                 this->layers[i]->decode(topk_per_iter, this->eagle_padded_length, this->fc2->output, layer_output, this->eagle_position_ids, this->eagle_cache_length, Mask(eagle_mask_2d, topk_per_iter, topk_per_iter * d), this->kv_caches->caches[i]);
                 layer_output = this->layers[i]->output;
             }
+            elementwise_scale(calc_stream, topk_per_iter, this->model->hidden_size, layer_output, this->residual_scale);
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
             add(calc_stream, topk_per_iter, this->eagle_position_ids, 1);
 

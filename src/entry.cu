@@ -191,6 +191,7 @@ void init_minicpm4_eagle_model(
     int topk_per_iter,
     int tree_size,
     int torch_dtype,
+    float residual_scale,
     bool use_input_norm,
     bool use_attn_norm
 ) {
@@ -201,6 +202,7 @@ void init_minicpm4_eagle_model(
             num_iter,
             topk_per_iter,
             tree_size,
+            residual_scale,
             use_input_norm,
             use_attn_norm
         );
