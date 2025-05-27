@@ -3,6 +3,7 @@ from ..llama import LLM
 
 import torch
 import time
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 
 def pack_mask(mask_2d):
     '''
@@ -44,8 +45,21 @@ class LLM_with_tree_drafter(LLM):
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
 
     def load_from_hf(self):
-        self._load_from_ckpt(self.drafter_path, cls=self.drafter_type)
-        super().load_from_hf()
+        with torch.no_grad():
+            self._load_from_ckpt(self.drafter_path, cls=self.drafter_type)
+
+            # rope
+            if hasattr(self.config, "rope_scaling") and self.config.rope_scaling is not None:
+                rope_type = self.config.rope_scaling.get("rope_type", self.config.rope_scaling.get("type"))
+            else:
+                rope_type = "default"
+            # TODO only support "default", "llama3" or "longrope" with long_factor=short_factor
+            inv_freq, attention_scaling = ROPE_INIT_FUNCTIONS[rope_type](self.config, "cpu", seq_len=self.max_total_length)
+            # attention_scaling = torch.tensor([attention_scaling], dtype=torch.float32, device="cpu")
+            self._load(f"{self.drafter_type}.rotary_emb.inv_freq", inv_freq, dtype=torch.float32)
+            # self._load("model.rotary_emb.attention_scaling", attention_scaling, dtype=torch.float32)
+
+            super().load_from_hf()
 
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32

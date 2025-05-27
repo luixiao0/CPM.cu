@@ -245,6 +245,7 @@ struct EagleImpl : Model {
     int topk_per_iter;
     int tree_size;
     int total_tried;
+    bool use_norm;
 
     ModelImpl<T>* model;
     KVCacheManager<T>* kv_caches;
@@ -284,12 +285,12 @@ struct EagleImpl : Model {
         this->topk_per_iter = topk_per_iter;
         this->tree_size = tree_size;
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
+        this->use_norm = use_norm;
 
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);
         fc1 = new Linear<T, true, true>(this->model->hidden_size, this->model->hidden_size);
         fc2 = new Linear<T>(this->model->hidden_size, this->model->hidden_size);
         if (use_norm) {
-            printf("use_norm: %d\n", use_norm);
             input_norm1 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
             input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
         }
@@ -308,7 +309,7 @@ struct EagleImpl : Model {
     void init_weight_ptr(Memory* memory) {
         fc1->init_weight_ptr(memory);
         fc2->init_weight_ptr(memory);
-        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+        if (use_norm) {
             input_norm1->init_weight_ptr(memory);
             input_norm2->init_weight_ptr(memory);
         }
@@ -322,7 +323,7 @@ struct EagleImpl : Model {
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         offset = fc1->init_output_ptr(memory, num_tokens, offset);
         offset = fc2->init_output_ptr(memory, num_tokens, offset);
-        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+        if (use_norm) {
             offset = input_norm1->init_output_ptr(memory, num_tokens, offset);
             offset = input_norm2->init_output_ptr(memory, num_tokens, offset);
         }
@@ -371,9 +372,13 @@ struct EagleImpl : Model {
             } else if (name.substr(0, 9) == "eagle.fc2") {
                 fc2->load_to_storage(name, ptr);
             } else if (name.find("eagle.input_norm1") != std::string::npos) {
+                if (!use_norm) throw std::invalid_argument("norm is not used, but input_norm1 is found");
                 input_norm1->load_to_storage(name, ptr);
             } else if (name.find("eagle.input_norm2") != std::string::npos) {
+                if (!use_norm) throw std::invalid_argument("norm is not used, but input_norm2 is found");
                 input_norm2->load_to_storage(name, ptr);
+            } else if (name.find("eagle.rotary_emb") != std::string::npos) {
+                kv_caches->rotary_embedding->load_to_storage(name, ptr);
             } else {
                 std::regex layer_regex("eagle\\.layers\\.(\\d+)\\.(.*)");
                 std::smatch matches;
@@ -391,7 +396,7 @@ struct EagleImpl : Model {
 
     void eagle_prefill(int num_history_tokens) {
         cudaMemcpy(this->prev_embed + (num_prev - 1) * this->model->hidden_size, this->model->embedding->output, this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+        if (use_norm) {
             this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
             this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
             this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
@@ -410,7 +415,7 @@ struct EagleImpl : Model {
     }
 
     void eagle_decode(int32_t* cache_length) {
-        if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+        if (use_norm) {
             this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
             this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
             this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
@@ -479,7 +484,7 @@ struct EagleImpl : Model {
         for (int d = 1; d < this->num_iter; ++d) {
             add(calc_stream, 1, this->eagle_cache_length, topk_per_iter);
             this->model->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
-            if (this->input_norm1 != nullptr && this->input_norm2 != nullptr) {
+            if (use_norm) {
                 this->input_norm1->prefill(calc_stream, topk_per_iter, this->model->embedding->output, nullptr);
                 this->input_norm2->prefill(calc_stream, topk_per_iter, this->fc1->output, nullptr);
                 this->fc1->prefill(calc_stream, topk_per_iter, this->input_norm1->output);
