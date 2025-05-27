@@ -7,13 +7,23 @@ from transformers import AutoTokenizer
 import time
 import numpy as np
 
-sink_window_size = 1
-block_window_size = 32
-sparse_topk = 32 
 apply_sparse = True
 quant = False
-path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+
+if apply_sparse:
+    sink_window_size = 1
+    block_window_size = 32
+    sparse_topk = 32
+else:
+    sink_window_size = 0
+    block_window_size = 0
+    sparse_topk = 0
+
+if quant:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+else:
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = True
@@ -53,7 +63,7 @@ if quant:
         llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.8, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.8, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
