@@ -11,6 +11,7 @@
 
 // eagle
 #include "model/eagle.cuh"
+#include "model/minicpm4/minicpm4_eagle.cuh"
 #include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin.cuh"
 #include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_rot.cuh"
 
@@ -171,8 +172,7 @@ void init_eagle_model(
     int num_iter,
     int topk_per_iter,
     int tree_size,
-    int torch_dtype,
-    bool use_norm
+    int torch_dtype
 ) {
     DTYPE_SWITCH(torch_dtype, [&] {
         model = new EagleImpl<elem_type>(
@@ -180,8 +180,29 @@ void init_eagle_model(
             num_layers,
             num_iter,
             topk_per_iter,
+            tree_size
+        );
+    });
+}
+
+void init_minicpm4_eagle_model(
+    int num_layers,
+    int num_iter,
+    int topk_per_iter,
+    int tree_size,
+    int torch_dtype,
+    bool use_input_norm,
+    bool use_attn_norm
+) {
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new MiniCPM4EagleImpl<elem_type>(
+            (ModelImpl<elem_type>*)model,
+            num_layers,
+            num_iter,
+            topk_per_iter,
             tree_size,
-            use_norm
+            use_input_norm,
+            use_attn_norm
         );
     });
 }
@@ -410,6 +431,7 @@ PYBIND11_MODULE(C, m) {
 
     // eagle bind
     m.def("init_eagle_model", &init_eagle_model, "Init eagle model");
+    m.def("init_minicpm4_eagle_model", &init_minicpm4_eagle_model, "Init minicpm4 eagle model");
     m.def("init_eagle_w4a16_gptq_marlin_model", &init_eagle_w4a16_gptq_marlin_model, "Init eagle W4A16 model");
     m.def("init_eagle_w4a16_gptq_marlin_rot_model", &init_eagle_w4a16_gptq_marlin_rot_model, "Init eagle W4A16 model");
 

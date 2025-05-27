@@ -1,258 +1,31 @@
 #pragma once
-#include "tree_drafter.cuh"
-#include "model.cuh"
-#include "topk.cuh"
-#include "layer.cuh"
-#include "kvcache.cuh"
-#include "norm.cuh"
-#include "elementwise.cuh"
-
-namespace {
-__global__ void add_kernel(int32_t* ptr, int32_t value) {
-    ptr[threadIdx.x] += value;
-}
-
-__global__ void repeat_kernel(int32_t dim, int32_t pos, const float4* input, float4* output) {
-    int row = blockIdx.x;
-    int col = threadIdx.x;
-    for (int i = col; i < dim; i += blockDim.x) {
-        output[row * dim + i] = input[pos * dim + i];
-    }
-}
+#include "../tree_drafter.cuh"
+#include "../model.cuh"
+#include "../topk.cuh"
+#include "../layer.cuh"
+#include "../kvcache.cuh"
+#include "../norm.cuh"
+#include "../elementwise.cuh"
 
 template<typename T>
-__global__ void repeat_kernel_2(int32_t pos, const T* input, T* output) {
-    int col = threadIdx.x;
-    output[col] = input[pos];
-}
-
-template<typename T>
-__global__ void log_softmax_kernel(int32_t dim, T* input) {
-    int base_idx = blockIdx.x * dim;
-    int warp_id = threadIdx.x / 32;
-    int lane_id = threadIdx.x % 32;
-
-    __shared__ float s_val[32];
-    float mx = -TypeTraits<T>::inf();
-    for (int i = threadIdx.x; i < dim; i += blockDim.x) {
-        mx = fmaxf(float(input[base_idx + i]), mx);
-    }
-    mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 16), mx);
-    mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 8), mx);
-    mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 4), mx);
-    mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 2), mx);
-    mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 1), mx);
-    if (lane_id == 0) s_val[warp_id] = mx;
-    __syncthreads();
-    if (threadIdx.x < 32) {
-        mx = s_val[threadIdx.x];
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 16), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 8), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 4), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 2), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 1), mx);
-    }
-    if (threadIdx.x == 0) {
-        s_val[0] = mx;
-    }
-    __syncthreads();
-    mx = s_val[0];
-
-    float sum = 0;
-    for (int i = threadIdx.x; i < dim; i += blockDim.x) {
-        sum += expf(float(input[base_idx + i]) - mx);
-    }
-    sum += __shfl_down_sync(0xffffffff, sum, 16);
-    sum += __shfl_down_sync(0xffffffff, sum, 8);
-    sum += __shfl_down_sync(0xffffffff, sum, 4);
-    sum += __shfl_down_sync(0xffffffff, sum, 2);
-    sum += __shfl_down_sync(0xffffffff, sum, 1);
-    if (lane_id == 0) s_val[warp_id] = sum;
-    __syncthreads();
-    if (threadIdx.x < 32) {
-        sum = s_val[threadIdx.x];
-        sum += __shfl_down_sync(0x0000ffff, sum, 16);
-        sum += __shfl_down_sync(0x0000ffff, sum, 8);
-        sum += __shfl_down_sync(0x0000ffff, sum, 4);
-        sum += __shfl_down_sync(0x0000ffff, sum, 2);
-        sum += __shfl_down_sync(0x0000ffff, sum, 1);
-    }
-    if (threadIdx.x == 0) {
-        s_val[0] = sum;
-    }
-    __syncthreads();
-    sum = s_val[0];
-    
-    for (int i = threadIdx.x; i < dim; i += blockDim.x) {
-        input[base_idx + i] = T( float(input[base_idx + i]) - mx - logf(sum) );
-    }
-}
-
-__global__ void init_tree_kernel(uint64_t* mask_2d) {
-    mask_2d[threadIdx.x] = 1ULL << threadIdx.x;
-}
-
-__global__ void set_parent_kernel(int32_t num_tokens, int32_t* parent, const int32_t* pos, int32_t offset) {
-    parent[threadIdx.x] = pos[threadIdx.x] + offset;
-}
-
-__global__ void update_tree_kernel(int32_t num_tokens, int32_t offset, uint64_t* mask_2d, const uint64_t* tmp_mask_2d, const int32_t* topk_pos) {
-    mask_2d[threadIdx.x] = tmp_mask_2d[topk_pos[threadIdx.x] / num_tokens] | (1ULL << (offset + threadIdx.x));
-}
-
-template<typename T>
-__global__ void cumsum_kernel(int32_t dim, T* input, const T* weight) {
-    input[blockIdx.x * dim + threadIdx.x] += weight[blockIdx.x];
-}
-
-__global__ void remap_hidden_kernel(int32_t scale, int32_t dim, const int32_t* id_map, const float4* real_hidden, float4* output) {
-    int row = blockIdx.x;
-    int col = threadIdx.x;
-    int real_row = id_map[row] / scale;
-    for (int i = col; i < dim; i += blockDim.x) {
-        output[row * dim + i] = real_hidden[real_row * dim + i];
-    }
-}
-
-__global__ void remap_id_kernel(const int32_t* id_map, const int32_t* real_id, int32_t* output) {
-    output[threadIdx.x] = real_id[id_map[threadIdx.x]];
-}
-
-__global__ void make_arange_kernel(int32_t* offset, int32_t* output) {
-    output[threadIdx.x] = threadIdx.x + offset[0];
-}
-
-} // namespace
-
-void add(const Stream& stream, int32_t num_tokens, int32_t* ptr, int32_t value) {
-    add_kernel<<<1, num_tokens, 0, stream.stream>>>(ptr, value);
-}
-
-template<typename T>
-void repeat(const Stream& stream, int32_t num_tokens, int32_t dim, int32_t pos, T* input, T* output=nullptr) {
-    if (output == nullptr) output = input;
-    if (dim > 1) {
-        dim = dim / (16 / sizeof(T));
-        repeat_kernel<<<num_tokens, 512, 0, stream.stream>>>(dim, pos, (float4*)input, (float4*)output);
-    } else {
-        repeat_kernel_2<<<1, num_tokens, 0, stream.stream>>>(pos, input, output);
-    }
-}
-
-template<typename T>
-void log_softmax(const Stream& stream, int32_t num_tokens, int32_t dim, T* input) {
-    log_softmax_kernel<<<num_tokens, 1024, 0, stream.stream>>>(dim, input);
-}
-
-void init_tree(const Stream& stream, int32_t num_tokens, uint64_t* mask_2d) {
-    init_tree_kernel<<<1, num_tokens, 0, stream.stream>>>(mask_2d);
-}
-
-void set_parent(const Stream& stream, int32_t num_tokens, int32_t* parent, const int32_t* pos, int32_t offset) {
-    set_parent_kernel<<<1, num_tokens, 0, stream.stream>>>(num_tokens, parent, pos, offset);
-}
-
-void update_tree(const Stream& stream, int32_t num_tokens, int32_t offset, uint64_t* mask_2d, const uint64_t* tmp_mask_2d, const int32_t* topk_pos) {
-    update_tree_kernel<<<1, num_tokens, 0, stream.stream>>>(num_tokens, offset, mask_2d, tmp_mask_2d, topk_pos);
-}
-
-template<typename T>
-void cumsum(const Stream& stream, int32_t num_tokens, int32_t dim, T* input, const T* weight) {
-    cumsum_kernel<<<num_tokens, dim, 0, stream.stream>>>(dim, input, weight);
-}
-
-template<typename T>
-void remap_hidden(const Stream& stream, int32_t num_tokens, int32_t dim, const int32_t* id_map, const T* real_hidden, T* output, int32_t scale=1) {
-    dim = dim / (16 / sizeof(T));
-    remap_hidden_kernel<<<num_tokens, 512, 0, stream.stream>>>(scale, dim, id_map, (float4*)real_hidden, (float4*)output);
-}
-
-void remap_id(const Stream& stream, int32_t num_tokens, int32_t* id_map, const int32_t* real_id, int32_t* output=nullptr) {
-    if (output == nullptr) output = id_map;
-    remap_id_kernel<<<1, num_tokens, 0, stream.stream>>>(id_map, real_id, output);
-}
-
-void make_arange(const Stream& stream, int32_t range, int32_t* offset, int32_t* output) {
-    make_arange_kernel<<<1, range, 0, stream.stream>>>(offset, output);
-}
-
-__global__ void build_dynamic_tree_kernel(int32_t tree_size, int32_t pos_offset, int32_t topk_per_iter, const int32_t* tried_history_parent, const int32_t* topk_pos, int32_t* tree_pos, uint64_t* tree_mask, int32_t* tree_parent) {
-    __shared__ int32_t reverse_tree_id[1024];
-    int tid = threadIdx.x;
-    if (tid != 0) {
-        reverse_tree_id[topk_pos[tid-1]] = tid;
-    }
-    __syncthreads();
-    if (tid == 0) {
-        tree_mask[0] = 1;
-        tree_pos[0] = pos_offset;
-        for (int i = 1; i < tree_size; i++) {
-            int p = topk_pos[i-1];
-            tree_pos[i] = pos_offset + ((p < topk_per_iter) ?  1 : (p - topk_per_iter) / (topk_per_iter * topk_per_iter) + 2);
-            tree_mask[i] = 1ULL << reverse_tree_id[p];;
-
-            if (p < topk_per_iter) {
-                p = -1;
-            } else {
-                p = p - topk_per_iter;
-                if (p < topk_per_iter * topk_per_iter) {
-                    p = p / topk_per_iter;
-                } else {
-                    p = tried_history_parent[(p - topk_per_iter * topk_per_iter) / topk_per_iter];
-                }
-            }
-            int parent = p == -1 ? 0 : reverse_tree_id[p];
-            tree_parent[i] = parent;
-            tree_mask[i] |= tree_mask[parent];
-        }
-    }
-}
-
-void build_dynamic_tree(const Stream& stream, int32_t tree_size, int32_t pos_offset, int32_t topk_per_iter, const int32_t* tried_history_parent, const int32_t* topk_pos, int32_t* tree_pos, uint64_t* tree_mask, int32_t* tree_parent) {
-    build_dynamic_tree_kernel<<<1, tree_size, 0, stream.stream>>>(tree_size, pos_offset, topk_per_iter, tried_history_parent, topk_pos, tree_pos, tree_mask, tree_parent);
-}
-
-template<typename T>
-struct Skip : Norm<T> {
-    int dim;
-
-    Skip(int dim) {
-        this->dim = dim;
-    }
-
-    void init_weight_ptr(Memory* memory) {}
-
-    int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
-        return memory->allocate((void**)&this->output, offset, num_tokens * dim * sizeof(T));
-    }
-
-    void load_to_storage(std::string name, void* ptr) {}
-
-    void prefill(const Stream& stream, int32_t num_tokens, T* input, T* prev_output, T* tgt=nullptr) {
-        if (tgt == nullptr) tgt = this->output;
-        if (prev_output == nullptr) {
-            cudaMemcpy(tgt, input, sizeof(T) * this->dim * num_tokens, cudaMemcpyDeviceToDevice);
-        } else {
-            elementwise_add(stream, num_tokens, this->dim, input, prev_output, tgt);
-        }
-    }
-};
-
-template<typename T>
-struct EagleImpl : Model {
+struct MiniCPM4EagleImpl : Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
+    bool use_input_norm;
+    bool use_attn_norm;
 
-    ModelImpl<T>* model;
-    KVCacheManager<T>* kv_caches;
+    ModelImpl<T>* model = nullptr;
+    KVCacheManager<T>* kv_caches = nullptr;
     std::vector<Layer<T>*> layers;
-    Linear<T, true, true> *fc1;
-    Linear<T> *fc2;
-    functions::TopK<T>* topk_func;
-    functions::TopK<T>* topk_func_2;
+    Linear<T, true, true> *fc1 = nullptr;
+    Linear<T> *fc2 = nullptr;
+    RMSNorm<T> *input_norm1 = nullptr;
+    RMSNorm<T> *input_norm2 = nullptr;
+    functions::TopK<T>* topk_func = nullptr;
+    functions::TopK<T>* topk_func_2 = nullptr;
 
     T *prev_hidden_state, *prev_embed;
     int num_prev, num_history_tokens;
@@ -268,12 +41,14 @@ struct EagleImpl : Model {
 
     T* tmp_kvcache;
 
-    EagleImpl(
+    MiniCPM4EagleImpl(
         ModelImpl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,
-        int tree_size
+        int tree_size,
+        bool use_input_norm = true,
+        bool use_attn_norm = true
     ) {
         this->model = model;
         this->num_layers = num_layers;
@@ -281,10 +56,16 @@ struct EagleImpl : Model {
         this->topk_per_iter = topk_per_iter;
         this->tree_size = tree_size;
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
+        this->use_input_norm = use_input_norm;
+        this->use_attn_norm = use_attn_norm;
 
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);
         fc1 = new Linear<T, true, true>(this->model->hidden_size, this->model->hidden_size);
         fc2 = new Linear<T>(this->model->hidden_size, this->model->hidden_size);
+        if (use_input_norm) {
+            input_norm1 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
+            input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
+        }
         for (int i = 0; i < num_layers; i++) {
             layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps));
         }
@@ -296,16 +77,26 @@ struct EagleImpl : Model {
     void init_weight_ptr(Memory* memory) {
         fc1->init_weight_ptr(memory);
         fc2->init_weight_ptr(memory);
+        if (use_input_norm) {
+            input_norm1->init_weight_ptr(memory);
+            input_norm2->init_weight_ptr(memory);
+        }
         for (int i = 0; i < num_layers; i++) {
             layers[i]->init_weight_ptr(memory);
         }
-        layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
+        if (!use_attn_norm) {
+            layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
+        }
         kv_caches->rotary_embedding = this->model->kv_caches->rotary_embedding;
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         offset = fc1->init_output_ptr(memory, num_tokens, offset);
         offset = fc2->init_output_ptr(memory, num_tokens, offset);
+        if (use_input_norm) {
+            offset = input_norm1->init_output_ptr(memory, num_tokens, offset);
+            offset = input_norm2->init_output_ptr(memory, num_tokens, offset);
+        }
         int64_t layer_end = 0;
         for (int i = 0; i < num_layers; i++) {
             layer_end = layers[i]->init_output_ptr(memory, num_tokens, offset);
@@ -350,6 +141,14 @@ struct EagleImpl : Model {
                 fc1->load_to_storage(name, ptr);
             } else if (name.substr(0, 9) == "eagle.fc2") {
                 fc2->load_to_storage(name, ptr);
+            } else if (name.find("eagle.input_norm1") != std::string::npos) {
+                if (!use_input_norm) throw std::invalid_argument("norm is not used, but input_norm1 is found");
+                input_norm1->load_to_storage(name, ptr);
+            } else if (name.find("eagle.input_norm2") != std::string::npos) {
+                if (!use_input_norm) throw std::invalid_argument("norm is not used, but input_norm2 is found");
+                input_norm2->load_to_storage(name, ptr);
+            } else if (name.find("eagle.rotary_emb") != std::string::npos) {
+                kv_caches->rotary_embedding->load_to_storage(name, ptr);
             } else {
                 std::regex layer_regex("eagle\\.layers\\.(\\d+)\\.(.*)");
                 std::smatch matches;
@@ -367,8 +166,15 @@ struct EagleImpl : Model {
 
     void eagle_prefill(int num_history_tokens) {
         cudaMemcpy(this->prev_embed + (num_prev - 1) * this->model->hidden_size, this->model->embedding->output, this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-        this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        if (use_input_norm) {
+            this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
+            this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
+            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+        } else {
+            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
@@ -379,8 +185,15 @@ struct EagleImpl : Model {
     }
 
     void eagle_decode(int32_t* cache_length) {
-        this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        if (use_input_norm) {
+            this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
+            this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
+            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+        } else {
+            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
@@ -393,7 +206,7 @@ struct EagleImpl : Model {
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->model->embedding->prefill(calc_stream, num_tokens, input);
         if (num_history_tokens > 0) {
-            this->eagle_prefill(this->num_history_tokens);
+            this->eagle_prefill(num_history_tokens);
         }
 
         cudaMemcpy(this->prev_embed, this->model->embedding->output + this->model->hidden_size, (num_tokens - 1) * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
@@ -441,8 +254,15 @@ struct EagleImpl : Model {
         for (int d = 1; d < this->num_iter; ++d) {
             add(calc_stream, 1, this->eagle_cache_length, topk_per_iter);
             this->model->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
-            this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
-            this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+            if (use_input_norm) {
+                this->input_norm1->prefill(calc_stream, topk_per_iter, this->model->embedding->output, nullptr);
+                this->input_norm2->prefill(calc_stream, topk_per_iter, this->fc1->output, nullptr);
+                this->fc1->prefill(calc_stream, topk_per_iter, this->input_norm1->output);
+                this->fc2->prefill(calc_stream, topk_per_iter, this->input_norm2->output);
+            } else {
+                this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
+                this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+            }
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
             T* layer_output = nullptr;
             for (int i = 0; i < num_layers; i++) {
@@ -490,6 +310,8 @@ struct EagleImpl : Model {
         cudaMemcpy(this->prev_embed, this->model->embedding->output, this->num_prev * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
         make_arange(calc_stream, this->num_prev, cache_length, this->eagle_position_ids);
+
+        // kv_cache->next_kv_length = kv_cache->next_kv_length - 1 + h_best[0];
 
         return h_best[0];
     }

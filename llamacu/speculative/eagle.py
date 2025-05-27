@@ -20,7 +20,9 @@ class LLM_with_eagle(LLM_with_tree_drafter):
                  num_iter=6,
                  topk_per_iter=10,
                  tree_size=60,
-                 use_norm=False,
+                 use_rope: bool=False,
+                 use_input_norm: bool=False,
+                 use_attn_norm: bool=False,
                  **kwargs):
         super().__init__(
             "eagle", eagle_path, base_path,
@@ -31,14 +33,24 @@ class LLM_with_eagle(LLM_with_tree_drafter):
         self.eagle_path = eagle_path
         self.eagle_config = EagleConfig.from_pretrained(eagle_path)
 
-        C.init_eagle_model(
-            self.eagle_config.eagle_num_layers,
-            num_iter,
-            topk_per_iter,
-            self.tree_size,
-            self.dtype_int,
-            use_norm
-        )
+        if not use_rope and not use_input_norm and not use_attn_norm:
+            C.init_eagle_model(
+                self.eagle_config.eagle_num_layers,
+                num_iter,
+                topk_per_iter,
+                self.tree_size,
+                self.dtype_int
+            )
+        else:
+            C.init_minicpm4_eagle_model(
+                self.eagle_config.eagle_num_layers,
+                num_iter,
+                topk_per_iter,
+                self.tree_size,
+                self.dtype_int,
+                use_input_norm, 
+                use_attn_norm
+            )
 
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:
