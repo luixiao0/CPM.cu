@@ -9,7 +9,7 @@ import numpy as np
 
 sink_window_size = 1
 block_window_size = 32
-sparse_topk = 32 
+sparse_topk = 32
 apply_sparse = True
 quant = False
 path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
@@ -17,7 +17,7 @@ path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
 eagle_path = ""
 dtype = torch.float16
 cuda_graph = True
-chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
+chunk_length = 2048
 num_generate = 128
 model_type = "base"
 

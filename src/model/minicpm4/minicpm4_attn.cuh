@@ -130,16 +130,15 @@ struct MiniCPM4Attention {
             kv_cache->compress(stream);
         }
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len > 0) {
+        if (kv_cache->c2_len > 0) {
             int q_round, k_round, out_len;
             mha_fwd_stage1(
                 TypeTraits<T>::type_code()==1,
                 1,
                 num_tokens,
                 kv_cache->c1_len,
-                num_tokens,
+                kv_cache->c2_len,
                 this->num_attention_heads,
                 this->num_key_value_heads,
                 this->head_dim,
@@ -198,8 +197,6 @@ struct MiniCPM4Attention {
             //     debug_print("blockmask.txt", blockmask, 2*num_tokens, ((num_history_tokens+num_tokens+63)/64+63)/64);
             //     exit(0);
             // }
-        } else {
-            blockmask = &fakeblock;
         }
 
         mha_fwd_kvcache(
@@ -207,7 +204,6 @@ struct MiniCPM4Attention {
             1,
             num_tokens,
             num_history_tokens+num_tokens,
-            num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,
@@ -255,16 +251,15 @@ struct MiniCPM4Attention {
 
         kv_cache->compress(stream);
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len > 0) {
+        if (kv_cache->c2_len > 0) {
             int q_round, k_round, out_len;
             mha_fwd_stage1(
                 TypeTraits<T>::type_code()==1,
                 1,
                 num_tokens,
                 kv_cache->c1_len,
-                num_tokens,
+                kv_cache->c2_len,
                 this->num_attention_heads,
                 this->num_key_value_heads,
                 this->head_dim,
@@ -310,8 +305,6 @@ struct MiniCPM4Attention {
                 padded_length
             );
             blockmask = kv_cache->blockmask;
-        } else {
-            blockmask = &fakeblock;
         }
 
         mha_fwd_kvcache(
@@ -319,7 +312,6 @@ struct MiniCPM4Attention {
             1,
             num_tokens,
             padded_length,
-            num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,

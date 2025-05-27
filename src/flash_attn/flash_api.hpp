@@ -206,7 +206,7 @@ void mha_fwd_stage1(
     int batch_size,
     int seqlen_q,
     int seqlen_k,
-    int seqlen_knew,
+    int seqlen_c,
     int num_heads,
     int num_heads_k,
     int head_size,
@@ -267,6 +267,8 @@ void mha_fwd_stage1(
     params.m_block_dim = 16;
     params.n_block_dim = 1;
 
+    params.seqlen_c = seqlen_c;
+
     params.mask_2d = nullptr;
     params.mask_q_range = 0;
     params.mask_k_range = 0;
@@ -291,7 +293,6 @@ void mha_fwd_kvcache(
     int batch_size,
     int seqlen_q,
     int seqlen_k,
-    int seqlen_knew,
     int num_heads,
     int num_heads_k,
     int head_size,
