@@ -1,20 +1,24 @@
 #include "signal_handler.cuh"
 
+// 保存原有信号处理器的全局变量
+std::map<int, void(*)(int)> original_handlers;
+
 void init_signal_handlers() {
-    // 设置信号处理器
-    signal(SIGSEGV, signal_handler);  // 段错误
-    signal(SIGABRT, signal_handler);  // 异常终止
-    signal(SIGFPE, signal_handler);   // 浮点异常
-    signal(SIGILL, signal_handler);   // 非法指令
+    // 保存并设置信号处理器
+    original_handlers[SIGSEGV] = signal(SIGSEGV, signal_handler);  // 段错误
+    original_handlers[SIGABRT] = signal(SIGABRT, signal_handler);  // 异常终止
+    original_handlers[SIGFPE] = signal(SIGFPE, signal_handler);    // 浮点异常
+    original_handlers[SIGILL] = signal(SIGILL, signal_handler);    // 非法指令
 #ifdef SIGBUS
-    signal(SIGBUS, signal_handler);   // 总线错误 (某些系统可能没有)
+    original_handlers[SIGBUS] = signal(SIGBUS, signal_handler);    // 总线错误 (某些系统可能没有)
 #endif
-    signal(SIGTERM, signal_handler);  // 终止信号
-    signal(SIGINT, signal_handler);   // 中断信号 (Ctrl+C)
+    original_handlers[SIGTERM] = signal(SIGTERM, signal_handler);  // 终止信号
+    original_handlers[SIGINT] = signal(SIGINT, signal_handler);    // 中断信号 (Ctrl+C)
     
     std::cout << "Signal handlers initialized for common exceptions" << std::endl;
 }
 
+// TODO 修复和python traceback的协作
 void signal_handler(int sig) {
     const char* signal_name = "Unknown";
     
@@ -39,8 +43,18 @@ void signal_handler(int sig) {
     print_stack_trace();
     
     std::cerr << "\nProgram terminated due to signal " << sig << std::endl;
+    std::cerr.flush();
+    std::cout.flush();
     
+    // 查找并调用原有的信号处理器
+    auto it = original_handlers.find(sig);
+    if (it != original_handlers.end() && it->second != SIG_DFL && it->second != SIG_IGN) {
+        std::cerr << "Calling original signal handler..." << std::endl;
+        it->second(sig);
+    }
+
     // 恢复默认信号处理并重新发送信号
+    std::cerr << "Restoring default handler..." << std::endl;
     signal(sig, SIG_DFL);
     raise(sig);
 }

@@ -8,6 +8,10 @@
 #include <cxxabi.h>
 #include <string>
 #include <iostream>
+#include <map>
+
+// 保存原有信号处理器
+extern std::map<int, void(*)(int)> original_handlers;
 
 // 初始化signal处理器
 void init_signal_handlers();

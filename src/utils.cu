@@ -1,4 +1,5 @@
 #include "utils.cuh"
+#include "signal_handler.cuh"
 
 bool initialized = false;
 
@@ -14,7 +15,7 @@ void init_resources() {
   
   // 初始化signal处理器
   init_signal_handlers();
-  
+ 
   cudaCheck(cudaStreamCreate(&calc_stream.stream));
   cublasCheck(cublasCreate(&calc_stream.cublas_handle));
   cublasCheck(cublasSetStream(calc_stream.cublas_handle, calc_stream.stream));
