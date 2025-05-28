@@ -27,11 +27,12 @@ def get_compile_args():
     
     if debug_mode:
         print("Debug mode enabled (LLAMACU_DEBUG=1)")
-        cxx_args = common_cxx_args + ["-g", "-O0", "-DDEBUG"]
+        cxx_args = common_cxx_args + ["-g", "-O0", "-DDEBUG", "-fno-inline"]
         nvcc_base_args = common_nvcc_args + [
-            "-g", "-G", "-O0",
-            "-DDEBUG",
-            "-DCUDA_DEBUG",
+            "-O0", "-g", 
+            "-DDEBUG", "-DCUDA_DEBUG",
+            "-Xcompiler", "-fno-inline",
+            # "-G",
         ]
     else:
         print("Release mode enabled")
