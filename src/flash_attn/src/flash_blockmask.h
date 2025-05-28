@@ -19,7 +19,7 @@ class fwdIterator{
         const int num_blocks_m = params.num_blocks_m;
         const int num_blocks_n = params.num_blocks_n;
         const int uint64_per_row = (num_blocks_n + 64 - 1) / 64;
-        const int row_offset = params.cu_seqlens_q != nullptr ? binfo.blockmask_q_offset(m_block_dim, batch_idx) : batch_idx * params.num_k_heads * params.num_blocks_m;
+        const int row_offset = params.cu_seqlens_q != nullptr ? binfo.blockmask_q_offset(m_block_dim, batch_idx) : batch_idx * params.h_k * params.num_blocks_m;
 
         if (params.blockmask == nullptr) {
             blockmask_ptr = nullptr;

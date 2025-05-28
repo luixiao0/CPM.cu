@@ -169,8 +169,6 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, nullptr, output);
     }
 
-    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; }
-
     void draft(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length, uint64_t*, int32_t*) {
         if (this->is_first_draft) {
             // append tree draft ids to draft input

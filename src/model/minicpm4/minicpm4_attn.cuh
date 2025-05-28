@@ -187,7 +187,7 @@ struct MiniCPM4Attention {
                 kv_cache->blockmask,
                 this->num_key_value_heads*num_tokens,
                 kv_cache->topk_func->top,
-                num_history_tokens+num_tokens // TODO minicpm4 decode should be padded length
+                num_history_tokens+num_tokens
             );
             blockmask = kv_cache->blockmask;
 

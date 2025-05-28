@@ -39,16 +39,6 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
         logits = self.prefill(input_ids, position_ids)
         self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
 
-        torch.cuda.synchronize()
-        draft_start_time = time.time()
-        C.draft_prefill(
-            self.tree_draft_ids.data_ptr(),
-            self.tree_position_ids.data_ptr(),
-            self.cache_length.data_ptr() # no use
-        )
-        torch.cuda.synchronize()
-        draft_end_time = time.time()
-
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.tree_draft_ids[0])
         accept_lengths = []

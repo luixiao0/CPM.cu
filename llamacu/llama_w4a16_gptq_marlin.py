@@ -25,9 +25,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                  chunk_length: int = 1024,
                  dtype: torch.dtype = None,
                  cuda_graph: bool = False,
-                 sink_window_size: int = 0,
-                 block_window_size: int = 0,
-                 sparse_topk_k: int = 0,
+                 apply_sparse: bool = False,
+                 sink_window_size: int = 1,
+                 block_window_size: int = 32,
+                 sparse_topk_k: int = 32,
     ):
         super().__init__()
 
@@ -53,8 +54,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers) if hasattr(self.config, "scale_depth") else 1.0
         print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
         
-        if sink_window_size > 0 and block_window_size > 0 and sparse_topk_k > 0:
-            assert chunk_length <= block_window_size * 64, f"chunk_length should be less than {block_window_size * 64}" # TODO minicpm4 this assert is required
+        if apply_sparse:
             C.init_w4a16_gptq_marlin_minicpm4_model(
                 self.memory_limit,
                 self.memory_pool.data.data_ptr(),

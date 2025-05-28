@@ -1,12 +1,7 @@
 #pragma once
 #include <type_traits>
-#include "../tree_drafter.cuh"
-#include "../model.cuh"
-#include "../topk.cuh"
-#include "../layer.cuh"
-#include "../kvcache.cuh"
-#include "../norm.cuh"
-#include "../elementwise.cuh"
+#include "../eagle.cuh"
+#include "minicpm4_model.cuh"
 
 template<typename T, class ModelType>
 struct MiniCPM4EagleImpl : Model {
@@ -75,7 +70,7 @@ struct MiniCPM4EagleImpl : Model {
         }
 
         topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
-        topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1); // TODO current topk do not support k > 32
+        topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -322,7 +317,9 @@ struct MiniCPM4EagleImpl : Model {
 
         make_arange(calc_stream, this->num_prev, cache_length, this->eagle_position_ids);
 
-        // kv_cache->next_kv_length = kv_cache->next_kv_length - 1 + h_best[0];
+        if constexpr (std::is_same_v<ModelType, MiniCPM4Impl<T>>) {
+            this->model->kv_caches->add_length(h_best[0] - 1);
+        }
 
         return h_best[0];
     }

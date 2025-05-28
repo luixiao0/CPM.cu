@@ -290,7 +290,7 @@ struct EagleImpl : Model {
         }
 
         topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
-        topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1); // TODO current topk do not support k > 32
+        topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1);
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -409,8 +409,6 @@ struct EagleImpl : Model {
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
     }
-
-    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; } // TODO minicpm4 useless interface
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
