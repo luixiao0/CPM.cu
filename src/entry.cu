@@ -8,6 +8,7 @@
 #include "model/model.cuh"
 #include "model/w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "model/minicpm4/minicpm4_model.cuh"
+#include "model/minicpm4/minicpm4_w4a16_gptq_marlin_model.cuh"
 
 // eagle
 #include "model/eagle.cuh"
@@ -162,6 +163,55 @@ void init_w4a16_gptq_marlin_base_model(
         scale_embed,
         scale_lmhead,
         scale_residual
+    );
+
+}
+
+void init_w4a16_gptq_marlin_minicpm4_model(
+    int64_t memory_limit,
+    std::uintptr_t memory_pool,
+    int vocab_size,
+    int num_hidden_layers,
+    int hidden_size,
+    int intermediate_size,
+    int num_attention_heads,
+    int num_key_value_heads,
+    int head_dim,
+    float rms_norm_eps,
+    int group_size,
+    int torch_dtype,
+    int chunk_length,
+    float scale_embed,
+    float scale_lmhead,
+    float scale_residual,
+    int sink_window_size,
+    int block_window_size,
+    int sparse_topk_k
+) {
+    if (torch_dtype != 0) {
+        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    }
+    init_resources();
+
+    model = new MiniCPM4W4A16GPTQMarlinModelImpl<half>(
+        memory_limit,
+        reinterpret_cast<void*>(memory_pool),
+        vocab_size,
+        num_hidden_layers,
+        hidden_size,
+        intermediate_size,
+        num_attention_heads,
+        num_key_value_heads,
+        head_dim,
+        rms_norm_eps,
+        group_size,
+        chunk_length,
+        scale_embed,
+        scale_lmhead,
+        scale_residual,
+        sink_window_size,
+        block_window_size,
+        sparse_topk_k
     );
 
 }
@@ -430,6 +480,7 @@ PYBIND11_MODULE(C, m) {
     m.def("init_base_model", &init_base_model, "Init base model");
     m.def("init_minicpm4_model", &init_minicpm4_model, "Init minicpm4 model");
     m.def("init_w4a16_gptq_marlin_base_model", &init_w4a16_gptq_marlin_base_model, "Init W4A16 base model");
+    m.def("init_w4a16_gptq_marlin_minicpm4_model", &init_w4a16_gptq_marlin_minicpm4_model, "Init W4A16 minicpm4 model");
 
     // eagle bind
     m.def("init_eagle_model", &init_eagle_model, "Init eagle model");
