@@ -35,6 +35,19 @@
     }                                        \
   }()
 
+#define MODEL_TYPE_SWITCH(MODEL_PTR, T, ...)  \
+  [&] {                                       \
+    if (dynamic_cast<MiniCPM4Impl<T>*>(MODEL_PTR)) {     \
+      using ModelType = MiniCPM4Impl<T>; \
+      auto* typed_model = static_cast<MiniCPM4Impl<T>*>(MODEL_PTR); \
+      return __VA_ARGS__();                   \
+    } else {                                  \
+      using ModelType = ModelImpl<T>; \
+      auto* typed_model = static_cast<ModelImpl<T>*>(MODEL_PTR);    \
+      return __VA_ARGS__();                   \
+    }                                         \
+  }()
+
 Model* model;
 
 void init_base_model(
@@ -246,16 +259,18 @@ void init_minicpm4_eagle_model(
     bool use_attn_norm
 ) {
     DTYPE_SWITCH(torch_dtype, [&] {
-        model = new MiniCPM4EagleImpl<elem_type>(
-            (ModelImpl<elem_type>*)model,
-            num_layers,
-            num_iter,
-            topk_per_iter,
-            tree_size,
-            residual_scale,
-            use_input_norm,
-            use_attn_norm
-        );
+        MODEL_TYPE_SWITCH(model, elem_type, [&] {
+            model = new MiniCPM4EagleImpl<elem_type, ModelType>(
+                typed_model,
+                num_layers,
+                num_iter,
+                topk_per_iter,
+                tree_size,
+                residual_scale,
+                use_input_norm,
+                use_attn_norm
+            );
+        });
     });
 }
 

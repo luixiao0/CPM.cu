@@ -1,4 +1,5 @@
 #pragma once
+#include <type_traits>
 #include "../tree_drafter.cuh"
 #include "../model.cuh"
 #include "../topk.cuh"
@@ -7,7 +8,7 @@
 #include "../norm.cuh"
 #include "../elementwise.cuh"
 
-template<typename T>
+template<typename T, class ModelType>
 struct MiniCPM4EagleImpl : Model {
     int num_layers;
     int num_iter;
@@ -18,7 +19,7 @@ struct MiniCPM4EagleImpl : Model {
     bool use_input_norm;
     bool use_attn_norm;
 
-    ModelImpl<T>* model = nullptr;
+    ModelType* model = nullptr;
     KVCacheManager<T>* kv_caches = nullptr;
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1 = nullptr;
@@ -43,7 +44,7 @@ struct MiniCPM4EagleImpl : Model {
     T* tmp_kvcache;
 
     MiniCPM4EagleImpl(
-        ModelImpl<T>* model,
+        ModelType* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,
@@ -133,7 +134,11 @@ struct MiniCPM4EagleImpl : Model {
         int64_t offset = this->model->init_output_ptr(this->model->memory, this->model->chunk_length, this->model->memory->model_offset);
         int64_t kv_cache_offset = this->init_output_ptr(this->model->memory, this->model->chunk_length, offset);
         float ratio = float(this->model->num_hidden_layers) / (this->model->num_hidden_layers + this->num_layers);
-        kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset, ratio);
+        if constexpr (std::is_same_v<ModelType, MiniCPM4Impl<T>>) {
+            kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, this->model->chunk_length, kv_cache_offset, ratio);
+        } else {
+            kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset, ratio);
+        }
         kv_caches->init_output_ptr(this->model->memory, kv_cache_offset);
         return min(kv_caches->budget + 1, this->model->kv_caches->budget);
     }
