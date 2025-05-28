@@ -74,8 +74,9 @@ struct Flash_fwd_params : public Qkv_params {
     int * __restrict__ seqused_k;
 
     uint64_t *__restrict__ blockmask;
-    int m_block_dim, n_block_dim, num_k_heads;
-    int num_blocks_m, num_blocks_n, block_window_size;
+    int m_block_dim, n_block_dim;
+    int num_blocks_m, num_blocks_n;
+    int block_window_size;
 
     // The mask_2d matrix.
     uint64_t *__restrict__ mask_2d;

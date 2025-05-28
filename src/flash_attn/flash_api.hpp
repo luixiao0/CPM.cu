@@ -355,14 +355,13 @@ void mha_fwd_kvcache(
     if (blockmask != nullptr) {
         params.m_block_dim = 16;
         params.n_block_dim = 64;
-        params.num_k_heads = 2;
         params.num_blocks_m = (seqlen_q + 16 - 1) / 16;
         params.num_blocks_n = (seqlen_k + 64 - 1) / 64;
-        params.block_window_size = block_window_size;
     } else {
         params.m_block_dim = 1;
         params.n_block_dim = 1;
     }
+    params.block_window_size = block_window_size;
 
     params.mask_2d = mask.ptr;
     params.mask_q_range = mask.mask_q_range;

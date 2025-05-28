@@ -1,6 +1,7 @@
 from .. import C
 from .tree_drafter import LLM_with_tree_drafter
 
+import math
 import torch
 from transformers import PretrainedConfig
 
@@ -30,13 +31,27 @@ class LLM_with_eagle(LLM_with_tree_drafter):
         self.eagle_path = eagle_path
         self.eagle_config = EagleConfig.from_pretrained(eagle_path)
 
-        C.init_eagle_model(
-            self.eagle_config.eagle_num_layers,
-            num_iter,
-            topk_per_iter,
-            self.tree_size,
-            self.dtype_int,
-        )
+        if kwargs.get("apply_sparse", False):
+            scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers + self.eagle_config.eagle_num_layers) if hasattr(self.config, "scale_depth") else 1.0
+            print(f"eagle scale_residual: {scale_residual}")
+            C.init_minicpm4_eagle_model(
+                self.eagle_config.eagle_num_layers,
+                num_iter,
+                topk_per_iter,
+                self.tree_size,
+                self.dtype_int,
+                scale_residual,
+                True,
+                True,
+            )
+        else:
+            C.init_eagle_model(
+                self.eagle_config.eagle_num_layers,
+                num_iter,
+                topk_per_iter,
+                self.tree_size,
+                self.dtype_int,
+            )
 
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:

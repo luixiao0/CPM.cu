@@ -143,7 +143,7 @@ struct HierEagleW4A16GMSpecW4A16GMImpl: Model {
         }
 
         ea_topk_func = new functions::TopK<T>(this->draft_model->vocab_size, ea_topk_per_iter);
-        ea_topk_func_2 = new functions::TopK<T>(ea_total_tried, this->ea_tree_size-1); // TODO current topk do not support k > 32
+        ea_topk_func_2 = new functions::TopK<T>(ea_total_tried, this->ea_tree_size-1);
 
         this->ea_accept_nums_size = 0;
         this->cur_ea_accept_nums_size = 0;

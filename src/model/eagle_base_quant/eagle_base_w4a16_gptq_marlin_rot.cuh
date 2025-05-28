@@ -64,7 +64,7 @@ struct EagleImplBaseW4A16GPTQMarlinRot : Model {
         lm_head = new Linear<T>(this->model->hidden_size, this->model->vocab_size);
 
         topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
-        topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1); // TODO current topk do not support k > 32
+        topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1);
     }
 
     void init_weight_ptr(Memory* memory) {

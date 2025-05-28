@@ -130,7 +130,6 @@ struct MiniCPM4Attention {
             kv_cache->compress(stream);
         }
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
         if (kv_cache->c1_len > 0) {
             int q_round, k_round, out_len;
@@ -198,8 +197,6 @@ struct MiniCPM4Attention {
             //     debug_print("blockmask.txt", blockmask, 2*num_tokens, ((num_history_tokens+num_tokens+63)/64+63)/64);
             //     exit(0);
             // }
-        } else {
-            blockmask = &fakeblock;
         }
 
         mha_fwd_kvcache(
@@ -255,7 +252,6 @@ struct MiniCPM4Attention {
 
         kv_cache->compress(stream);
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
         if (kv_cache->c1_len > 0) {
             int q_round, k_round, out_len;
@@ -310,8 +306,6 @@ struct MiniCPM4Attention {
                 padded_length
             );
             blockmask = kv_cache->blockmask;
-        } else {
-            blockmask = &fakeblock;
         }
 
         mha_fwd_kvcache(

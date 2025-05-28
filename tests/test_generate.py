@@ -12,14 +12,15 @@ block_window_size = 32
 sparse_topk = 64 
 apply_sparse = True
 quant = False
-path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
+# path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
 # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
-eagle_path = ""
+path = "/data1/liyx/eagle_0526/job_33952_step_17300"
+eagle_path = "/data1/liyx/eagle_0526/job_35949"
 dtype = torch.float16
 cuda_graph = True
 chunk_length = 2048
 num_generate = 128
-model_type = "base"
+model_type = "eagle"
 
 def make_input(digits, a = 2500, b = 4000):
     head = "There is a pass key hidden in the context. Find it and remember it. I will quiz you about it later. "
@@ -50,14 +51,14 @@ teminators = [tokenizer.eos_token_id]
 
 if quant:
     if model_type == "eagle":
-        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.8, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk)

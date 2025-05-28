@@ -188,7 +188,7 @@ void topk_to_uint64_func( // TODO not necessary now, since topk is small
 ) {
     int k_blocks = (k_len + block_size - 1) / block_size;
     int n_uint64_per_row = (k_blocks + block_size - 1) / block_size;
-    
+
     const int threads_per_block = 256;
     const int blocks_per_row = (batch_size + threads_per_block - 1) / threads_per_block;
     
@@ -301,5 +301,11 @@ struct MiniCPM4KVCacheManager {
         }
         cudaMemcpy(this->d_flat_caches, this->h_flat_caches, num_hidden_layers * 2 * sizeof(T*), cudaMemcpyHostToDevice);
         return offset;
+    }
+
+    void add_length(int length) {
+        for (int i = 0; i < this->num_hidden_layers; i++) {
+            caches[i]->next_kv_length += length;
+        }
     }
 };

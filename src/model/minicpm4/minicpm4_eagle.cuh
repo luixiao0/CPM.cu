@@ -1,20 +1,25 @@
 #pragma once
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_model.cuh"
 #include "../eagle.cuh"
+#include "minicpm4_model.cuh"
 
 template<typename T>
-struct EagleImplBaseW4A16GPTQMarlin : Model {
+struct MiniCPM4EagleImpl : Model {
     int num_layers;
     int num_iter;
     int topk_per_iter;
     int tree_size;
     int total_tried;
+    float residual_scale;
+    bool use_input_norm;
+    bool use_attn_norm;
 
-    W4A16GPTQMarlinModelImpl<T>* model;
+    MiniCPM4Impl<T>* model;
     KVCacheManager<T>* kv_caches;
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1;
     Linear<T> *fc2;
+    RMSNorm<T> *input_norm1;
+    RMSNorm<T> *input_norm2;
     functions::TopK<T>* topk_func;
     functions::TopK<T>* topk_func_2;
 
@@ -32,12 +37,15 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
 
     T* tmp_kvcache;
 
-    EagleImplBaseW4A16GPTQMarlin(
-        W4A16GPTQMarlinModelImpl<T>* model,
+    MiniCPM4EagleImpl(
+        MiniCPM4Impl<T>* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,
-        int tree_size
+        int tree_size,
+        float residual_scale = 1.0f,
+        bool use_input_norm = true,
+        bool use_attn_norm = true
     ) {
         this->model = model;
         this->num_layers = num_layers;
@@ -45,12 +53,19 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
         this->topk_per_iter = topk_per_iter;
         this->tree_size = tree_size;
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
+        this->residual_scale = residual_scale;
+        this->use_input_norm = use_input_norm;
+        this->use_attn_norm = use_attn_norm;
 
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);
         fc1 = new Linear<T, true, true>(this->model->hidden_size, this->model->hidden_size);
         fc2 = new Linear<T>(this->model->hidden_size, this->model->hidden_size);
+        if (use_input_norm) {
+            input_norm1 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
+            input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
+        }
         for (int i = 0; i < num_layers; i++) {
-            layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps));
+            layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, this->residual_scale));
         }
 
         topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
@@ -60,16 +75,26 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
     void init_weight_ptr(Memory* memory) {
         fc1->init_weight_ptr(memory);
         fc2->init_weight_ptr(memory);
+        if (use_input_norm) {
+            input_norm1->init_weight_ptr(memory);
+            input_norm2->init_weight_ptr(memory);
+        }
         for (int i = 0; i < num_layers; i++) {
             layers[i]->init_weight_ptr(memory);
         }
-        layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
+        if (!use_attn_norm) {
+            layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
+        }
         kv_caches->rotary_embedding = this->model->kv_caches->rotary_embedding;
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         offset = fc1->init_output_ptr(memory, num_tokens, offset);
         offset = fc2->init_output_ptr(memory, num_tokens, offset);
+        if (use_input_norm) {
+            offset = input_norm1->init_output_ptr(memory, num_tokens, offset);
+            offset = input_norm2->init_output_ptr(memory, num_tokens, offset);
+        }
         int64_t layer_end = 0;
         for (int i = 0; i < num_layers; i++) {
             layer_end = layers[i]->init_output_ptr(memory, num_tokens, offset);
@@ -103,7 +128,7 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
         int64_t offset = this->model->init_output_ptr(this->model->memory, this->model->chunk_length, this->model->memory->model_offset);
         int64_t kv_cache_offset = this->init_output_ptr(this->model->memory, this->model->chunk_length, offset);
         float ratio = float(this->model->num_hidden_layers) / (this->model->num_hidden_layers + this->num_layers);
-        kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset, ratio);
+        kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, this->model->chunk_length, kv_cache_offset, ratio);
         kv_caches->init_output_ptr(this->model->memory, kv_cache_offset);
         return min(kv_caches->budget + 1, this->model->kv_caches->budget);
     }
@@ -114,6 +139,14 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
                 fc1->load_to_storage(name, ptr);
             } else if (name.substr(0, 9) == "eagle.fc2") {
                 fc2->load_to_storage(name, ptr);
+            } else if (name.find("eagle.input_norm1") != std::string::npos) {
+                if (!use_input_norm) throw std::invalid_argument("norm is not used, but input_norm1 is found");
+                input_norm1->load_to_storage(name, ptr);
+            } else if (name.find("eagle.input_norm2") != std::string::npos) {
+                if (!use_input_norm) throw std::invalid_argument("norm is not used, but input_norm2 is found");
+                input_norm2->load_to_storage(name, ptr);
+            } else if (name.find("eagle.rotary_emb") != std::string::npos) {
+                kv_caches->rotary_embedding->load_to_storage(name, ptr);
             } else {
                 std::regex layer_regex("eagle\\.layers\\.(\\d+)\\.(.*)");
                 std::smatch matches;
@@ -131,33 +164,49 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
 
     void eagle_prefill(int num_history_tokens) {
         cudaMemcpy(this->prev_embed + (num_prev - 1) * this->model->hidden_size, this->model->embedding->output, this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
-        this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        if (use_input_norm) {
+            this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
+            this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
+            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+        } else {
+            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
             this->layers[i]->prefill(num_prev, num_history_tokens, this->fc2->output, layer_output, this->eagle_position_ids, this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_prev, this->model->hidden_size, layer_output, this->residual_scale);
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
     }
 
     void eagle_decode(int32_t* cache_length) {
-        this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-        this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        if (use_input_norm) {
+            this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
+            this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
+            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+        } else {
+            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+        }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
         for (int i = 0; i < num_layers; i++) {
             this->layers[i]->decode(num_prev, this->eagle_padded_length, this->fc2->output, layer_output, this->eagle_position_ids, cache_length, Mask(nullptr), this->kv_caches->caches[i]);
             layer_output = this->layers[i]->output;
         }
+        elementwise_scale(calc_stream, num_prev, this->model->hidden_size, layer_output, this->residual_scale);
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
     }
 
     void prefill(int32_t num_tokens, int32_t num_history_tokens, int32_t* input, int32_t* position_ids, void* output) {
         this->model->embedding->prefill(calc_stream, num_tokens, input);
         if (num_history_tokens > 0) {
-            this->eagle_prefill(this->num_history_tokens);
+            this->eagle_prefill(num_history_tokens);
         }
 
         cudaMemcpy(this->prev_embed, this->model->embedding->output + this->model->hidden_size, (num_tokens - 1) * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
@@ -173,6 +222,8 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
     }
+
+    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; }
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
@@ -203,14 +254,22 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
         for (int d = 1; d < this->num_iter; ++d) {
             add(calc_stream, 1, this->eagle_cache_length, topk_per_iter);
             this->model->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
-            this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
-            this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+            if (use_input_norm) {
+                this->input_norm1->prefill(calc_stream, topk_per_iter, this->model->embedding->output, nullptr);
+                this->input_norm2->prefill(calc_stream, topk_per_iter, this->fc1->output, nullptr);
+                this->fc1->prefill(calc_stream, topk_per_iter, this->input_norm1->output);
+                this->fc2->prefill(calc_stream, topk_per_iter, this->input_norm2->output);
+            } else {
+                this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
+                this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+            }
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
             T* layer_output = nullptr;
             for (int i = 0; i < num_layers; i++) {
                 this->layers[i]->decode(topk_per_iter, this->eagle_padded_length, this->fc2->output, layer_output, this->eagle_position_ids, this->eagle_cache_length, Mask(eagle_mask_2d, topk_per_iter, topk_per_iter * d), this->kv_caches->caches[i]);
                 layer_output = this->layers[i]->output;
             }
+            elementwise_scale(calc_stream, topk_per_iter, this->model->hidden_size, layer_output, this->residual_scale);
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
             add(calc_stream, topk_per_iter, this->eagle_position_ids, 1);
 
@@ -252,6 +311,8 @@ struct EagleImplBaseW4A16GPTQMarlin : Model {
         cudaMemcpy(this->prev_embed, this->model->embedding->output, this->num_prev * this->model->hidden_size * sizeof(T), cudaMemcpyDeviceToDevice);
 
         make_arange(calc_stream, this->num_prev, cache_length, this->eagle_position_ids);
+
+        this->model->kv_caches->add_length(h_best[0] - 1);
 
         return h_best[0];
     }
