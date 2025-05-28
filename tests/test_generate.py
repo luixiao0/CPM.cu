@@ -8,29 +8,30 @@ import time
 import numpy as np
 
 test_minicpm4 = True
-model_type = "base"
-apply_quant = True
+apply_eagle = True
+apply_quant = False
 apply_sparse = True
+
+num_generate = 128
+sink_window_size = 1
+# block_window_size = 2048
+# sparse_topk_k = 0
+block_window_size = 32
+sparse_topk_k = 32
 
 if not test_minicpm4:
     print(f"test_minicpm4 is False, set apply_sparse to False")
     apply_sparse = False
 
-if apply_sparse:
-    sink_window_size = 1
-    # block_window_size = 2048
-    # sparse_topk_k = 0
-    block_window_size = 32
-    sparse_topk_k = 32
-else:
-    sink_window_size = 0
-    block_window_size = 0
-    sparse_topk_k = 0
-
+model_type = "base" if not apply_eagle else "eagle"
 dtype = torch.float16
 cuda_graph = False
 chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
-num_generate = 128
+
+if not apply_sparse:
+    sink_window_size = 0
+    block_window_size = 0
+    sparse_topk_k = 0
 
 if test_minicpm4:
     eagle_path = "/data1/liyx/eagle_0526/job_35949"
@@ -57,16 +58,17 @@ def make_input(digits, a = 2500, b = 4000):
     return head + before + needle + after + query
 
 prompt = None
+prompt_content = "北京有哪些好玩的地方"
+# with open("prompt.txt", "r") as f:
+#     prompt_content = f.read()
+
 # prompt = make_input(681725493, 2000, 4000) # 120k
-prompt = make_input(681725493, 1500, 3000) # 90k
+# prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = make_input(681725493, 10, 50)
 # prompt = "Beijing is the"
-prompt_content = "北京有哪些好玩的地方"
-
-# with open("prompt.txt", "r") as f:
-#     prompt_content = f.read()
+# prompt = prompt_content
 
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
@@ -74,6 +76,7 @@ if prompt is None:
     prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt_content}], tokenize=False, add_generation_prompt=True)
 input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()
 print(f"input_ids: {input_ids}")
+print(f"Input token number is {input_ids.shape[1]}")
 num_tokens = input_ids.numel()
 
 position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1, num_tokens)
@@ -89,7 +92,8 @@ if apply_quant:
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=3, topk_per_iter=10, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=1, topk_per_iter=4, tree_size=4, chunk_length=chunk_length, cuda_graph=cuda_graph, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
+        # llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
@@ -97,8 +101,6 @@ else:
 
 llm.init_storage()
 llm.load_from_hf()
-
-print(f"Input token number is {input_ids.shape[1]}")
 
 torch.cuda.synchronize()
 st = time.time()
@@ -108,11 +110,13 @@ et = time.time()
 decode_time = gen_result[-1]
 prefill_time = et - st - decode_time
 
+print("\n[gen_result]")
 if model_type == "medusa" or model_type == "eagle":
     print(tokenizer.decode(gen_result[0]).strip())
     print("Mean acc:", np.mean(gen_result[1]))
 else:
     print(tokenizer.decode(gen_result[0]).strip())
+print("\n")
 
 print(f"prefill length: {input_ids.shape[1]}")
 print(f"prefill time: {prefill_time:.2f} s")
