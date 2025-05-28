@@ -184,7 +184,7 @@ struct Mask {
 
                         const int col_idx_limit_left = std::max(0, orig_row_idx + max_seqlen_k - orig_max_seqlen_q - window_size_left);
                         const int col_idx_limit_right = std::min(max_seqlen_k, orig_row_idx + 1 + max_seqlen_k - orig_max_seqlen_q + window_size_right);
-                        const uint64_t mask = (Mask_2d && row_idx < mask_q_range) ? mask_2d[row_idx] : 0;
+                        const uint64_t mask = (Mask_2d && orig_row_idx < mask_q_range) ? mask_2d[orig_row_idx] : 0;
                         #pragma unroll
                         for (int nj = 0; nj < size<1, 1>(tensor); ++nj) {
                             const int col_idx_base = col_idx_offset + nj * 8;

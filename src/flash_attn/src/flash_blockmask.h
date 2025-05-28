@@ -10,6 +10,7 @@ class fwdIterator{
             blockmask_ptr = nullptr;
             return;
         }
+        // TODO minicpm4 support eagle streaming here
         this->cache_seqlen_k = binfo.actual_seqlen_k - binfo.actual_seqlen_q / params.m_block_dim;
         this->max_block_idx = cute::ceil_div(binfo.actual_seqlen_k, params.n_block_dim);
         this->m_block_dim = params.m_block_dim;
