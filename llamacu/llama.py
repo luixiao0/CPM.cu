@@ -51,7 +51,6 @@ class LLM(torch.nn.Module):
         print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
 
         if apply_sparse:
-            # assert chunk_length <= block_window_size * 64, f"chunk_length should be less than {block_window_size * 64}" # TODO minicpm4 this assert is required
             C.init_minicpm4_model(
                 self.memory_limit,
                 self.memory_pool.data.data_ptr(),

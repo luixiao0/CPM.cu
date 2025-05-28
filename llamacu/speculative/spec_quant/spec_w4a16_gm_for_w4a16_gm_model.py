@@ -46,9 +46,6 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         self.draft_parent = torch.tensor([], dtype=torch.int32, device="cuda")
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
 
-        self.draft_prefill_logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
-        # self.draft_prefill_logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
-        # self.logits = torch.empty((64, self.config.hidden_size), dtype=self.dtype, device="cuda")
         self.draft_cuda_graph = draft_cuda_graph
 
         self.draft_group_size = self.drafter_config.quantization_config['group_size']
@@ -110,19 +107,6 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
             # self._load("model.rotary_emb.attention_scaling", attention_scaling, dtype=torch.float32)
         super().load_from_hf()
     
-    # def prefill(self, input_ids, position_ids):
-    #     assert input_ids.dtype == torch.int32
-    #     for i in range(0, input_ids.numel(), self.chunk_length):
-    #         torch.cuda.nvtx.range_push(f"chunk from {i}")
-    #         C.prefill(
-    #             min(input_ids.numel() - i, self.chunk_length), i,
-    #             input_ids.view(-1)[i:].data_ptr(), position_ids.view(-1)[i:].data_ptr(),
-    #             self.logits.data_ptr(),
-    #             self.draft_prefill_logits.data_ptr()
-    #         )
-    #         torch.cuda.nvtx.range_pop()
-    #     return self.logits[:1].clone()
-    
 
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32
@@ -131,17 +115,6 @@ class W4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.draft_ids[:1].copy_(logits[0].argmax(dim=-1))
-        self.cache_length[0] = prefix_length
-        self.draft_position_ids[0] = prefix_length 
-        torch.cuda.synchronize()
-        draft_prefill_start_time = time.time()
-        C.draft_prefill(
-            self.draft_ids.data_ptr(), 
-            self.draft_position_ids.data_ptr(), 
-            self.cache_length.data_ptr()
-        )
-        torch.cuda.synchronize()
-        draft_prefill_end_time = time.time()
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.draft_ids[0])

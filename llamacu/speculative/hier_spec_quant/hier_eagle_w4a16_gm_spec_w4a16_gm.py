@@ -207,17 +207,6 @@ class HierEagleW4A16GMSpecW4A16GM(W4A16GPTQMarlinLLM):
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         logits = self.prefill(input_ids, position_ids)
         self.draft_ids[:1].copy_(logits[0].argmax(dim=-1))
-        self.cache_length[0] = prefix_length
-        self.draft_position_ids[0] = prefix_length
-        torch.cuda.synchronize()
-        draft_start_time = time.time()
-        C.draft_prefill(
-            self.draft_ids.data_ptr(),
-            self.draft_position_ids.data_ptr(),
-            self.cache_length.data_ptr(),
-        )
-        torch.cuda.synchronize()
-        draft_end_time = time.time()
 
         tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
         tokens[0].copy_(self.draft_ids[0])
