@@ -213,14 +213,14 @@ void bitonic_topk(
 }
 
 template<typename T>
-static __global__ void set_topk_to_neg_inf_kernel(int dim, T* x, const int* topk_pos) {
-    x[blockIdx.x * dim + topk_pos[threadIdx.x]] = -TypeTraits<T>::inf();
+static __global__ void set_topk_to_neg_inf_kernel(int dim, int top, T* x, const int* topk_pos) {
+    x[blockIdx.x * dim + topk_pos[blockIdx.x * top + threadIdx.x]] = -TypeTraits<T>::inf();
 }
 } // namespace
 
 template<typename T>
-void set_topk_to_neg_inf(const Stream& stream, int num_tokens, int dim, int top, T* x, const int* topk_pos) {
-    set_topk_to_neg_inf_kernel<<<num_tokens, top, 0, stream.stream>>>(dim, x, topk_pos);
+void set_topk_to_neg_inf(const Stream& stream, int num_tokens, int dim, int top, int num, T* x, const int* topk_pos) {
+    set_topk_to_neg_inf_kernel<<<num_tokens, num, 0, stream.stream>>>(dim, top, x, topk_pos);
 }
 
 template <typename T>
@@ -271,19 +271,19 @@ public:
             this->nw_buf_val, this->nw_buf_pos
         );
         if (top > 32) {
-            assert(top <= 64); // tmp fix
-            cudaMemcpy(this->tmp_x, input, num_tokens * dim * sizeof(T), cudaMemcpyDeviceToDevice);
-            set_topk_to_neg_inf(stream, num_tokens, dim, 32, this->tmp_x, this->topk_pos);
-            assert(num_tokens == 1); // tmp fix
-            bitonic_topk<T>(
-                stream,
-                num_tokens,
-                dim, top - 32,
-                this->tmp_x,
-                this->topk_val + 32, this->topk_pos + 32,
-                this->buf_val, this->buf_pos,
-                this->nw_buf_val, this->nw_buf_pos
-            );
+            for (int i = 32; i < top; i += 32) {
+                cudaMemcpyAsync(this->tmp_x, input, num_tokens * dim * sizeof(T), cudaMemcpyDeviceToDevice, stream.stream);
+                set_topk_to_neg_inf(stream, num_tokens, dim, top, 32, this->tmp_x, this->topk_pos + (i - 32));
+                bitonic_topk<T>(
+                    stream,
+                    num_tokens,
+                    dim, top,
+                    this->tmp_x,
+                    this->topk_val + i, this->topk_pos + i,
+                    this->buf_val, this->buf_pos,
+                    this->nw_buf_val, this->nw_buf_pos
+                );
+            }
         }
     }
 };

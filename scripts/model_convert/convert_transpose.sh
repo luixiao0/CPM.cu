@@ -1,1 +1,0 @@
-python3 model_convert/convert_transpose.py --model-path /yourpath/minicpm4_mupformat --output-path /yourpath/minicpm4_mupformat_transposed

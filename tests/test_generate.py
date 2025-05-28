@@ -8,9 +8,9 @@ import time
 import numpy as np
 
 test_minicpm4 = True
-model_type = "eagle"
+model_type = "base"
 apply_quant = False
-apply_sparse = False
+apply_sparse = True
 
 if not test_minicpm4:
     apply_sparse = False
@@ -27,8 +27,8 @@ else:
     sparse_topk_k = 0
 
 if test_minicpm4:
-    # eagle_path = "/data1/liyx/eagle_0526/job_35949"
-    eagle_path = "/data1/liyx/eagle_0526/job_35949_llamaformat"
+    eagle_path = "/data1/liyx/eagle_0526/job_35949"
+    # eagle_path = "/data1/liyx/eagle_0526/job_35949_llamaformat"
 else:
     eagle_path = "/data1/liyx/Models/EAGLE-LLaMA3-Instruct-8B"
 dtype = torch.float16
@@ -39,14 +39,14 @@ num_generate = 128
 if apply_quant and apply_sparse:
     exit(-1)
 elif not apply_quant and apply_sparse:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat_transposed"
+    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
 elif apply_quant and not apply_sparse:
     path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
 elif not apply_quant and not apply_sparse:
     if test_minicpm4:   
         # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-        # path = "/data1/liyx/eagle_0526/job_33952_step_17300"
-        path = "/data1/liyx/eagle_0526/job_33952_step_17300_llamaformat"
+        path = "/data1/liyx/eagle_0526/job_33952_step_17300"
+        # path = "/data1/liyx/eagle_0526/job_33952_step_17300_llamaformat"
     else:
         path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
 else:
@@ -62,7 +62,7 @@ def make_input(digits, a = 2500, b = 4000):
 
 prompt = None
 # prompt = make_input(681725493, 2000, 4000) # 120k
-# prompt = make_input(681725493, 1500, 3000) # 90k
+prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = make_input(681725493, 10, 50)
