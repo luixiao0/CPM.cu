@@ -15,7 +15,6 @@
 #include "model/eagle.cuh"
 #include "model/minicpm4/minicpm4_eagle.cuh"
 #include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin.cuh"
-#include "model/eagle_base_quant/eagle_base_w4a16_gptq_marlin_rot.cuh"
 
 // spec model
 #include "model/spec_quant/w4a16_gm_spec_w4a16_gm.cuh"
@@ -286,6 +285,7 @@ void init_minicpm4_eagle_model(
     int topk_per_iter,
     int tree_size,
     int torch_dtype,
+    int eagle_window_size,
     float residual_scale,
     bool use_input_norm,
     bool use_attn_norm
@@ -300,6 +300,7 @@ void init_minicpm4_eagle_model(
                 num_iter,
                 topk_per_iter,
                 tree_size,
+                eagle_window_size,
                 residual_scale,
                 use_input_norm,
                 use_attn_norm
@@ -314,6 +315,7 @@ void init_minicpm4_eagle_model(
             num_iter,
             topk_per_iter,
             tree_size,
+            eagle_window_size,
             residual_scale,
             use_input_norm,
             use_attn_norm
@@ -323,26 +325,6 @@ void init_minicpm4_eagle_model(
         printf("Model type failed to dispatch: %s\n", typeid(*model).name());
     }
 }
-
-void init_eagle_w4a16_gptq_marlin_rot_model(
-    int num_layers,
-    int num_iter,
-    int topk_per_iter,
-    int tree_size,
-    int torch_dtype
-) {
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for W8A8 model");
-    }
-    model = new EagleImplBaseW4A16GPTQMarlinRot<half>(
-        (W4A16GPTQMarlinModelImpl<half>*)model,
-        num_layers,
-        num_iter,
-        topk_per_iter,
-        tree_size
-    );
-}
-// eagle model
 
 // spec model
 void init_w4a16_gm_spec_w4a16_gm_model(
@@ -522,13 +504,11 @@ PYBIND11_MODULE(C, m) {
     m.def("init_base_model", &init_base_model, "Init base model");
     m.def("init_minicpm4_model", &init_minicpm4_model, "Init minicpm4 model");
     m.def("init_w4a16_gptq_marlin_base_model", &init_w4a16_gptq_marlin_base_model, "Init W4A16 base model");
-    m.def("init_w4a16_gptq_marlin_minicpm4_model", &init_w4a16_gptq_marlin_minicpm4_model, "Init W4A16 minicpm4 model");
+    m.def("init_w4a16_gptq_marlin_minicpm4_model", &init_w4a16_gptq_marlin_minicpm4_model, "Init W4A16 base model");
 
     // eagle bind
     m.def("init_eagle_model", &init_eagle_model, "Init eagle model");
     m.def("init_minicpm4_eagle_model", &init_minicpm4_eagle_model, "Init minicpm4 eagle model");
-    m.def("init_eagle_w4a16_gptq_marlin_rot_model", &init_eagle_w4a16_gptq_marlin_rot_model, "Init eagle W4A16 model");
-
     // spec bind
     m.def("init_w4a16_gm_spec_w4a16_gm_model", &init_w4a16_gm_spec_w4a16_gm_model, "Init w4a16 spec v1 model");
 

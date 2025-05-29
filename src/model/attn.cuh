@@ -71,7 +71,9 @@ struct Attention {
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
 
-    Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps) {
+    int window_size;
+
+    Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int window_size = 0) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
@@ -83,6 +85,8 @@ struct Attention {
         this->k_proj = new Linear<T>(hidden_size, num_key_value_heads * head_dim);
         this->v_proj = new Linear<T>(hidden_size, num_key_value_heads * head_dim);
         this->o_proj = new Linear<T>(hidden_size, num_attention_heads * head_dim);
+
+        this->window_size = window_size;
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -160,7 +164,9 @@ struct Attention {
             -1,
             -1,
             0,
-            stream.stream
+            stream.stream,
+            nullptr,
+            this->window_size
         );
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
 
@@ -209,7 +215,9 @@ struct Attention {
             -1,
             -1,
             0,
-            stream.stream
+            stream.stream,
+            nullptr,
+            this->window_size
         );
         cuda_perf_stop_on_stream_f(DECODE_ATTN_CORE, stream.stream);
 

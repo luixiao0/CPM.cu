@@ -19,6 +19,7 @@ class LLM_with_eagle(LLM_with_tree_drafter):
                  num_iter=6,
                  topk_per_iter=10,
                  tree_size=60,
+                 eagle_window_size=0,
                  use_rope: bool=False,
                  use_input_norm: bool=False,
                  use_attn_norm: bool=False,
@@ -56,6 +57,7 @@ class LLM_with_eagle(LLM_with_tree_drafter):
                 topk_per_iter,
                 self.tree_size,
                 self.dtype_int,
+                eagle_window_size,
                 scale_residual,
                 use_input_norm, 
                 use_attn_norm

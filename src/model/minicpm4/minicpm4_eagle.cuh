@@ -45,6 +45,7 @@ struct MiniCPM4EagleImpl : Model {
         int num_iter,
         int topk_per_iter,
         int tree_size,
+        int eagle_window_size = 0,
         float residual_scale = 1.0f,
         bool use_input_norm = true,
         bool use_attn_norm = true
@@ -67,7 +68,7 @@ struct MiniCPM4EagleImpl : Model {
             input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
         }
         for (int i = 0; i < num_layers; i++) {
-            layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, this->residual_scale));
+            layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, this->residual_scale, eagle_window_size));
         }
 
         topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
@@ -228,8 +229,6 @@ struct MiniCPM4EagleImpl : Model {
     void decode(int32_t num_tokens, int32_t padded_length, int32_t* input, int32_t* position_ids, int32_t* cache_length, uint64_t* mask_2d, void* output) {
         this->model->decode(num_tokens, padded_length, input, position_ids, cache_length, mask_2d, output);
     }
-
-    void draft_prefill(int32_t *tree_draft_ids, int32_t *tree_position_ids, int32_t *cache_length) { return; }
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);

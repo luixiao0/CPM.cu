@@ -109,4 +109,5 @@ class LLM_with_tree_drafter(LLM):
         torch.cuda.synchronize()
         decode_time = time.time() - start_time
         tokens = tokens[:1+i].tolist()
+
         return tokens, accept_lengths, model_step, decode_time

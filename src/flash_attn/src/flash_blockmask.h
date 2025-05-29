@@ -7,32 +7,29 @@ class fwdIterator{
     template<typename Params, typename BlockInfo>
     __device__ fwdIterator(const Params &params, const BlockInfo &binfo, const int kBlockM, const int kBlockN, const int batch_idx, const int head_idx, const int loop_step_idx, int n_block_min, int n_block_max) {//row first
         this->cache_seqlen_k = binfo.actual_seqlen_k - binfo.actual_seqlen_q / params.m_block_dim;
-        this->max_block_idx = cute::ceil_div(binfo.actual_seqlen_k, params.n_block_dim);
-        this->m_block_dim = params.m_block_dim;
-        this->n_block_dim = params.n_block_dim;
+        this->max_block_idx = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
         this->n_block_min = n_block_min;
         this->n_block_max = n_block_max;
         this->batch_idx = batch_idx;  // Store batch_idx for debugging
         this->head_idx = head_idx;
 
-        // Calculate the offset for the uint64 blockmask 
-        const int num_blocks_m = params.num_blocks_m;
-        const int num_blocks_n = params.num_blocks_n;
-        const int uint64_per_row = (num_blocks_n + 64 - 1) / 64;
-        const int row_offset = params.cu_seqlens_q != nullptr ? binfo.blockmask_q_offset(m_block_dim, batch_idx) : batch_idx * params.h_k * params.num_blocks_m;
+        const int q_block_idx = loop_step_idx + cache_seqlen_k;
+        if (params.blockmask != nullptr) {
+            // Calculate the offset for the uint64 blockmask 
+            const int num_blocks_m = params.num_blocks_m;
+            const int num_blocks_n = params.num_blocks_n;
+            const int uint64_per_row = (num_blocks_n + 64 - 1) / 64;
+            const int row_offset = params.cu_seqlens_q != nullptr ? binfo.blockmask_q_offset(params.m_block_dim, batch_idx) : batch_idx * params.h_k * params.num_blocks_m;
 
-        if (params.blockmask == nullptr) {
+            blockmask_ptr = params.blockmask + 
+                            head_idx * params.num_blocks_m * uint64_per_row + 
+                            row_offset * uint64_per_row +
+                            loop_step_idx * uint64_per_row;
+        } else {
             blockmask_ptr = nullptr;
         }
-        else{
-            blockmask_ptr = params.blockmask + 
-                        head_idx * params.num_blocks_m * uint64_per_row + 
-                        row_offset * uint64_per_row +
-                        loop_step_idx * uint64_per_row;
-        }
 
-        const int q_block_idx = loop_step_idx + cache_seqlen_k;
-        this->k_window_right = q_block_idx / n_block_dim;
+        this->k_window_right = q_block_idx / kBlockN;
         this->k_window_left = max(0, this->k_window_right - params.block_window_size + 1);
     }
 
@@ -45,14 +42,14 @@ class fwdIterator{
             return -1;
         };
         if (target < 0) return -1;
-        
+
         if (k_window_left <= target && target <= k_window_right){
             return target;
         }
         
         // 目标值不能超过最大块索引
         target = min(target, max_block_idx - 1);
-
+        
         int result = -1;
         
         if (blockmask_ptr != nullptr) {
@@ -67,7 +64,7 @@ class fwdIterator{
             
             // 创建一个掩码，保留target及更低位的所有位
             uint64_t mask = bit_pos != 63 ? (1ULL << (bit_pos + 1)) - 1 : 0xFFFFFFFFFFFFFFFFULL;
-
+            
             // 检查当前uint64中target及以下的位
             uint64_t value = blockmask_ptr[uint64_offset] & mask;
             
@@ -103,7 +100,6 @@ class fwdIterator{
     int uint64_per_row;          // 每行使用的uint64数量
     int cache_seqlen_k;
     int max_block_idx;
-    int m_block_dim, n_block_dim;
     int n_block_min, n_block_max;
     int batch_idx, head_idx;
     int k_window_left, k_window_right;

@@ -1514,7 +1514,7 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
 
     const float alibi_slope = !Has_alibi ? 0.0f : reinterpret_cast<float *>(params.alibi_slopes_ptr)[bidb * params.alibi_slopes_batch_stride + bidh] / params.scale_softmax;
     flash::Mask<Is_causal, Is_local, Has_alibi, /*Mask_2d=*/true> mask(binfo.actual_seqlen_k, binfo.actual_seqlen_q, params.window_size_left, params.window_size_right, alibi_slope, params.mask_2d, params.mask_q_range, params.mask_k_range, params.m_block_dim);
-    fwdIterator blockmask(params, binfo, kBlockM, kBlockN, bidb, bidh, m_block, n_block_min, n_block_max);
+    fwdIterator blockmask(params, binfo, kBlockM, kBlockN, bidb, bidh, m_block * kBlockM, n_block_min, n_block_max);
     int next_block_idx = blockmask.max_no_larger(n_block_max-1);
     int leap = 0;
     // For performance reason, we separate out two kinds of iterations:

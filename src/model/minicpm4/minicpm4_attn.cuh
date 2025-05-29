@@ -3,41 +3,6 @@
 #include "minicpm4_kvcache.cuh"
 
 template <typename T>
-void debug_print(std::string name, T* arr, int n, int m) {
-    FILE* fp = fopen(name.c_str(), "w");
-    T* h_arr = new T[n * m];
-    cudaMemcpy(h_arr, arr, n * m * sizeof(T), cudaMemcpyDeviceToHost);
-    fprintf(fp, "%d %d\n", n, m);
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            float value = float(h_arr[i * m + j]);
-            fprintf(fp, "%f ", value);
-        }
-        fprintf(fp, "\n");
-    }
-    fclose(fp);
-    delete[] h_arr;
-}
-
-template <>
-void debug_print(std::string name, uint64_t* arr, int n, int m) {
-    FILE* fp = fopen(name.c_str(), "w");
-    uint64_t* h_arr = new uint64_t[n * m];
-    cudaMemcpy(h_arr, arr, n * m * sizeof(uint64_t), cudaMemcpyDeviceToHost);
-    fprintf(fp, "%d %d\n", n, m);
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            for (int k = 0; k < 64; k++) {
-                fprintf(fp, "%d", (h_arr[i * m + j] >> k) & 1);
-            }
-        }
-        fprintf(fp, "\n");
-    }
-    fclose(fp);
-    delete[] h_arr;
-}
-
-template <typename T>
 struct MiniCPM4Attention {
     int hidden_size;
     int num_attention_heads;
@@ -190,19 +155,6 @@ struct MiniCPM4Attention {
                 num_history_tokens+num_tokens
             );
             blockmask = kv_cache->blockmask;
-
-            // if (num_history_tokens == 8192) {
-            //     printf("num_history_tokens: %d, num_tokens: %d\n", num_history_tokens, num_tokens);
-            //     debug_print("q.txt", this->q_proj->output, num_tokens, this->hidden_size);
-            //     debug_print("k_cache.txt", kv_cache->k_cache, num_history_tokens, this->hidden_size/16);
-            //     debug_print("v_cache.txt", kv_cache->v_cache, num_history_tokens, this->hidden_size/16);
-            //     debug_print("c1_cache.txt", kv_cache->c1_cache, kv_cache->c1_len, this->hidden_size/16);
-            //     debug_print("stage1_score.txt", kv_cache->stage1_score, 2*q_round, k_round);
-            //     debug_print("pool_score.txt", kv_cache->pool_score, 2*num_tokens, out_len);
-            //     debug_print("topk.txt", kv_cache->topk_func->topk_pos, 2*num_tokens, kv_cache->topk_func->top);
-            //     debug_print("blockmask.txt", blockmask, 2*num_tokens, ((num_history_tokens+num_tokens+63)/64+63)/64);
-            //     exit(0);
-            // }
         }
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE1, stream.stream);
 
@@ -232,7 +184,7 @@ struct MiniCPM4Attention {
             0,
             stream.stream,
             blockmask,
-            this->block_window_size
+            blockmask?this->block_window_size:0 // TODO fix this condition
         );
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE2, stream.stream);
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
@@ -348,7 +300,7 @@ struct MiniCPM4Attention {
             0,
             stream.stream,
             blockmask,
-            this->block_window_size
+            blockmask?this->block_window_size:0 // TODO fix this condition
         );
         cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE2, stream.stream);
         cuda_perf_stop_on_stream_f(DECODE_ATTN_CORE, stream.stream);

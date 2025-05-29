@@ -10,12 +10,14 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
     def __init__(self,
                  drafter_type, drafter_path, base_path,
                  tree_size,
+                 use_rope: bool=False,
                  **kwargs):
         super().__init__(base_path, **kwargs)
 
         self.drafter_type = drafter_type
         self.drafter_path = drafter_path
         self.base_path = base_path
+        self.use_rope = use_rope
 
         self.tree_size = tree_size
         self.tree_draft_ids = torch.empty((tree_size), dtype=torch.int32, device="cuda")
@@ -28,8 +30,21 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
 
     def load_from_hf(self):
-        self._load_from_ckpt(self.drafter_path, cls=self.drafter_type)
-        super().load_from_hf()
+        with torch.no_grad():
+            self._load_from_ckpt(self.drafter_path, cls=self.drafter_type)
+
+            if self.use_rope:
+                if hasattr(self.config, "rope_scaling") and self.config.rope_scaling is not None:
+                    rope_type = self.config.rope_scaling.get("rope_type", self.config.rope_scaling.get("type"))
+                else:
+                    rope_type = "default"
+                # TODO only support "default", "llama3" or "longrope" with long_factor=short_factor
+                inv_freq, attention_scaling = ROPE_INIT_FUNCTIONS[rope_type](self.config, "cpu", seq_len=self.max_total_length)
+                # attention_scaling = torch.tensor([attention_scaling], dtype=torch.float32, device="cpu")
+                self._load(f"{self.drafter_type}.rotary_emb.inv_freq", inv_freq, dtype=torch.float32)
+                # self._load("model.rotary_emb.attention_scaling", attention_scaling, dtype=torch.float32)
+
+            super().load_from_hf()
 
     def generate(self, input_ids, generation_length=100, teminators=[]):
         assert input_ids.dtype == torch.int32

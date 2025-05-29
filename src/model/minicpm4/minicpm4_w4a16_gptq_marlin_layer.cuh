@@ -1,8 +1,8 @@
 #pragma once
-#include "minicpm4_w4a16_gptq_marlin_attn.cuh"
-#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_ffn.cuh"
 #include "../layer.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_ffn.cuh"
 #include "../../qgemm/gptq_marlin/gptq_marlin.cuh"
+#include "minicpm4_w4a16_gptq_marlin_attn.cuh"
 
 template <typename T>
 struct MiniCPM4W4A16GPTQMarlinLayer {

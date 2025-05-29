@@ -15,8 +15,8 @@ struct Layer {
     int hidden_size;
     float residual_scale;
 
-    Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float residual_scale = 1.0) {
-        this->attn = new Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps);
+    Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float residual_scale = 1.0, int window_size = 0) {
+        this->attn = new Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, window_size);
         this->ffn = new GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps);
         this->hidden_size = hidden_size;
         this->residual_scale = residual_scale;

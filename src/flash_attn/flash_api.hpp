@@ -264,6 +264,7 @@ void mha_fwd_stage1(
                      );
 
     params.blockmask = nullptr;
+    params.block_window_size = 0;
     params.m_block_dim = 16;
     params.n_block_dim = 1;
 

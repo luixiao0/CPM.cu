@@ -43,7 +43,6 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         self.memory_pool = torch.nn.Parameter(torch.empty(self.memory_limit, dtype=torch.uint8, device="cuda"), requires_grad=False)
 
         self.chunk_length = chunk_length
-        assert chunk_length <= 2048, "chunk_length should be less than 2048"
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
         
@@ -74,7 +73,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 scale_residual,
                 sink_window_size,
                 block_window_size,
-                sparse_topk_k
+                sparse_topk_k,
             )
         else:
             C.init_w4a16_gptq_marlin_base_model(
@@ -93,7 +92,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 self.chunk_length,
                 scale_embed,
                 scale_lmhead,
-                scale_residual
+                scale_residual,
             )
 
         self.logits = torch.empty((64, self.config.vocab_size), dtype=self.dtype, device="cuda")
