@@ -2,6 +2,7 @@
 
 // For TORCH_CHECK
 #include <torch/library.h>
+#include <variant>
 
 namespace vllm {
 
