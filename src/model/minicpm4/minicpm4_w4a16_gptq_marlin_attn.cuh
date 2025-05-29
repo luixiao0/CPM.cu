@@ -92,6 +92,8 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         cudaMemcpy(v_cache, this->permute_qkv_output + num_tokens*( this->num_attention_heads + this->num_key_value_heads)*this->head_dim, num_tokens*this->num_key_value_heads*this->head_dim*sizeof(T), cudaMemcpyDeviceToDevice);
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->permute_qkv_output, k_cache, position_ids);
 
+        cuda_perf_start_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
+        cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE1, stream.stream);
         if (num_history_tokens == 0) {
             kv_cache->init();
         } else {
@@ -101,6 +103,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         uint64_t *blockmask = nullptr;
         if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
+            cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(
                 TypeTraits<T>::type_code()==1,
                 1,
@@ -124,6 +127,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
                 q_round,
                 k_round
             );
+            cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE1_CORE, stream.stream);
             maxpooling_func(
                 stream.stream,
                 kv_cache->stage1_score,
@@ -153,7 +157,9 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             );
             blockmask = kv_cache->blockmask;
         }
+        cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE1, stream.stream);
 
+        cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE2, stream.stream);
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -180,6 +186,8 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             blockmask,
             blockmask ? this->block_window_size : 0 // TODO fix this condition
         );
+        cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE2, stream.stream);
+        cuda_perf_stop_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
 
         // flash attention and put output to attn_norm->output
         this->o_proj->prefill(stream, num_tokens, this->attn_output, a_tmp, c_tmp);
@@ -201,8 +209,10 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         }
         k = q + num_tokens * this->num_attention_heads * this->head_dim;
         v = k + num_tokens * this->num_key_value_heads * this->head_dim;
-
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
+
+        cuda_perf_start_on_stream_f(DECODE_ATTN_CORE, stream.stream);
+        cuda_perf_start_on_stream_f(DECODE_ATTN_STAGE1, stream.stream);
 
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
 
@@ -263,7 +273,9 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             );
             blockmask = kv_cache->blockmask;
         }
+        cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE1, stream.stream);
         
+        cuda_perf_start_on_stream_f(DECODE_ATTN_STAGE2, stream.stream);
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -290,6 +302,8 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             blockmask,
             blockmask ? this->block_window_size : 0 // TODO fix this condition
         );
+        cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE2, stream.stream);
+        cuda_perf_stop_on_stream_f(DECODE_ATTN_CORE, stream.stream);
 
         // flash attention and put output to attn_norm->output
         this->o_proj->prefill(stream, num_tokens, this->attn_output, a_tmp, c_tmp);
