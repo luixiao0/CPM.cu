@@ -121,7 +121,8 @@ void init_minicpm4_model(
     float scale_residual,
     int sink_window_size,
     int block_window_size,
-    int sparse_topk_k
+    int sparse_topk_k,
+    bool apply_compress_lse
 ) {
     init_resources();
 
@@ -143,7 +144,8 @@ void init_minicpm4_model(
             scale_residual,
             sink_window_size,
             block_window_size,
-            sparse_topk_k
+            sparse_topk_k,
+            apply_compress_lse
         );
     });
 
@@ -212,7 +214,8 @@ void init_w4a16_gptq_marlin_minicpm4_model(
     float scale_residual,
     int sink_window_size,
     int block_window_size,
-    int sparse_topk_k
+    int sparse_topk_k,
+    bool apply_compress_lse
 ) {
     if (torch_dtype != 0) {
         throw std::invalid_argument("Only half precision is supported for W8A8 model");
@@ -237,7 +240,8 @@ void init_w4a16_gptq_marlin_minicpm4_model(
         scale_residual,
         sink_window_size,
         block_window_size,
-        sparse_topk_k
+        sparse_topk_k,
+        apply_compress_lse
     );
 
 }

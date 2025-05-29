@@ -24,8 +24,9 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
 
     int sink_window_size;
     int block_window_size;
+    int apply_compress_lse;
 
-    MiniCPM4W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int sink_window_size, int block_window_size) {
+    MiniCPM4W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int sink_window_size, int block_window_size, bool apply_compress_lse) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
@@ -39,6 +40,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
 
         this->sink_window_size = sink_window_size;
         this->block_window_size = block_window_size;
+        this->apply_compress_lse = apply_compress_lse;
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -96,22 +98,21 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             kv_cache->compress(stream);
         }
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len > 0) {
+        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
             mha_fwd_stage1(
                 TypeTraits<T>::type_code()==1,
                 1,
                 num_tokens,
                 kv_cache->c1_len,
-                num_tokens,
+                apply_compress_lse ? kv_cache->c2_len : kv_cache->c1_len,
                 this->num_attention_heads,
                 this->num_key_value_heads,
                 this->head_dim,
                 this->permute_qkv_output,
                 kv_cache->c1_cache,
-                kv_cache->c2_cache,
+                apply_compress_lse ? kv_cache->c2_cache : kv_cache->c1_cache,
                 nullptr,
                 kv_cache->stage1_score,
                 rsqrtf(float(this->head_dim)),
@@ -148,11 +149,9 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
                 kv_cache->blockmask,
                 this->num_key_value_heads*num_tokens,
                 kv_cache->topk_func->top,
-                num_history_tokens+num_tokens // TODO minicpm4 decode should be padded length
+                num_history_tokens+num_tokens
             );
             blockmask = kv_cache->blockmask;
-        } else {
-            blockmask = &fakeblock;
         }
 
         mha_fwd_kvcache(
@@ -160,7 +159,6 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             1,
             num_tokens,
             num_history_tokens+num_tokens,
-            num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,
@@ -210,22 +208,21 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
 
         kv_cache->compress(stream);
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len > 0) {
+        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
             mha_fwd_stage1(
                 TypeTraits<T>::type_code()==1,
                 1,
                 num_tokens,
                 kv_cache->c1_len,
-                num_tokens,
+                apply_compress_lse ? kv_cache->c2_len : kv_cache->c1_len,
                 this->num_attention_heads,
                 this->num_key_value_heads,
                 this->head_dim,
                 q,
                 kv_cache->c1_cache,
-                kv_cache->c2_cache,
+                apply_compress_lse ? kv_cache->c2_cache : kv_cache->c1_cache,
                 nullptr,
                 kv_cache->stage1_score,
                 rsqrtf(float(this->head_dim)),
@@ -265,16 +262,12 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
                 padded_length
             );
             blockmask = kv_cache->blockmask;
-        } else {
-            blockmask = &fakeblock;
         }
-
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
             num_tokens,
             padded_length,
-            num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,
