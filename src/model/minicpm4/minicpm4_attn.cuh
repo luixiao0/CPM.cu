@@ -20,7 +20,7 @@ struct MiniCPM4Attention {
 
     int sink_window_size;
     int block_window_size;
-    int sparse_topk_k;
+    bool apply_compress_lse;
 
     MiniCPM4Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int sink_window_size, int block_window_size, int sparse_topk_k) {
         this->hidden_size = hidden_size;
@@ -37,7 +37,7 @@ struct MiniCPM4Attention {
 
         this->sink_window_size = sink_window_size;
         this->block_window_size = block_window_size;
-        this->sparse_topk_k = sparse_topk_k;
+        this->apply_compress_lse = apply_compress_lse;
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -101,7 +101,7 @@ struct MiniCPM4Attention {
 
         uint64_t fake_blockmask = 0;
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len > 0) {
+        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
             cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(
@@ -109,13 +109,13 @@ struct MiniCPM4Attention {
                 1,
                 num_tokens,
                 kv_cache->c1_len,
-                num_tokens,
+                apply_compress_lse ? kv_cache->c2_len : kv_cache->c1_len,
                 this->num_attention_heads,
                 this->num_key_value_heads,
                 this->head_dim,
                 this->q_proj->output,
                 kv_cache->c1_cache,
-                kv_cache->c2_cache,
+                apply_compress_lse ? kv_cache->c2_cache : kv_cache->c1_cache,
                 nullptr,
                 kv_cache->stage1_score,
                 rsqrtf(float(this->head_dim)),
@@ -168,7 +168,6 @@ struct MiniCPM4Attention {
             1,
             num_tokens,
             num_history_tokens+num_tokens,
-            num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,
@@ -223,20 +222,20 @@ struct MiniCPM4Attention {
 
         uint64_t fake_blockmask = 0;
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len > 0) {
+        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
             mha_fwd_stage1(
                 TypeTraits<T>::type_code()==1,
                 1,
                 num_tokens,
                 kv_cache->c1_len,
-                num_tokens,
+                apply_compress_lse ? kv_cache->c2_len : kv_cache->c1_len,
                 this->num_attention_heads,
                 this->num_key_value_heads,
                 this->head_dim,
                 this->q_proj->output,
                 kv_cache->c1_cache,
-                kv_cache->c2_cache,
+                apply_compress_lse ? kv_cache->c2_cache : kv_cache->c1_cache,
                 nullptr,
                 kv_cache->stage1_score,
                 rsqrtf(float(this->head_dim)),
@@ -288,7 +287,6 @@ struct MiniCPM4Attention {
             1,
             num_tokens,
             padded_length,
-            num_tokens,
             this->num_attention_heads,
             this->num_key_value_heads,
             this->head_dim,

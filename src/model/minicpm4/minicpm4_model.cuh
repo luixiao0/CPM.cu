@@ -43,7 +43,8 @@ struct MiniCPM4Impl : Model {
         float scale_residual = 1.0f,
         int sink_window_size = 1,
         int block_window_size = 32,
-        int sparse_topk_k = 32
+        int sparse_topk_k = 32,
+        bool apply_compress_lse = false
     ) {
         this->vocab_size = vocab_size;
         this->num_hidden_layers = num_hidden_layers;
@@ -59,11 +60,11 @@ struct MiniCPM4Impl : Model {
         
         memory = new Memory(memory_limit, memory_pool);
 
-        kv_caches = new MiniCPM4KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim, sparse_topk_k);
+        kv_caches = new MiniCPM4KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim, sparse_topk_k, apply_compress_lse);
 
         embedding = new Embedding<T>(vocab_size, hidden_size, scale_embed);
         for (int i = 0; i < num_hidden_layers; i++) {
-            layers.push_back(new MiniCPM4Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, residual_scale, sink_window_size, block_window_size));
+            layers.push_back(new MiniCPM4Layer<T>(hidden_size, intermediate_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, residual_scale, sink_window_size, block_window_size, apply_compress_lse));
         }
         norm = new RMSNorm<T>(hidden_size, rms_norm_eps);
         lm_head = new LMHead<T>(hidden_size, vocab_size, scale_lmhead);

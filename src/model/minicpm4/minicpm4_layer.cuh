@@ -10,8 +10,8 @@ struct MiniCPM4Layer {
     int hidden_size;
     float residual_scale;
 
-    MiniCPM4Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float residual_scale = 1.0, int sink_window_size = 1, int block_window_size = 32, int sparse_topk_k = 32) {
-        this->attn = new MiniCPM4Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, sink_window_size, block_window_size, sparse_topk_k);
+    MiniCPM4Layer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, float residual_scale = 1.0, int sink_window_size = 1, int block_window_size = 32, bool apply_compress_lse = false) {
+        this->attn = new MiniCPM4Attention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, sink_window_size, block_window_size, apply_compress_lse);
         this->ffn = new GatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps);
         this->hidden_size = hidden_size;
         this->residual_scale = residual_scale;

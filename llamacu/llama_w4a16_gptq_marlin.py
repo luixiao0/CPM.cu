@@ -29,6 +29,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                  sink_window_size: int = 1,
                  block_window_size: int = 32,
                  sparse_topk_k: int = 32,
+                 apply_compress_lse: bool = False,
     ):
         super().__init__()
 
@@ -74,6 +75,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 sink_window_size,
                 block_window_size,
                 sparse_topk_k,
+                apply_compress_lse,
             )
         else:
             C.init_w4a16_gptq_marlin_base_model(
