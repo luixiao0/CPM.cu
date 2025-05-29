@@ -318,7 +318,8 @@ void mha_fwd_kvcache(
     if (seqlen_q == 1) { is_causal = false; }
     if (is_causal) { window_size_right = 0; }
 
-    if (blockmask != nullptr || block_window_size > 0) {
+    if (blockmask != nullptr) { // TODO improve this
+    // if (blockmask != nullptr || block_window_size > 0) {
         seqlen_q *= 16;
         num_heads /= 16;
     }
@@ -353,7 +354,8 @@ void mha_fwd_kvcache(
                      );
 
     params.blockmask = blockmask;
-    if (blockmask != nullptr || block_window_size > 0) {
+    if (blockmask != nullptr) { // TODO improve this
+    // if (blockmask != nullptr || block_window_size > 0) {
         params.m_block_dim = 16;
         params.n_block_dim = 64;
         params.num_blocks_m = (seqlen_q + 16 - 1) / 16;

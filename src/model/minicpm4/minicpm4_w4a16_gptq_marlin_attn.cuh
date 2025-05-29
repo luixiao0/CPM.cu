@@ -180,7 +180,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             0,
             stream.stream,
             blockmask,
-            blockmask?this->block_window_size:0 // TODO fix this condition
+            blockmask ? this->block_window_size : 0 // TODO fix this condition
         );
 
         // flash attention and put output to attn_norm->output
@@ -294,7 +294,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             0,
             stream.stream,
             blockmask,
-            blockmask?this->block_window_size:0 // TODO fix this condition
+            blockmask ? this->block_window_size : 0 // TODO fix this condition
         );
 
         // flash attention and put output to attn_norm->output

@@ -99,6 +99,7 @@ struct MiniCPM4Attention {
             kv_cache->compress(stream);
         }
 
+        uint64_t fake_blockmask = 0;
         uint64_t *blockmask = nullptr;
         if (kv_cache->c1_len > 0) {
             int q_round, k_round, out_len;
@@ -156,6 +157,9 @@ struct MiniCPM4Attention {
             );
             blockmask = kv_cache->blockmask;
         }
+        else {
+            blockmask = &fake_blockmask;
+        }
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE1, stream.stream);
 
         cuda_perf_start_on_stream_f(PREFILL_ATTN_STAGE2, stream.stream);
@@ -184,7 +188,7 @@ struct MiniCPM4Attention {
             0,
             stream.stream,
             blockmask,
-            blockmask?this->block_window_size:0 // TODO fix this condition
+            blockmask ? this->block_window_size : 0 // TODO fix this condition
         );
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE2, stream.stream);
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
@@ -217,6 +221,7 @@ struct MiniCPM4Attention {
 
         kv_cache->compress(stream);
 
+        uint64_t fake_blockmask = 0;
         uint64_t *blockmask = nullptr;
         if (kv_cache->c1_len > 0) {
             int q_round, k_round, out_len;
@@ -272,6 +277,9 @@ struct MiniCPM4Attention {
             );
             blockmask = kv_cache->blockmask;
         }
+        else {
+            blockmask = &fake_blockmask;
+        }
         cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE1, stream.stream);
 
         cuda_perf_start_on_stream_f(DECODE_ATTN_STAGE2, stream.stream);
@@ -300,7 +308,7 @@ struct MiniCPM4Attention {
             0,
             stream.stream,
             blockmask,
-            blockmask?this->block_window_size:0 // TODO fix this condition
+            blockmask ? this->block_window_size : 0 // TODO fix this condition
         );
         cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE2, stream.stream);
         cuda_perf_stop_on_stream_f(DECODE_ATTN_CORE, stream.stream);

@@ -25,74 +25,69 @@ class fwdIterator{
                             head_idx * params.num_blocks_m * uint64_per_row + 
                             row_offset * uint64_per_row +
                             loop_step_idx * uint64_per_row;
+
+            this->k_window_left = params.block_window_size > 0 ? (q_block_idx + kBlockN - 1) / kBlockN - params.block_window_size : 2147483647;
         } else {
             blockmask_ptr = nullptr;
+            this->k_window_left = params.block_window_size > 0 ? (q_block_idx + kBlockN - 1) / kBlockN - params.block_window_size / kBlockN : -1;
         }
-
-        this->k_window_right = q_block_idx / kBlockN;
-        this->k_window_left = max(0, this->k_window_right - params.block_window_size + 1);
     }
 
     __device__ int max_no_larger(int target) const {
-        if (blockmask_ptr == nullptr && k_window_left > k_window_right) {
-            return target;
-        }
-
         if(max_block_idx == 0){
             return -1;
         };
         if (target < 0) return -1;
 
-        if (k_window_left <= target && target <= k_window_right){
+        if (blockmask_ptr == nullptr) {
+            if (k_window_left <= target) return target; // sliding window
+            return -1; // attention sink
+        }
+        
+        if (k_window_left <= target) {
             return target;
         }
         
         // 目标值不能超过最大块索引
         target = min(target, max_block_idx - 1);
         
-        int result = -1;
+        // 计算相对于当前q_bit_position的实际位置
+        int target_bit_pos = target;
         
-        if (blockmask_ptr != nullptr) {
-            // 计算相对于当前q_bit_position的实际位置
-            int target_bit_pos = target;
-            
-            // 确定此块在哪个uint64中
-            int uint64_offset = target_bit_pos / 64;
-            
-            // 确定此块在uint64中的哪一位
-            int bit_pos = target_bit_pos % 64;
-            
-            // 创建一个掩码，保留target及更低位的所有位
-            uint64_t mask = bit_pos != 63 ? (1ULL << (bit_pos + 1)) - 1 : 0xFFFFFFFFFFFFFFFFULL;
-            
-            // 检查当前uint64中target及以下的位
-            uint64_t value = blockmask_ptr[uint64_offset] & mask;
-            
-            // 如果当前uint64中有设置的位
+        // 确定此块在哪个uint64中
+        int uint64_offset = target_bit_pos / 64;
+        
+        // 确定此块在uint64中的哪一位
+        int bit_pos = target_bit_pos % 64;
+        
+        // 创建一个掩码，保留target及更低位的所有位
+        uint64_t mask = bit_pos != 63 ? (1ULL << (bit_pos + 1)) - 1 : 0xFFFFFFFFFFFFFFFFULL;
+        
+        // 检查当前uint64中target及以下的位
+        uint64_t value = blockmask_ptr[uint64_offset] & mask;
+        
+        // 如果当前uint64中有设置的位
+        if (value != 0) {
+            // 找到最高位的1（即不大于target的最大设置位）
+            int highest_bit = 63 - __clzll(value);  // __clzll计算前导0的数量
+            int result = highest_bit + (uint64_offset * 64);
+            return result;
+        }
+        
+        // 如果当前uint64中没有找到，检查更低的uint64块
+        for (int i = uint64_offset - 1; i >= 0; i--) {
+            value = blockmask_ptr[i];
             if (value != 0) {
-                // 找到最高位的1（即不大于target的最大设置位）
-                int highest_bit = 63 - __clzll(value);  // __clzll计算前导0的数量
-                result = highest_bit + (uint64_offset * 64);
-            } else {
-                // 如果当前uint64中没有找到，检查更低的uint64块
-                for (int i = uint64_offset - 1; i >= 0; i--) {
-                    value = blockmask_ptr[i];
-                    if (value != 0) {
-                        // 找到最高位的1
-                        int highest_bit = 63 - __clzll(value);
-                        // 计算相对于q_bit_position的偏移
-                        result = highest_bit + (i * 64);
-                        break;
-                    }
-                }
+                // 找到最高位的1
+                int highest_bit = 63 - __clzll(value);
+                // 计算相对于q_bit_position的偏移
+                int result = highest_bit + (i * 64);
+                return result;
             }
         }
-
-        if (target > k_window_right && result <= k_window_right && k_window_left <= k_window_right)
-            return k_window_right;
         
         // 没有找到设置位
-        return result;
+        return -1;
     }
 
     uint64_t *blockmask_ptr;
@@ -102,7 +97,7 @@ class fwdIterator{
     int max_block_idx;
     int n_block_min, n_block_max;
     int batch_idx, head_idx;
-    int k_window_left, k_window_right;
+    int k_window_left;
 };
 
 }  // namespace flash
