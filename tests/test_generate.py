@@ -9,7 +9,7 @@ import numpy as np
 
 test_minicpm4 = True
 apply_eagle = True
-apply_quant = False
+apply_quant = True
 apply_sparse = True
 
 num_generate = 128
@@ -17,7 +17,7 @@ sink_window_size = 1
 # block_window_size = 2048
 # sparse_topk_k = 0
 block_window_size = 32
-sparse_topk_k = 32
+sparse_topk_k = 64
 
 if not test_minicpm4:
     print(f"test_minicpm4 is False, set apply_sparse to False")
@@ -27,11 +27,6 @@ model_type = "base" if not apply_eagle else "eagle"
 dtype = torch.float16
 cuda_graph = False
 chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
-
-if not apply_sparse:
-    sink_window_size = 0
-    block_window_size = 0
-    sparse_topk_k = 0
 
 if test_minicpm4:
     eagle_path = "/data1/liyx/eagle_0526/job_35949"
@@ -59,10 +54,10 @@ def make_input(digits, a = 2500, b = 4000):
 
 prompt = None
 prompt_content = "北京有哪些好玩的地方"
-# with open("prompt.txt", "r") as f:
-#     prompt_content = f.read()
+with open("prompt.txt", "r") as f:
+    prompt_content = f.read()
 
-# prompt = make_input(681725493, 2000, 4000) # 120k
+prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
@@ -85,7 +80,7 @@ teminators = [tokenizer.eos_token_id]
 
 if apply_quant:
     if model_type == "eagle":
-        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.8, num_iter=3, tree_size=30, chunk_length=chunk_length, cuda_graph=cuda_graph)
+        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.5, num_iter=1, topk_per_iter=4, tree_size=4, chunk_length=chunk_length, cuda_graph=cuda_graph, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
         llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.45, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)

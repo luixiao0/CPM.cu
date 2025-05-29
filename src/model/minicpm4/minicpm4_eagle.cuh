@@ -2,6 +2,7 @@
 #include <type_traits>
 #include "../eagle.cuh"
 #include "minicpm4_model.cuh"
+#include "minicpm4_w4a16_gptq_marlin_model.cuh"
 
 template<typename T, class ModelType>
 struct MiniCPM4EagleImpl : Model {
@@ -129,7 +130,7 @@ struct MiniCPM4EagleImpl : Model {
         int64_t offset = this->model->init_output_ptr(this->model->memory, this->model->chunk_length, this->model->memory->model_offset);
         int64_t kv_cache_offset = this->init_output_ptr(this->model->memory, this->model->chunk_length, offset);
         float ratio = float(this->model->num_hidden_layers) / (this->model->num_hidden_layers + this->num_layers);
-        if constexpr (std::is_same_v<ModelType, MiniCPM4Impl<T>>) {
+        if constexpr (std::is_same_v<ModelType, MiniCPM4Impl<T>> || std::is_same_v<ModelType, MiniCPM4W4A16GPTQMarlinModelImpl<T>>) {
             kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, this->model->chunk_length, kv_cache_offset, ratio);
         } else {
             kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset, ratio);
@@ -317,7 +318,7 @@ struct MiniCPM4EagleImpl : Model {
 
         make_arange(calc_stream, this->num_prev, cache_length, this->eagle_position_ids);
 
-        if constexpr (std::is_same_v<ModelType, MiniCPM4Impl<T>>) {
+        if constexpr (std::is_same_v<ModelType, MiniCPM4Impl<T>> || std::is_same_v<ModelType, MiniCPM4W4A16GPTQMarlinModelImpl<T>>) {
             this->model->kv_caches->add_length(h_best[0] - 1);
         }
 

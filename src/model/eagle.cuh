@@ -238,7 +238,7 @@ struct Skip : Norm<T> {
     }
 };
 
-template<typename T>
+template<typename T, class ModelType>
 struct EagleImpl : Model {
     int num_layers;
     int num_iter;
@@ -246,7 +246,7 @@ struct EagleImpl : Model {
     int tree_size;
     int total_tried;
 
-    ModelImpl<T>* model;
+    ModelType* model;
     KVCacheManager<T>* kv_caches;
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1;
@@ -269,7 +269,7 @@ struct EagleImpl : Model {
     T* tmp_kvcache;
 
     EagleImpl(
-        ModelImpl<T>* model,
+        ModelType* model,
         int num_layers,
         int num_iter,
         int topk_per_iter,

@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <cuda_runtime.h>
+#include <type_traits>
 
 #include "utils.cuh"
 #include "trait.cuh"
@@ -41,11 +42,24 @@
       using ModelType = MiniCPM4Impl<T>; \
       auto* typed_model = static_cast<MiniCPM4Impl<T>*>(MODEL_PTR); \
       return __VA_ARGS__();                   \
-    } else {                                  \
+    } else if (dynamic_cast<ModelImpl<T>*>(MODEL_PTR)) { \
       using ModelType = ModelImpl<T>; \
       auto* typed_model = static_cast<ModelImpl<T>*>(MODEL_PTR);    \
       return __VA_ARGS__();                   \
-    }                                         \
+    } \
+  }()
+
+#define MODEL_TYPE_SWITCH_ONLY_HALF(MODEL_PTR, ...)  \
+  [&] {                                       \
+    if (dynamic_cast<W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR)) { \
+      using ModelType = W4A16GPTQMarlinModelImpl<__half>; \
+      auto* typed_model = static_cast<W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR); \
+      return __VA_ARGS__();                   \
+    } else if (dynamic_cast<MiniCPM4W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR)) { \
+      using ModelType = MiniCPM4W4A16GPTQMarlinModelImpl<__half>; \
+      auto* typed_model = static_cast<MiniCPM4W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR); \
+      return __VA_ARGS__();                   \
+    } \
   }()
 
 Model* model;
@@ -237,15 +251,33 @@ void init_eagle_model(
     int tree_size,
     int torch_dtype
 ) {
+    bool dispatch_model = false;
     DTYPE_SWITCH(torch_dtype, [&] {
-        model = new EagleImpl<elem_type>(
-            (ModelImpl<elem_type>*)model,
+        MODEL_TYPE_SWITCH(model, elem_type, [&] {
+            dispatch_model = true;
+            model = new EagleImpl<elem_type, ModelType>(
+                typed_model,
+                num_layers,
+                num_iter,
+                topk_per_iter,
+                tree_size
+            );
+        });
+    });
+    // TODO: constexpr is_same_v has bug
+    MODEL_TYPE_SWITCH_ONLY_HALF(model, [&] {
+        dispatch_model = true;
+        model = new EagleImpl<half, ModelType>(
+            typed_model,
             num_layers,
             num_iter,
             topk_per_iter,
             tree_size
         );
     });
+    if (!dispatch_model) {
+        printf("Model type failed to dispatch: %s\n", typeid(*model).name());
+    }
 }
 
 void init_minicpm4_eagle_model(
@@ -258,8 +290,10 @@ void init_minicpm4_eagle_model(
     bool use_input_norm,
     bool use_attn_norm
 ) {
+    bool dispatch_model = false;
     DTYPE_SWITCH(torch_dtype, [&] {
         MODEL_TYPE_SWITCH(model, elem_type, [&] {
+            dispatch_model = true;
             model = new MiniCPM4EagleImpl<elem_type, ModelType>(
                 typed_model,
                 num_layers,
@@ -272,25 +306,22 @@ void init_minicpm4_eagle_model(
             );
         });
     });
-}
-
-void init_eagle_w4a16_gptq_marlin_model(
-    int num_layers,
-    int num_iter,
-    int topk_per_iter,
-    int tree_size,
-    int torch_dtype
-) {
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for W8A8 model");
+    MODEL_TYPE_SWITCH_ONLY_HALF(model, [&] {
+        dispatch_model = true;
+        model = new MiniCPM4EagleImpl<half, ModelType>(
+            typed_model,
+            num_layers,
+            num_iter,
+            topk_per_iter,
+            tree_size,
+            residual_scale,
+            use_input_norm,
+            use_attn_norm
+        );
+    });
+    if (!dispatch_model) {
+        printf("Model type failed to dispatch: %s\n", typeid(*model).name());
     }
-    model = new EagleImplBaseW4A16GPTQMarlin<half>(
-        (W4A16GPTQMarlinModelImpl<half>*)model,
-        num_layers,
-        num_iter,
-        topk_per_iter,
-        tree_size
-    );
 }
 
 void init_eagle_w4a16_gptq_marlin_rot_model(
@@ -496,7 +527,6 @@ PYBIND11_MODULE(C, m) {
     // eagle bind
     m.def("init_eagle_model", &init_eagle_model, "Init eagle model");
     m.def("init_minicpm4_eagle_model", &init_minicpm4_eagle_model, "Init minicpm4 eagle model");
-    m.def("init_eagle_w4a16_gptq_marlin_model", &init_eagle_w4a16_gptq_marlin_model, "Init eagle W4A16 model");
     m.def("init_eagle_w4a16_gptq_marlin_rot_model", &init_eagle_w4a16_gptq_marlin_rot_model, "Init eagle W4A16 model");
 
     // spec bind
