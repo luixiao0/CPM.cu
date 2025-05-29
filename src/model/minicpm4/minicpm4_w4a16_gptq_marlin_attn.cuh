@@ -98,7 +98,6 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
             kv_cache->compress(stream);
         }
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
         if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
@@ -153,8 +152,6 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
                 num_history_tokens+num_tokens
             );
             blockmask = kv_cache->blockmask;
-        } else {
-            blockmask = &fakeblock;
         }
 
         mha_fwd_kvcache(
@@ -211,7 +208,6 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
 
         kv_cache->compress(stream);
 
-        uint64_t fakeblock;
         uint64_t *blockmask = nullptr;
         if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
@@ -266,8 +262,6 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
                 padded_length
             );
             blockmask = kv_cache->blockmask;
-        } else {
-            blockmask = &fakeblock;
         }
         
         mha_fwd_kvcache(

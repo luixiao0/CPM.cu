@@ -99,7 +99,6 @@ struct MiniCPM4Attention {
             kv_cache->compress(stream);
         }
 
-        uint64_t fake_blockmask = 0;
         uint64_t *blockmask = nullptr;
         if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
@@ -156,9 +155,6 @@ struct MiniCPM4Attention {
                 num_history_tokens+num_tokens
             );
             blockmask = kv_cache->blockmask;
-        }
-        else {
-            blockmask = &fake_blockmask;
         }
         cuda_perf_stop_on_stream_f(PREFILL_ATTN_STAGE1, stream.stream);
 
@@ -220,7 +216,6 @@ struct MiniCPM4Attention {
 
         kv_cache->compress(stream);
 
-        uint64_t fake_blockmask = 0;
         uint64_t *blockmask = nullptr;
         if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
             int q_round, k_round, out_len;
@@ -275,9 +270,6 @@ struct MiniCPM4Attention {
                 padded_length
             );
             blockmask = kv_cache->blockmask;
-        }
-        else {
-            blockmask = &fake_blockmask;
         }
         cuda_perf_stop_on_stream_f(DECODE_ATTN_STAGE1, stream.stream);
 
