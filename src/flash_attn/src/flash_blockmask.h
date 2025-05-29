@@ -41,7 +41,7 @@ class fwdIterator{
 
         if (blockmask_ptr == nullptr) {
             if (k_window_left <= target) return target; // sliding window
-            return -1; // attention sink
+            return -1;
         }
         
         if (k_window_left <= target) {
