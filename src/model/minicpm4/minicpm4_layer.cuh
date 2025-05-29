@@ -43,9 +43,9 @@ struct MiniCPM4Layer {
         if (prev_output != nullptr) {
             elementwise_scale(calc_stream, num_tokens, this->hidden_size, prev_output, this->residual_scale);
         }
-        cuda_perf_start_on_stream_f(PREFILL_ATTN, calc_stream.stream);
+        cuda_perf_start_on_stream_f(M4_PREFILL_ATTN, calc_stream.stream);
         this->attn->prefill(calc_stream, num_tokens, num_history_tokens, input, prev_output, position_ids, static_cast<MiniCPM4KVCache<T>*>(kv_cache));
-        cuda_perf_stop_on_stream_f(PREFILL_ATTN, calc_stream.stream);
+        cuda_perf_stop_on_stream_f(M4_PREFILL_ATTN, calc_stream.stream);
         if (prev_layer_states != nullptr) {
             cudaMemcpyAsync(
                 prev_layer_states,    // dst
@@ -56,18 +56,18 @@ struct MiniCPM4Layer {
             );
         }
         elementwise_scale(calc_stream, num_tokens, this->hidden_size, this->attn->output, this->residual_scale);
-        cuda_perf_start_on_stream_f(PREFILL_FFN, calc_stream.stream);
+        cuda_perf_start_on_stream_f(M4_PREFILL_FFN, calc_stream.stream);
         this->ffn->prefill(calc_stream, num_tokens, input, this->attn->output);
-        cuda_perf_stop_on_stream_f(PREFILL_FFN, calc_stream.stream);
+        cuda_perf_stop_on_stream_f(M4_PREFILL_FFN, calc_stream.stream);
     }
 
     void decode(int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache, T* prev_layer_states=nullptr) {
         if (prev_output != nullptr) {
             elementwise_scale(calc_stream, num_tokens, this->hidden_size, prev_output, this->residual_scale);
         }
-        cuda_perf_start_on_stream_f(DECODE_ATTN, calc_stream.stream);
+        cuda_perf_start_on_stream_f(M4_DECODE_ATTN, calc_stream.stream);
         this->attn->decode(calc_stream, num_tokens, padded_length, input, prev_output, position_ids, cache_length, mask, static_cast<MiniCPM4KVCache<T>*>(kv_cache));
-        cuda_perf_stop_on_stream_f(DECODE_ATTN, calc_stream.stream);
+        cuda_perf_stop_on_stream_f(M4_DECODE_ATTN, calc_stream.stream);
         if (prev_layer_states != nullptr) {
             cudaMemcpyAsync(
                 prev_layer_states,    // dst
@@ -78,8 +78,8 @@ struct MiniCPM4Layer {
             );
         }
         elementwise_scale(calc_stream, num_tokens, this->hidden_size, this->attn->output, this->residual_scale);
-        cuda_perf_start_on_stream_f(DECODE_FFN, calc_stream.stream);
+        cuda_perf_start_on_stream_f(M4_DECODE_FFN, calc_stream.stream);
         this->ffn->decode(calc_stream, num_tokens, input, this->attn->output);
-        cuda_perf_stop_on_stream_f(DECODE_FFN, calc_stream.stream);
+        cuda_perf_stop_on_stream_f(M4_DECODE_FFN, calc_stream.stream);
     }
 };

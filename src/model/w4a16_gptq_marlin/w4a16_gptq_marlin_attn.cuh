@@ -87,7 +87,7 @@ struct W4A16GPTQMarlinAttention {
 
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->permute_qkv_output, k_cache, position_ids);
 
-        cuda_perf_start_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
+        cuda_perf_start_on_stream_f(Q_PREFILL_ATTN_CORE, stream.stream);
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -112,7 +112,7 @@ struct W4A16GPTQMarlinAttention {
             0,
             stream.stream
         );
-        cuda_perf_stop_on_stream_f(PREFILL_ATTN_CORE, stream.stream);
+        cuda_perf_stop_on_stream_f(Q_PREFILL_ATTN_CORE, stream.stream);
 
         // flash attention and put output to attn_norm->output
         this->o_proj->prefill(stream, num_tokens, this->attn_output, a_tmp, c_tmp);
@@ -140,7 +140,7 @@ struct W4A16GPTQMarlinAttention {
 
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
 
-        cuda_perf_start_on_stream_f(DECODE_ATTN_CORE, stream.stream);
+        cuda_perf_start_on_stream_f(Q_DECODE_ATTN_CORE, stream.stream);
         mha_fwd_kvcache(
             TypeTraits<T>::type_code()==1,
             1,
@@ -165,7 +165,7 @@ struct W4A16GPTQMarlinAttention {
             0,
             stream.stream
         );
-        cuda_perf_stop_on_stream_f(DECODE_ATTN_CORE, stream.stream);
+        cuda_perf_stop_on_stream_f(Q_DECODE_ATTN_CORE, stream.stream);
         // flash attention and put output to attn_norm->output
         this->o_proj->prefill(stream, num_tokens, this->attn_output, a_tmp, c_tmp);
     }
