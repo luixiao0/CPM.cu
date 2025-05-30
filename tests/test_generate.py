@@ -56,8 +56,8 @@ def make_input(digits, a = 2500, b = 4000):
 
 prompt = None
 prompt_content = "北京有哪些好玩的地方"
-with open("prompt.txt", "r") as f:
-    prompt_content = f.read()
+# with open("prompt.txt", "r") as f:
+#     prompt_content = f.read()
 
 prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1500, 3000) # 90k
