@@ -7,11 +7,26 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 def detect_cuda_arch():
     """自动检测当前CUDA架构"""
     # 1. 首先检查环境变量是否指定了架构
-    env_arch = os.getenv("CUDA_ARCH") or os.getenv("TORCH_CUDA_ARCH_LIST")
+    env_arch = os.getenv("LLAMACU_CUDA_ARCH")
     if env_arch:
-        # 支持多个架构，用分号或逗号分隔
-        arch_list = env_arch.replace(';', ',').split(',')
-        arch_list = [arch.strip() for arch in arch_list if arch.strip()]
+        # 仅支持逗号分隔的简单格式，如 "80,86"
+        arch_list = []
+        tokens = env_arch.split(',')
+        
+        for token in tokens:
+            token = token.strip()
+            if not token:
+                continue
+                
+            # 检查格式：必须是纯数字
+            if not token.isdigit():
+                raise ValueError(
+                    f"Invalid CUDA architecture format: '{token}'. "
+                    f"LLAMACU_CUDA_ARCH should only contain comma-separated numbers like '80,86'"
+                )
+            
+            arch_list.append(token)
+        
         if arch_list:
             print(f"Using CUDA architectures from environment variable: {arch_list}")
             return arch_list
