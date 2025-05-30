@@ -1,6 +1,5 @@
 import os, glob
 from setuptools import setup, find_packages
-from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -38,7 +37,7 @@ def detect_cuda_arch():
         # 3. 如果没有环境变量也没有torch，报错
         raise RuntimeError(
             "CUDA architecture detection failed. Please either:\n"
-            "1. Set environment variable CUDA_ARCH (e.g., export CUDA_ARCH=90), or\n"
+            "1. Set environment variable LLAMACU_CUDA_ARCH (e.g., export LLAMACU_CUDA_ARCH=90), or\n"
             "2. Install PyTorch (pip install torch) for automatic detection.\n"
             "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
         )
@@ -59,14 +58,14 @@ def detect_cuda_arch():
         else:
             raise RuntimeError(
                 "No CUDA devices detected. Please either:\n"
-                "1. Set environment variable CUDA_ARCH (e.g., export CUDA_ARCH=90), or\n"
+                "1. Set environment variable LLAMACU_CUDA_ARCH (e.g., export LLAMACU_CUDA_ARCH=90), or\n"
                 "2. Ensure CUDA devices are available and properly configured.\n"
                 "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
             )
     except Exception as e:
         raise RuntimeError(
             f"CUDA architecture detection failed: {e}\n"
-            "Please set environment variable CUDA_ARCH (e.g., export CUDA_ARCH=90).\n"
+            "Please set environment variable LLAMACU_CUDA_ARCH (e.g., export LLAMACU_CUDA_ARCH=90).\n"
             "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
         )
 
@@ -93,13 +92,25 @@ def get_compile_args():
     
     if debug_mode:
         print("Debug mode enabled (LLAMACU_DEBUG=1)")
-        cxx_args = common_cxx_args + ["-g", "-O0", "-DDEBUG", "-fno-inline"]
-        nvcc_base_args = common_nvcc_args + [
-            "-O0", "-g", 
-            "-DDEBUG", "-DCUDA_DEBUG",
-            "-Xcompiler", "-fno-inline",
-            # "-G",
+        cxx_args = common_cxx_args + [
+            "-g3",           # 最详细的调试信息
+            "-O0",           # 禁用优化
+            "-DDEBUG", 
+            "-fno-inline",   # 禁用内联
+            "-fno-omit-frame-pointer",  # 保留栈帧指针
         ]
+        nvcc_base_args = common_nvcc_args + [
+            "-O0", 
+            "-g",            # 主机端调试信息
+            "-lineinfo",     # 生成行号信息
+            "-DDEBUG", 
+            "-DCUDA_DEBUG",
+            "-Xcompiler", "-g3",              # 传递给主机编译器
+            "-Xcompiler", "-fno-inline",      # 禁用内联
+            "-Xcompiler", "-fno-omit-frame-pointer",  # 保留栈帧指针
+        ]
+        # Debug模式下的链接参数
+        link_args = ["-g", "-rdynamic"]
     else:
         print("Release mode enabled")
         cxx_args = common_cxx_args + ["-O3"]
@@ -107,6 +118,8 @@ def get_compile_args():
             "-O3",
             "--use_fast_math",
         ]
+        # Release模式下的链接参数
+        link_args = []
     
     # 添加性能测试控制
     if perf_mode:
@@ -116,7 +129,7 @@ def get_compile_args():
     else:
         print("Performance monitoring disabled (LLAMACU_PERF=0)")
     
-    return cxx_args, nvcc_base_args
+    return cxx_args, nvcc_base_args, link_args
 
 def get_all_headers():
     """获取所有头文件，用于依赖跟踪"""
@@ -143,68 +156,50 @@ def get_all_headers():
     
     return headers
 
-class NinjaBuildExtension(BuildExtension):
-    def __init__(self, *args, **kwargs) -> None:
-        # do not override env MAX_JOBS if already exists
-        if not os.environ.get("MAX_JOBS"):
-            import psutil
+# 尝试构建扩展模块
+ext_modules = []
+cmdclass = {}
 
-            # calculate the maximum allowed NUM_JOBS based on cores
-            max_num_jobs_cores = max(1, os.cpu_count() // 2)
-
-            # calculate the maximum allowed NUM_JOBS based on free memory
-            free_memory_gb = psutil.virtual_memory().available / (1024 ** 3)  # free memory in GB
-            max_num_jobs_memory = int(free_memory_gb / 9)  # each JOB peak memory cost is ~8-9GB when threads = 4
-
-            # pick lower value of jobs based on cores vs memory metric to minimize oom and swap usage during compilation
-            max_jobs = max(1, min(max_num_jobs_cores, max_num_jobs_memory))
-            os.environ["MAX_JOBS"] = str(max_jobs)
-
-        super().__init__(*args, **kwargs)
-
-# 自动检测CUDA架构
-arch_list = detect_cuda_arch()
-
-# 获取所有头文件用于依赖跟踪
-all_headers = get_all_headers()
-
-# 获取编译参数
-cxx_args, nvcc_base_args = get_compile_args()
-
-# 为每个架构生成gencode参数
-gencode_args = []
-arch_defines = []
-for arch in arch_list:
-    gencode_args.extend(["-gencode", f"arch=compute_{arch},code=sm_{arch}"])
-    arch_defines.append(f"-D_ARCH{arch}")
-
-print(f"Using CUDA architecture compile flags: {arch_list}")
-
-setup(
-    name='llamacu',
-    version='0.0.0',
-    author_email="acha131441373@gmail.com",
-    description="llama cuda implementation",
-    packages=find_packages(),
-    setup_requires=[
-        "pybind11",
-        "psutil",
-        "ninja",
-    ],
-    install_requires=[
-        "transformers==4.46.2",
-        "accelerate==0.26.0",
-        "torch",
-        "datasets",
-        "fschat",
-        "openai",
-        "anthropic",
-        "human_eval",
-        "zstandard",
-        "tree_sitter",
-        "tree-sitter-python"
-    ],
-    ext_modules=[
+try:
+    # 尝试导入torch相关模块
+    from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+    
+    # 获取CUDA架构
+    arch_list = detect_cuda_arch()
+    
+    # 获取编译参数
+    cxx_args, nvcc_base_args, link_args = get_compile_args()
+    
+    # 获取头文件
+    all_headers = get_all_headers()
+    
+    # 为每个架构生成gencode参数
+    gencode_args = []
+    arch_defines = []
+    for arch in arch_list:
+        gencode_args.extend(["-gencode", f"arch=compute_{arch},code=sm_{arch}"])
+        arch_defines.append(f"-D_ARCH{arch}")
+    
+    print(f"Using CUDA architecture compile flags: {arch_list}")
+    
+    # 创建Ninja构建扩展类
+    class NinjaBuildExtension(BuildExtension):
+        def __init__(self, *args, **kwargs) -> None:
+            # do not override env MAX_JOBS if already exists
+            if not os.environ.get("MAX_JOBS"):
+                import psutil
+                # calculate the maximum allowed NUM_JOBS based on cores
+                max_num_jobs_cores = max(1, os.cpu_count() // 2)
+                # calculate the maximum allowed NUM_JOBS based on free memory
+                free_memory_gb = psutil.virtual_memory().available / (1024 ** 3)  # free memory in GB
+                max_num_jobs_memory = int(free_memory_gb / 9)  # each JOB peak memory cost is ~8-9GB when threads = 4
+                # pick lower value of jobs based on cores vs memory metric to minimize oom and swap usage during compilation
+                max_jobs = max(1, min(max_num_jobs_cores, max_num_jobs_memory))
+                os.environ["MAX_JOBS"] = str(max_jobs)
+            super().__init__(*args, **kwargs)
+    
+    # 配置扩展模块
+    ext_modules = [
         CUDAExtension(
             name='llamacu.C',
             sources = [
@@ -236,6 +231,7 @@ setup(
                     ]
                 ),
             },
+            extra_link_args=link_args,
             include_dirs=[
                 f"{this_dir}/src/flash_attn",
                 f"{this_dir}/src/flash_attn/src",
@@ -243,8 +239,38 @@ setup(
                 f"{this_dir}/src/",
             ],
         )
+    ]
+    
+    cmdclass = {'build_ext': NinjaBuildExtension}
+    
+except Exception as e:
+    print(f"警告: 无法配置CUDA扩展模块: {e}")
+    print("跳过扩展模块构建，仅安装Python包...")
+
+setup(
+    name='llamacu',
+    version='0.0.0',
+    author_email="acha131441373@gmail.com",
+    description="llama cuda implementation",
+    packages=find_packages(),
+    setup_requires=[
+        "pybind11",
+        "psutil",
+        "ninja",
+        "torch",
     ],
-    cmdclass={
-        'build_ext': NinjaBuildExtension
-    }
+    install_requires=[
+        "transformers==4.46.2",
+        "accelerate==0.26.0",
+        "datasets",
+        "fschat",
+        "openai",
+        "anthropic",
+        "human_eval",
+        "zstandard",
+        "tree_sitter",
+        "tree-sitter-python"
+    ],
+    ext_modules=ext_modules,
+    cmdclass=cmdclass,
 ) 
