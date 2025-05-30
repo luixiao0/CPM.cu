@@ -1,4 +1,5 @@
 #include "signal_handler.cuh"
+#include <dlfcn.h>
 
 // 保存原有信号处理器的全局变量
 std::map<int, void(*)(int)> original_handlers;
@@ -70,6 +71,15 @@ void print_stack_trace() {
     if (strings == nullptr) {
         std::cerr << "Failed to get backtrace symbols (backtrace may not be available on this system)" << std::endl;
         return;
+    }
+    
+    // 添加基地址信息
+    Dl_info dl_info;
+    if (dladdr((void*)print_stack_trace, &dl_info)) {
+        std::cerr << "\n=== MODULE INFO ===" << std::endl;
+        std::cerr << "Base address: " << dl_info.dli_fbase << std::endl;
+        std::cerr << "Module path: " << dl_info.dli_fname << std::endl;
+        std::cerr << "===================" << std::endl;
     }
     
     std::cerr << "\n=== STACK TRACE ===" << std::endl;
