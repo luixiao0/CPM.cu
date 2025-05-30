@@ -4,6 +4,57 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
+def detect_cuda_arch():
+    """自动检测当前CUDA架构"""
+    # 1. 首先检查环境变量是否指定了架构
+    env_arch = os.getenv("CUDA_ARCH") or os.getenv("TORCH_CUDA_ARCH_LIST")
+    if env_arch:
+        # 支持多个架构，用分号或逗号分隔
+        arch_list = env_arch.replace(';', ',').split(',')
+        arch_list = [arch.strip() for arch in arch_list if arch.strip()]
+        if arch_list:
+            print(f"Using CUDA architectures from environment variable: {arch_list}")
+            return arch_list
+    
+    # 2. 检查是否有torch库，如果有则自动检测
+    try:
+        import torch
+    except ImportError:
+        # 3. 如果没有环境变量也没有torch，报错
+        raise RuntimeError(
+            "CUDA architecture detection failed. Please either:\n"
+            "1. Set environment variable CUDA_ARCH (e.g., export CUDA_ARCH=90), or\n"
+            "2. Install PyTorch (pip install torch) for automatic detection.\n"
+            "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
+        )
+    
+    # 使用torch自动检测所有GPU架构
+    try:
+        if torch.cuda.is_available():
+            arch_set = set()
+            device_count = torch.cuda.device_count()
+            for i in range(device_count):
+                major, minor = torch.cuda.get_device_capability(i)
+                arch = f"{major}{minor}"
+                arch_set.add(arch)
+            
+            arch_list = sorted(list(arch_set))  # 排序保证一致性
+            print(f"Detected CUDA architectures: {arch_list} (from {device_count} GPU devices)")
+            return arch_list
+        else:
+            raise RuntimeError(
+                "No CUDA devices detected. Please either:\n"
+                "1. Set environment variable CUDA_ARCH (e.g., export CUDA_ARCH=90), or\n"
+                "2. Ensure CUDA devices are available and properly configured.\n"
+                "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
+            )
+    except Exception as e:
+        raise RuntimeError(
+            f"CUDA architecture detection failed: {e}\n"
+            "Please set environment variable CUDA_ARCH (e.g., export CUDA_ARCH=90).\n"
+            "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
+        )
+
 def append_nvcc_threads(nvcc_extra_args):
     nvcc_threads = os.getenv("NVCC_THREADS") or "16"
     return nvcc_extra_args + ["--threads", nvcc_threads]
@@ -96,13 +147,23 @@ class NinjaBuildExtension(BuildExtension):
 
         super().__init__(*args, **kwargs)
 
-arch = "80"
+# 自动检测CUDA架构
+arch_list = detect_cuda_arch()
 
 # 获取所有头文件用于依赖跟踪
 all_headers = get_all_headers()
 
 # 获取编译参数
 cxx_args, nvcc_base_args = get_compile_args()
+
+# 为每个架构生成gencode参数
+gencode_args = []
+arch_defines = []
+for arch in arch_list:
+    gencode_args.extend(["-gencode", f"arch=compute_{arch},code=sm_{arch}"])
+    arch_defines.append(f"-D_ARCH{arch}")
+
+print(f"Using CUDA architecture compile flags: {arch_list}")
 
 setup(
     name='llamacu',
@@ -152,9 +213,9 @@ setup(
             extra_compile_args={
                 "cxx": cxx_args,
                 "nvcc": append_nvcc_threads(
-                    nvcc_base_args + [
-                        "-gencode", f"arch=compute_{arch},code=sm_{arch}",
-                        f"-D_ARCH{arch}",
+                    nvcc_base_args + 
+                    gencode_args +
+                    arch_defines + [
                         # 添加依赖文件生成选项
                         "-MMD", "-MP",
                     ]
