@@ -118,6 +118,10 @@ __global__ void remap_id_kernel(const int32_t* id_map, const int32_t* real_id, i
     output[threadIdx.x] = real_id[id_map[threadIdx.x]];
 }
 
+__global__ void remap_id_kernel(const int32_t* id_map, const int32_t* real_id, const int32_t* token_id_remap, int32_t* output) {
+    output[threadIdx.x] = token_id_remap[real_id[id_map[threadIdx.x]]];
+}
+
 __global__ void make_arange_kernel(int32_t* offset, int32_t* output) {
     output[threadIdx.x] = threadIdx.x + offset[0];
 }
@@ -170,6 +174,11 @@ void remap_hidden(const Stream& stream, int32_t num_tokens, int32_t dim, const i
 void remap_id(const Stream& stream, int32_t num_tokens, int32_t* id_map, const int32_t* real_id, int32_t* output=nullptr) {
     if (output == nullptr) output = id_map;
     remap_id_kernel<<<1, num_tokens, 0, stream.stream>>>(id_map, real_id, output);
+}
+
+void remap_id_fr(const Stream& stream, int32_t num_tokens, int32_t* id_map, const int32_t* real_id, const int32_t* token_id_remap, int32_t* output=nullptr) {
+    if (output == nullptr) output = id_map;
+    remap_id_kernel<<<1, num_tokens, 0, stream.stream>>>(id_map, real_id, token_id_remap, output);
 }
 
 void make_arange(const Stream& stream, int32_t range, int32_t* offset, int32_t* output) {

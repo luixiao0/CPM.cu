@@ -1,3 +1,4 @@
+import os
 import torch
 from llamacu.llama import LLM
 from llamacu.llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
@@ -10,7 +11,7 @@ import numpy as np
 test_minicpm4 = True
 apply_eagle = True
 apply_quant = True
-apply_sparse = True
+apply_sparse = False # TODO Maybe lead to illegal memory access
 apply_compress_lse = True
 
 num_generate = 256
@@ -20,31 +21,33 @@ sink_window_size = 1
 block_window_size = 32
 sparse_topk_k = 64
 eagle_window_size = 64 * 128
+frspec_vocab_size = 16384
+chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
+cuda_graph = False
 
 if not test_minicpm4:
     print(f"test_minicpm4 is False, set apply_sparse to False")
     apply_sparse = False
 
-model_type = "base" if not apply_eagle else "eagle"
 dtype = torch.float16
-cuda_graph = False
-chunk_length = 2048 # TODO minicpm4 change this to 1024 and test correctness
+model_type = "base" if not apply_eagle else "eagle"
 
+path_prefix = "/cache/copys/217/data1/liyx/Models"
 if test_minicpm4:
-    eagle_path = "/data1/liyx/eagle_0526/job_35949"
-    # eagle_path = "/data1/liyx/eagle_0526/job_35949_llamaformat"
+    eagle_path = f"{path_prefix}/job_35949"
+    # eagle_path = "/data1/liyx/job_35949_llamaformat"
 else:
-    eagle_path = "/data1/liyx/Models/EAGLE-LLaMA3-Instruct-8B"
+    eagle_path = f"{path_prefix}/EAGLE-LLaMA3-Instruct-8B"
 
 if not apply_quant:
     if test_minicpm4:   
         # path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_mupformat"
-        path = "/data1/liyx/eagle_0526/job_33952_step_17300"
-        # path = "/data1/liyx/eagle_0526/job_33952_step_17300_llamaformat"
+        path = f"{path_prefix}/job_33952_step_17300"
+        # path = f"{path_prefix}/job_33952_step_17300_llamaformat"
     else:
-        path = "/data1/liyx/Models/Meta-Llama-3-8B-Instruct"
+        path = f"{path_prefix}/Meta-Llama-3-8B-Instruct"
 else:
-    path = "/DATA/disk0/zhaoweilun/minicpm4/models/minicpm4_marlin"
+    path = f"{path_prefix}/minicpm4_marlin"
 
 def make_input(digits, a = 2500, b = 4000):
     head = "There is a pass key hidden in the context. Find it and remember it. I will quiz you about it later. "
@@ -55,9 +58,11 @@ def make_input(digits, a = 2500, b = 4000):
     return head + before + needle + after + query
 
 prompt = None
-prompt_content = "北京有哪些好玩的地方"
-# with open("prompt.txt", "r") as f:
-#     prompt_content = f.read()
+if os.path.exists("prompt.txt"):
+    with open("prompt.txt", "r") as f:
+        prompt_content = f.read()
+else:
+    prompt_content = "北京有哪些好玩的地方"
 
 prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 1500, 3000) # 90k
@@ -82,14 +87,14 @@ teminators = [tokenizer.eos_token_id]
 
 if apply_quant:
     if model_type == "eagle":
-        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.5, num_iter=2, topk_per_iter=16, tree_size=32, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
+        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.6, num_iter=2, topk_per_iter=16, tree_size=32, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, frspec_vocab_size=frspec_vocab_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.45, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
+        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.6, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=2, topk_per_iter=16, tree_size=32, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.9, num_iter=2, topk_per_iter=16, tree_size=32, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, frspec_vocab_size=frspec_vocab_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
         # llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
@@ -97,6 +102,10 @@ else:
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()
+if model_type == "eagle" and frspec_vocab_size > 0:
+    with open(f'fr_index/MiniCPM4-8B/freq_{frspec_vocab_size}.pt', 'rb') as f:
+        token_id_remap = torch.tensor(torch.load(f, weights_only=True), dtype=torch.int32, device="cpu")
+    llm._load("token_id_remap", token_id_remap, cls="eagle")
 llm.load_from_hf()
 
 torch.cuda.synchronize()

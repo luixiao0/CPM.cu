@@ -290,6 +290,7 @@ void init_minicpm4_eagle_model(
     int tree_size,
     int torch_dtype,
     int eagle_window_size,
+    int frspec_vocab_size,
     float residual_scale,
     bool use_input_norm,
     bool use_attn_norm
@@ -305,6 +306,7 @@ void init_minicpm4_eagle_model(
                 topk_per_iter,
                 tree_size,
                 eagle_window_size,
+                frspec_vocab_size,
                 residual_scale,
                 use_input_norm,
                 use_attn_norm
@@ -320,6 +322,7 @@ void init_minicpm4_eagle_model(
             topk_per_iter,
             tree_size,
             eagle_window_size,
+            frspec_vocab_size,
             residual_scale,
             use_input_norm,
             use_attn_norm

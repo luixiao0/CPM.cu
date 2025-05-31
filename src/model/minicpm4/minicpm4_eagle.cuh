@@ -1,5 +1,6 @@
 #pragma once
 #include <type_traits>
+#include "../tree_drafter.cuh"
 #include "../eagle.cuh"
 #include "minicpm4_model.cuh"
 #include "minicpm4_w4a16_gptq_marlin_model.cuh"
@@ -20,6 +21,8 @@ struct MiniCPM4EagleImpl : Model {
     std::vector<Layer<T>*> layers;
     Linear<T, true, true> *fc1 = nullptr;
     Linear<T> *fc2 = nullptr;
+    Linear<T>* lm_head = nullptr;
+    int32_t* token_id_remap = nullptr;
     RMSNorm<T> *input_norm1 = nullptr;
     RMSNorm<T> *input_norm2 = nullptr;
     functions::TopK<T>* topk_func = nullptr;
@@ -34,6 +37,7 @@ struct MiniCPM4EagleImpl : Model {
     T* tired_history_val; int32_t* tired_history_pos;
     int32_t* tired_history_parent;
     bool is_first_draft;
+    int frspec_vocab_size;
 
     int32_t *h_best, *d_best;    
 
@@ -46,6 +50,7 @@ struct MiniCPM4EagleImpl : Model {
         int topk_per_iter,
         int tree_size,
         int eagle_window_size = 0,
+        int frspec_vocab_size = 0,
         float residual_scale = 1.0f,
         bool use_input_norm = true,
         bool use_attn_norm = true
@@ -56,6 +61,7 @@ struct MiniCPM4EagleImpl : Model {
         this->topk_per_iter = topk_per_iter;
         this->tree_size = tree_size;
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
+        this->frspec_vocab_size = frspec_vocab_size > 0 ? frspec_vocab_size : this->model->vocab_size;
         this->residual_scale = residual_scale;
         this->use_input_norm = use_input_norm;
         this->use_attn_norm = use_attn_norm;
@@ -70,8 +76,13 @@ struct MiniCPM4EagleImpl : Model {
         for (int i = 0; i < num_layers; i++) {
             layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, this->residual_scale, eagle_window_size));
         }
+        if (this->frspec_vocab_size != this->model->vocab_size) {
+            lm_head = new Linear<T>(this->model->hidden_size, this->frspec_vocab_size);
+        } else {
+            lm_head = this->model->lm_head;
+        }
 
-        topk_func = new functions::TopK<T>(model->vocab_size, topk_per_iter);
+        topk_func = new functions::TopK<T>(this->frspec_vocab_size, topk_per_iter);
         topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1);
     }
 
@@ -85,10 +96,14 @@ struct MiniCPM4EagleImpl : Model {
         for (int i = 0; i < num_layers; i++) {
             layers[i]->init_weight_ptr(memory);
         }
+        if (this->frspec_vocab_size != this->model->vocab_size) {
+            lm_head->init_weight_ptr(memory);
+        }
         if (!use_attn_norm) {
             layers[0]->attn->attn_norm = new Skip<T>(this->model->hidden_size);
         }
         kv_caches->rotary_embedding = this->model->kv_caches->rotary_embedding;
+        token_id_remap = (int32_t*)memory->allocate_for_model(this->frspec_vocab_size * sizeof(int32_t));
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
@@ -103,7 +118,10 @@ struct MiniCPM4EagleImpl : Model {
             layer_end = layers[i]->init_output_ptr(memory, num_tokens, offset);
         }
         offset = layer_end;
-        offset = memory->allocate((void**)&eagle_logits, offset, this->topk_per_iter * this->model->vocab_size * sizeof(T));
+        if (this->frspec_vocab_size != this->model->vocab_size) {
+            offset = lm_head->init_output_ptr(memory, 64, offset);
+        }
+        offset = memory->allocate((void**)&eagle_logits, offset, this->topk_per_iter * this->frspec_vocab_size * sizeof(T));
         offset = memory->allocate((void**)&eagle_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&tmp_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&tired_history_val, offset, this->total_tried * sizeof(T));
@@ -146,6 +164,8 @@ struct MiniCPM4EagleImpl : Model {
                 fc1->load_to_storage(name, ptr);
             } else if (name.substr(0, 9) == "eagle.fc2") {
                 fc2->load_to_storage(name, ptr);
+            } else if (name.substr(0, 20) == "eagle.token_id_remap") {
+                cudaMemcpy((void*)token_id_remap, ptr, this->frspec_vocab_size * sizeof(int32_t), cudaMemcpyHostToDevice);
             } else if (name.find("eagle.input_norm1") != std::string::npos) {
                 if (!use_input_norm) throw std::invalid_argument("norm is not used, but input_norm1 is found");
                 input_norm1->load_to_storage(name, ptr);
@@ -166,6 +186,11 @@ struct MiniCPM4EagleImpl : Model {
             }
         } else {
             this->model->load_to_storage(name, ptr);
+            if (name.substr(0, 7) == "lm_head") {
+                if (this->frspec_vocab_size != this->model->vocab_size) {
+                    remap_copy(calc_stream, this->model->lm_head->weight, this->lm_head->weight, this->model->hidden_size, this->frspec_vocab_size, this->token_id_remap);
+                }
+            }
         }
     }
 
@@ -246,13 +271,17 @@ struct MiniCPM4EagleImpl : Model {
         repeat(calc_stream, topk_per_iter, 1, 0, this->eagle_position_ids);
 
         { // d = 0
-            this->model->lm_head->prefill(calc_stream, 1, this->fc2->output + (num_prev - 1) * this->model->hidden_size, this->eagle_logits);
-            log_softmax(calc_stream, 1, this->model->vocab_size, this->eagle_logits);
+            lm_head->prefill(calc_stream, 1, this->fc2->output + (num_prev - 1) * this->model->hidden_size, this->eagle_logits);
+            log_softmax(calc_stream, 1, this->frspec_vocab_size, this->eagle_logits);
             this->topk_func->prefill(calc_stream, 1, this->eagle_logits);
-            cudaMemcpy(this->topk_func_2->topk_pos, this->topk_func->topk_pos, topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->topk_func_2->topk_val, this->topk_func->topk_val, topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->tired_history_val, this->topk_func->topk_val, topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->tired_history_pos, this->topk_func->topk_pos, topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            if (this->frspec_vocab_size != this->model->vocab_size) {
+                remap(calc_stream, topk_per_iter, this->topk_func->topk_pos, this->topk_func_2->topk_pos, this->token_id_remap);
+            } else {
+                cudaMemcpy(this->topk_func_2->topk_pos, this->topk_func->topk_pos, topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            }
+            cudaMemcpy(this->topk_func_2->topk_val, this->topk_func->topk_val, topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
             repeat(calc_stream, topk_per_iter, this->model->hidden_size, num_prev-1, this->fc2->output, this->fc1->output);
             init_tree(calc_stream, topk_per_iter, this->eagle_mask_2d);
         }
@@ -278,8 +307,8 @@ struct MiniCPM4EagleImpl : Model {
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc2->output, layer_output, this->fc2->output);
             add(calc_stream, topk_per_iter, this->eagle_position_ids, 1);
 
-            this->model->lm_head->prefill(calc_stream, topk_per_iter, this->fc2->output, this->eagle_logits);
-            log_softmax(calc_stream, topk_per_iter, this->model->vocab_size, this->eagle_logits);
+            lm_head->prefill(calc_stream, topk_per_iter, this->fc2->output, this->eagle_logits);
+            log_softmax(calc_stream, topk_per_iter, this->frspec_vocab_size, this->eagle_logits);
             this->topk_func->prefill(calc_stream, topk_per_iter, this->eagle_logits);
             cumsum(calc_stream, topk_per_iter, topk_per_iter, this->topk_func->topk_val, this->topk_func_2->topk_val);
             cudaMemcpy(this->tired_history_val + topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter, this->topk_func->topk_val, topk_per_iter * topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
@@ -290,14 +319,22 @@ struct MiniCPM4EagleImpl : Model {
             set_parent(calc_stream, topk_per_iter, this->tired_history_parent + (d - 1) * topk_per_iter, this->topk_func_2->topk_pos, 10 + (d - 1) * topk_per_iter * topk_per_iter);
             update_tree(calc_stream, topk_per_iter, topk_per_iter * d, this->eagle_mask_2d, this->tmp_mask_2d, this->topk_func_2->topk_pos);
             remap_hidden(calc_stream, topk_per_iter, this->model->hidden_size, this->topk_func_2->topk_pos, this->fc2->output, this->fc1->output, topk_per_iter);
-            remap_id(calc_stream, topk_per_iter, this->topk_func_2->topk_pos, this->topk_func->topk_pos);
+            if (this->frspec_vocab_size != this->model->vocab_size) {
+                remap_id_fr(calc_stream, topk_per_iter, this->topk_func_2->topk_pos, this->topk_func->topk_pos, this->token_id_remap);
+            } else {
+                remap_id(calc_stream, topk_per_iter, this->topk_func_2->topk_pos, this->topk_func->topk_pos);
+            }
         }
 
         this->topk_func_2->prefill(calc_stream, 1, this->tired_history_val);
 
         // build tree
         build_dynamic_tree(calc_stream, this->tree_size, this->eagle_original_length[0], this->topk_per_iter, this->tired_history_parent, this->topk_func_2->topk_pos, tree_position_ids, tree_attn_mask, tree_parent);
-        remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, tree_draft_ids + 1);
+        if (this->frspec_vocab_size != this->model->vocab_size) {
+            remap_id_fr(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, this->token_id_remap, tree_draft_ids + 1);
+        } else {
+            remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, tree_draft_ids + 1);
+        }
 
         this->is_first_draft = false;
     }

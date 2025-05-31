@@ -13,6 +13,7 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
                  topk_per_iter=10,
                  tree_size=60,
                  eagle_window_size=0,
+                 frspec_vocab_size=0,
                  apply_eagle_quant: bool=False,
                  use_rope: bool=False,
                  use_input_norm: bool=False,
@@ -64,6 +65,7 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
                     self.tree_size,
                     self.dtype_int,
                     eagle_window_size,
+                    frspec_vocab_size,
                     scale_residual,
                     use_input_norm, 
                     use_attn_norm
@@ -73,6 +75,9 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
 
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:
+            if name == "token_id_remap":
+                C.load_model(f"{cls}.{name}", param.data_ptr())
+                return
             if dtype is None:
                 dtype = self.dtype
             param = param.contiguous().to(dtype)

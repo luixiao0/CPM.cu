@@ -210,3 +210,9 @@ build/
 # Checkpoints
 checkpoints/*
 !checkpoints/.gitkeep
+
+# Cursor Rules
+.mdc
+
+# FR-Spec Index
+fr_index

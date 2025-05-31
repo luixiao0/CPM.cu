@@ -75,6 +75,19 @@ __global__ void fix_kvcache_kernel_2(int num_caches, int dim, int32_t* pred, con
         pred[i] = gt[pred[i]];
     }
 }
+
+template<typename T>
+__global__ void remap_copy_kernel(int32_t dim, const T* src, T* dst, const int32_t* token_id_remap) {
+    int row = blockIdx.x;
+    int real_row = token_id_remap[row];
+    for (int i = threadIdx.x; i < dim; i += blockDim.x) {
+        dst[row * dim + i] = src[real_row * dim + i];
+    }
+}
+
+__global__ void remap_kernel(int32_t num_tokens, const int32_t* input, int32_t* output, const int32_t* token_id_remap) {
+    output[threadIdx.x] = token_id_remap[input[threadIdx.x]];
+}
 }
 
 void verify_draft(const Stream& stream, int num_tokens, int32_t* pred, const int32_t* gt, const int32_t* position_ids, const int32_t* cache_length, const uint64_t* attn_mask, const int32_t* tree_parent, int32_t* best) {
@@ -85,4 +98,14 @@ template<typename T>
 void fix_kv_cache(const Stream& stream, int accept_length, int num_caches, int dim, int32_t* pred, const int32_t* gt, const int32_t* cache_length, T** flat_caches, T* tmp_kvcache) {
     fix_kvcache_kernel_1<T><<<dim3(accept_length, num_caches, 1), 256, 0, stream.stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
     fix_kvcache_kernel_2<T><<<dim3(accept_length, num_caches, 1), 256, 0, stream.stream>>>(num_caches, dim/(16/sizeof(T)), pred, gt, cache_length, flat_caches, (float4*)tmp_kvcache);
+}
+
+template<typename T>
+void remap_copy(const Stream& stream, const T* src, T* dst, int32_t dim, int32_t num_tokens, const int32_t* token_id_remap) {
+    dim = dim / (16 / sizeof(T));
+    remap_copy_kernel<<<num_tokens, 512, 0, stream.stream>>>(dim, (float4*)src, (float4*)dst, token_id_remap);
+}
+
+void remap(const Stream& stream, int32_t num_tokens, const int32_t* input, int32_t* output, const int32_t* token_id_remap) {
+    remap_kernel<<<1, num_tokens, 0, stream.stream>>>(num_tokens, input, output, token_id_remap);
 }
