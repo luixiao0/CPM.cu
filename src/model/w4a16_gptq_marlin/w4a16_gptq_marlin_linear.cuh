@@ -65,15 +65,15 @@ struct W4A16GPTQMarlinLinear {
 
     void init_weight_ptr(Memory* memory) {
         const int w_size = this->dim_in * this->dim_out / 8;
-        weight = (int32_t*)memory->allocate_for_model(w_size*sizeof(int32_t));
+        weight = (int32_t*)memory->allocate_for_model_cudaMalloc(w_size*sizeof(int32_t));
         const int s_size = this->num_groups * this->dim_out ;
-        scales = (T*)memory->allocate_for_model(s_size * sizeof(T));
+        scales = (T*)memory->allocate_for_model_cudaMalloc(s_size * sizeof(T));
 
         const int workspace_size = (this->dim_out / 64)*16;
-        workspace = (int32_t*)memory->allocate_for_model(workspace_size * sizeof(int32_t));
+        workspace = (int32_t*)memory->allocate_for_model_cudaMalloc(workspace_size * sizeof(int32_t));
 
         if constexpr (has_bias) {
-            bias = (T*)memory->allocate_for_model(dim_out * sizeof(T));
+            bias = (T*)memory->allocate_for_model_cudaMalloc(dim_out * sizeof(T));
         }
     }
 

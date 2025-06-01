@@ -132,7 +132,7 @@ struct RMSNorm : Norm<T> {
     }
 
     void init_weight_ptr(Memory* memory) {
-        weight = (T*)memory->allocate_for_model(dim * sizeof(T));
+        weight = (T*)memory->allocate_for_model_cudaMalloc(dim * sizeof(T));
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {

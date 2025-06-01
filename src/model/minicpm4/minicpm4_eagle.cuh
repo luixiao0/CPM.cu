@@ -35,7 +35,7 @@ struct MiniCPM4EagleImpl : Model {
     uint64_t *eagle_mask_2d, *tmp_mask_2d;
     T* eagle_logits;
     T* tired_history_val; int32_t* tired_history_pos;
-    int32_t* tired_history_parent;
+    int32_t* tired_history_parent = nullptr;
     bool is_first_draft;
     int frspec_vocab_size;
 
@@ -126,7 +126,9 @@ struct MiniCPM4EagleImpl : Model {
         offset = memory->allocate((void**)&tmp_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&tired_history_val, offset, this->total_tried * sizeof(T));
         offset = memory->allocate((void**)&tired_history_pos, offset, this->total_tried * sizeof(int32_t));
-        offset = memory->allocate((void**)&tired_history_parent, offset, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t));
+        if (this->num_iter > 1) {
+            offset = memory->allocate((void**)&tired_history_parent, offset, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t));
+        }
         cudaMallocHost(&eagle_original_length, sizeof(int32_t));
 
         offset = topk_func->init_output_ptr(memory, this->topk_per_iter, offset);
@@ -256,6 +258,8 @@ struct MiniCPM4EagleImpl : Model {
     }
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
+        static int draft_count = 0;
+        printf("draft %d\n", draft_count++);
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
         this->eagle_padded_length = (this->eagle_original_length[0] + 256 - 1) / 128 * 128;
 
@@ -286,6 +290,7 @@ struct MiniCPM4EagleImpl : Model {
             init_tree(calc_stream, topk_per_iter, this->eagle_mask_2d);
         }
         for (int d = 1; d < this->num_iter; ++d) {
+            // assert(false);
             add(calc_stream, 1, this->eagle_cache_length, topk_per_iter);
             this->model->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
             if (use_input_norm) {

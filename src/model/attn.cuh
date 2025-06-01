@@ -103,12 +103,12 @@ struct Attention {
         int64_t k_proj_end = this->k_proj->init_output_ptr(memory, num_tokens, q_proj_end);
         int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
         
-        memory->allocate((void**)&this->attn_output, offset);
-        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t attn_output_end = memory->allocate((void**)&this->attn_output, offset, num_tokens * this->num_attention_heads * this->head_dim * sizeof(T));
+        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, attn_output_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
 
-        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, v_proj_end);
+        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, oaccum_end);
         this->output = this->o_proj->output;
 
         return std::max(oaccum_end, o_proj_end);
