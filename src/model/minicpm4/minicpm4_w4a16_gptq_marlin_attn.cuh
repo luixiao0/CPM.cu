@@ -24,7 +24,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
 
     int sink_window_size;
     int block_window_size;
-    int apply_compress_lse;
+    bool apply_compress_lse;
 
     MiniCPM4W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int sink_window_size, int block_window_size, bool apply_compress_lse) {
         this->hidden_size = hidden_size;

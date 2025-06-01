@@ -22,7 +22,7 @@ struct MiniCPM4Attention {
     int block_window_size;
     bool apply_compress_lse;
 
-    MiniCPM4Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int sink_window_size, int block_window_size, int sparse_topk_k) {
+    MiniCPM4Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int sink_window_size, int block_window_size, bool apply_compress_lse) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
