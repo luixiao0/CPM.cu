@@ -10,19 +10,35 @@ struct Memory {
     uint8_t* memory_pool;
     int64_t model_offset;
 
-    Memory(int64_t memory_limit) {
-        this->memory_limit = memory_limit;
+    Memory(float memory_limit) {
+        // Get GPU total memory size
+        size_t free_memory, total_memory;
+        cudaError_t err = cudaMemGetInfo(&free_memory, &total_memory);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "\nError: cudaMemGetInfo failed: %s\n\n", cudaGetErrorString(err));
+            this->memory_limit = 0;
+            this->memory_pool = nullptr;
+            this->model_offset = 0;
+            return;
+        }
+        
+        // Calculate actual memory size
+        this->memory_limit = (int64_t)(total_memory * memory_limit);
         this->model_offset = 0;
         
-        cudaError_t err = cudaMalloc(reinterpret_cast<void**>(&this->memory_pool), memory_limit);
+        printf("GPU Total Memory: %ld bytes (%.2f GB)\n", total_memory, (double)total_memory / (1024*1024*1024));
+        printf("Allocated Memory: %ld bytes (%.2f GB), ratio: %.1f%%\n", 
+               this->memory_limit, (double)this->memory_limit / (1024*1024*1024), memory_limit * 100);
+        
+        err = cudaMalloc(reinterpret_cast<void**>(&this->memory_pool), this->memory_limit);
         if (err != cudaSuccess) {
             print_stack_trace();
-            fprintf(stderr, "\nError: cudaMalloc failed in Memory constructor: %s, size: %ld\n\n", cudaGetErrorString(err), memory_limit);
+            fprintf(stderr, "\nError: cudaMalloc failed in Memory constructor: %s, size: %ld\n\n", cudaGetErrorString(err), this->memory_limit);
             this->memory_pool = nullptr;
         }
     }
 
-    // 添加析构函数防止内存泄漏
+    // Add destructor to prevent memory leak
     ~Memory() {
         if (memory_pool != nullptr) {
             cudaError_t err = cudaFree(memory_pool);

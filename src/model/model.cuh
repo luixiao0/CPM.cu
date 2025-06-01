@@ -46,7 +46,7 @@ struct ModelImpl : Model {
     float residual_scale;
 
     ModelImpl(
-        int64_t memory_limit,
+        float memory_limit,
         int vocab_size,
         int num_hidden_layers,
         int hidden_size,

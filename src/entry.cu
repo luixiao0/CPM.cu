@@ -64,7 +64,7 @@
 Model* model;
 
 void init_base_model(
-    int64_t memory_limit,
+    float memory_limit,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,
@@ -102,7 +102,7 @@ void init_base_model(
 }
 
 void init_minicpm4_model(
-    int64_t memory_limit,
+    float memory_limit,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,
@@ -148,7 +148,7 @@ void init_minicpm4_model(
 }
 
 void init_w4a16_gptq_marlin_base_model(
-    int64_t memory_limit,
+    float memory_limit,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,
@@ -190,7 +190,7 @@ void init_w4a16_gptq_marlin_base_model(
 }
 
 void init_w4a16_gptq_marlin_minicpm4_model(
-    int64_t memory_limit,
+    float memory_limit,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,

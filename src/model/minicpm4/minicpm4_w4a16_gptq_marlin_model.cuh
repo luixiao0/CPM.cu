@@ -27,7 +27,7 @@ struct MiniCPM4W4A16GPTQMarlinModelImpl : Model {
     float residual_scale;
 
     MiniCPM4W4A16GPTQMarlinModelImpl(
-        int64_t memory_limit,
+        float memory_limit,
         int vocab_size,
         int num_hidden_layers,
         int hidden_size,

@@ -28,7 +28,7 @@ struct W4A16GPTQMarlinModelImpl: Model {
 
 
     W4A16GPTQMarlinModelImpl(
-        int64_t memory_limit,
+        float memory_limit,
         int vocab_size,
         int num_hidden_layers,
         int hidden_size,
@@ -51,10 +51,11 @@ struct W4A16GPTQMarlinModelImpl: Model {
         this->num_key_value_heads = num_key_value_heads;
         this->head_dim = head_dim;
         this->rms_norm_eps = rms_norm_eps;
+        this->group_size = group_size;
 
         this->chunk_length = chunk_length;
         this->residual_scale = scale_residual;
-
+        
         memory = new Memory(memory_limit);
 
         kv_caches = new KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim);

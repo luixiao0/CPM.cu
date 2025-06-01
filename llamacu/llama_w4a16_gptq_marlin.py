@@ -40,8 +40,6 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         self.dtype_int = dtype_to_int(self.dtype)
         self.cuda_graph = cuda_graph
 
-        self.memory_limit = int(torch.cuda.get_device_properties(0).total_memory * memory_limit)
-
         self.chunk_length = chunk_length
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
@@ -55,7 +53,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         
         if apply_sparse:
             C.init_w4a16_gptq_marlin_minicpm4_model(
-                self.memory_limit,
+                memory_limit,
                 self.config.vocab_size,
                 self.config.num_hidden_layers,
                 self.config.hidden_size,
@@ -77,7 +75,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             )
         else:
             C.init_w4a16_gptq_marlin_base_model(
-                self.memory_limit,
+                memory_limit,
                 self.config.vocab_size,
                 self.config.num_hidden_layers,
                 self.config.hidden_size,

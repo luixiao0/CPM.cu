@@ -27,7 +27,7 @@ struct MiniCPM4Impl : Model {
     float residual_scale;
 
     MiniCPM4Impl(
-        int64_t memory_limit,
+        float memory_limit,
         int vocab_size,
         int num_hidden_layers,
         int hidden_size,
