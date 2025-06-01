@@ -82,6 +82,8 @@ struct MiniCPM4EagleImpl : Model {
             lm_head = this->model->lm_head;
         }
 
+        assert(topk_per_iter <= this->tree_size-1);
+
         topk_func = new functions::TopK<T>(this->frspec_vocab_size, topk_per_iter);
         topk_func_2 = new functions::TopK<T>(total_tried, this->tree_size-1);
     }
@@ -318,7 +320,7 @@ struct MiniCPM4EagleImpl : Model {
             this->topk_func_2->prefill(calc_stream, 1, this->topk_func->topk_val, topk_per_iter * topk_per_iter, topk_per_iter);
 
             cudaMemcpy(this->tmp_mask_2d, this->eagle_mask_2d, topk_per_iter * sizeof(uint64_t), cudaMemcpyDeviceToDevice);
-            set_parent(calc_stream, topk_per_iter, this->tired_history_parent + (d - 1) * topk_per_iter, this->topk_func_2->topk_pos, 10 + (d - 1) * topk_per_iter * topk_per_iter);
+            set_parent(calc_stream, topk_per_iter, this->tired_history_parent + (d - 1) * topk_per_iter, this->topk_func_2->topk_pos, topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter);
             update_tree(calc_stream, topk_per_iter, topk_per_iter * d, this->eagle_mask_2d, this->tmp_mask_2d, this->topk_func_2->topk_pos);
             remap_hidden(calc_stream, topk_per_iter, this->model->hidden_size, this->topk_func_2->topk_pos, this->fc2->output, this->fc1->output, topk_per_iter);
             if (this->frspec_vocab_size != this->model->vocab_size) {
