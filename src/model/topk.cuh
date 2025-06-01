@@ -107,7 +107,7 @@ static __global__ void kernel_bitonic_topk_multiblock(
     int offset_inp = blockIdx.x * n + offset_col;
     int offset_out = blockIdx.x * (gridDim.y * N) + blockIdx.y * N + threadIdx.x;
     T local_v = (offset_col < n) ? inp[offset_inp] : T(-TypeTraits<T>::inf());
-    int local_pos = (idx_inp == nullptr) ? offset_col : idx_inp[offset_inp];
+    int local_pos = (idx_inp == nullptr) ? offset_col : ((offset_col < n) ? idx_inp[offset_inp] : -1);
     if (!ordered) warpBitonicSort<T, N>(local_v, local_pos, false); // local sort in desc order
     blockBitonicReduce<T, N>(local_v, local_pos);
     if (threadIdx.x < N) {

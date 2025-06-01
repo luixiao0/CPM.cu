@@ -72,11 +72,11 @@ struct GatedFFN : FFN<T> {
     void prefill(const Stream& stream, int32_t num_tokens, T* input, T* prev_output) {
         this->ffn_norm->prefill(stream, num_tokens, input, prev_output);
 
-        // this->gate_proj->prefill(stream, num_tokens, this->ffn_norm->output);
-        // this->up_proj->prefill(stream, num_tokens, this->ffn_norm->output);
-        // gated_silu<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
-        linear<T>(stream, num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
-        gated_silu_interleaved<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
+        this->gate_proj->prefill(stream, num_tokens, this->ffn_norm->output);
+        this->up_proj->prefill(stream, num_tokens, this->ffn_norm->output);
+        gated_silu<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
+        // linear<T>(stream, num_tokens, this->hidden_size, this->intermediate_size*2, this->ffn_norm->output, this->gate_proj->weight, this->gate_proj->output);
+        // gated_silu_interleaved<T>(stream, num_tokens, this->intermediate_size, this->gate_proj->output, this->gated_up);
 
         this->down_proj->prefill(stream, num_tokens, this->gated_up);
     }

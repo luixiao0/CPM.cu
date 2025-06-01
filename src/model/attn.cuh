@@ -177,15 +177,21 @@ struct Attention {
         this->attn_norm->prefill(stream, num_tokens, input, prev_output);
         T *q, *k, *v;
         int merge_dim_out = (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim;
-        if (num_tokens > 1) {
-            linear<T>(stream, num_tokens, this->hidden_size, merge_dim_out, this->attn_norm->output, this->q_proj->weight, this->v_proj->output);
-            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj->output, this->q_proj->output);
-        } else {
-            linear<T>(stream, num_tokens, this->hidden_size, merge_dim_out, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
-        }
+        // if (num_tokens > 1) {
+        //     linear<T>(stream, num_tokens, this->hidden_size, merge_dim_out, this->attn_norm->output, this->q_proj->weight, this->v_proj->output);
+        //     permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj->output, this->q_proj->output);
+        // } else {
+        //     linear<T>(stream, num_tokens, this->hidden_size, merge_dim_out, this->attn_norm->output, this->q_proj->weight, this->q_proj->output);
+        // }
+        // q = this->q_proj->output;
+        // k = q + num_tokens * this->num_attention_heads * this->head_dim;
+        // v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output);
+        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output);
+        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output);
         q = this->q_proj->output;
-        k = q + num_tokens * this->num_attention_heads * this->head_dim;
-        v = k + num_tokens * this->num_key_value_heads * this->head_dim;
+        k = this->k_proj->output;
+        v = this->v_proj->output;
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
 
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);

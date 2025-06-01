@@ -45,7 +45,7 @@ struct Memory {
     }
 #endif
     
-#if 1
+#if 0
     int64_t allocate(void** ptr, int64_t offset, size_t size = 0) { // 0 for reuse previous allocated memory, just need start offset, return value is useless
         if (size == 0) {
             fprintf(stderr, "Warning: size is 0\n");
