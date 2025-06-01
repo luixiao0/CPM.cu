@@ -90,7 +90,6 @@ struct LMHead : Linear<T> {
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         offset = Linear<T>::init_output_ptr(memory, num_tokens, offset);
-        printf("LMHead init_output_ptr dim_in: %d, dim_out: %d, offset: %ld\n", this->dim_in, this->dim_out, offset);
         offset = memory->allocate((void**)&this->tmp_hidden_size, offset, num_tokens * this->dim_in * sizeof(T));
         return offset;
     }
