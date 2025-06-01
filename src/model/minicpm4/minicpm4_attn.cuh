@@ -315,6 +315,6 @@ struct MiniCPM4Attention {
         // flash attention and put output to attn_norm->output
         this->o_proj->prefill(stream, num_tokens, this->attn_output);
 
-        kv_cache->next_kv_length = kv_cache->next_kv_length + 1; // TODO minicpm4 eagle verify should -1 + acceptlength
+        kv_cache->next_kv_length = kv_cache->next_kv_length + 1;
     }
 };
