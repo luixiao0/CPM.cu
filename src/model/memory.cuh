@@ -22,24 +22,24 @@ struct Memory {
         size_t aligned_size = ROUND_UP(size, ALIGN_SIZE);
         cudaError_t err = cudaMalloc(&ptr, aligned_size);
         if (err != cudaSuccess) {
-            fprintf(stderr, "Warning: cudaMalloc failed: %s, size: %ld\n", cudaGetErrorString(err), size);
             print_stack_trace();
+            fprintf(stderr, "Warning: cudaMalloc failed: %s, size: %ld\n", cudaGetErrorString(err), size);
             return nullptr;
         }
         return ptr;
     }
     int64_t allocate(void** ptr, int64_t offset, size_t size = 0) { // 0 for reuse previous allocated memory, just need start offset, return value is useless
         if (size == 0) {
-            fprintf(stderr, "Warning: size is 0\n");
             print_stack_trace();
+            fprintf(stderr, "Warning: size is 0\n");
             return -1;
         }
         
         size_t aligned_size = ROUND_UP(size, ALIGN_SIZE);
         cudaError_t err = cudaMalloc(ptr, aligned_size);
         if (err != cudaSuccess) {
-            fprintf(stderr, "Warning: cudaMalloc failed: %s, size: %ld\n", cudaGetErrorString(err), size);
             print_stack_trace();
+            fprintf(stderr, "Warning: cudaMalloc failed: %s, size: %ld\n", cudaGetErrorString(err), size);
             *ptr = nullptr;
             return -1;
         }
@@ -53,17 +53,18 @@ struct Memory {
         uint8_t* ret = memory_pool + model_offset;
         model_offset += size;
         model_offset = ROUND_UP(model_offset, ALIGN_SIZE); // Align to 16 bytes
-        if (offset > this->memory_limit) {
+        if (model_offset > this->memory_limit) {
             print_stack_trace();
-            fprintf(stderr, "Warning: memory limit exceeded, offset: %ld, size: %ld, memory_limit: %ld\n", offset, size, this->memory_limit);
-            return -1;
+            fprintf(stderr, "Warning: memory limit exceeded, offset: %ld, size: %ld, memory_limit: %ld\n", model_offset, size, this->memory_limit);
+            return nullptr;
         }
         return (void*)ret;
     }
     int64_t allocate(void** ptr, int64_t offset, size_t size = 0) { // 0 for reuse previous allocated memory, just need start offset, return value is useless
         if (size == 0) {
-            fprintf(stderr, "Warning: size is 0\n");
             print_stack_trace();
+            fprintf(stderr, "Warning: size is 0\n");
+            return -1;
         }
         *ptr = memory_pool + offset;
         offset += size;
@@ -71,6 +72,7 @@ struct Memory {
         if (offset > this->memory_limit) {
             print_stack_trace();
             fprintf(stderr, "Warning: memory limit exceeded, offset: %ld, size: %ld, memory_limit: %ld\n", offset, size, this->memory_limit);
+            *ptr = nullptr;
             return -1;
         }
         return offset;

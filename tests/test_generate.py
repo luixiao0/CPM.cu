@@ -10,10 +10,10 @@ import numpy as np
 test_minicpm4 = True
 apply_eagle = True
 apply_quant = True
-apply_sparse = False # TODO Maybe lead to illegal memory access
+apply_sparse = True # TODO Maybe lead to illegal memory access
 apply_compress_lse = True
 
-num_generate = 16
+num_generate = 256
 sink_window_size = 1
 # block_window_size = 2048
 # sparse_topk_k = 0
@@ -21,7 +21,7 @@ block_window_size = 32
 sparse_topk_k = 64
 eagle_window_size = 64 * 128
 frspec_vocab_size = 0
-chunk_length = 64 # TODO minicpm4 change this to 1024 and test correctness
+chunk_length = 256 # TODO minicpm4 change this to 1024 and test correctness
 cuda_graph = False
 
 if not test_minicpm4:
@@ -65,6 +65,7 @@ prompt_content = "北京有哪些好玩的地方"
 # prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
+prompt = make_input(681725493, 250, 500) # 15k
 # prompt = make_input(681725493, 10, 50)
 # prompt = "Beijing is the"
 # prompt = prompt_content
@@ -80,22 +81,23 @@ num_tokens = input_ids.numel()
 
 position_ids = torch.arange(num_tokens, dtype=torch.int32, device="cuda").view(1, num_tokens)
 
-teminators = [tokenizer.eos_token_id]
+# teminators = [tokenizer.eos_token_id]
+teminators = [0]
 
 if apply_quant:
     if model_type == "eagle":
-        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.1, num_iter=2, topk_per_iter=16, tree_size=32, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, frspec_vocab_size=frspec_vocab_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
+        llm = W4A16GPTQMarlinLLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.01, num_iter=2, topk_per_iter=15, tree_size=16, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, frspec_vocab_size=frspec_vocab_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.1, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
+        llm = W4A16GPTQMarlinLLM(path, dtype=dtype, memory_limit=0.01, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 else:
     if model_type == "eagle":
-        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.10, num_iter=2, topk_per_iter=16, tree_size=16, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, frspec_vocab_size=frspec_vocab_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
+        llm = LLM_with_eagle(eagle_path, path, dtype=dtype, memory_limit=0.01, num_iter=2, topk_per_iter=15, tree_size=16, chunk_length=chunk_length, cuda_graph=cuda_graph, eagle_window_size=eagle_window_size, frspec_vocab_size=frspec_vocab_size, use_rope=test_minicpm4, use_input_norm=test_minicpm4, use_attn_norm=test_minicpm4, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
         # llm = LLM(path, dtype=dtype, memory_limit=0.9, chunk_length=chunk_length, cuda_graph=cuda_graph, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
     else:
-        llm = LLM(path, dtype=dtype, memory_limit=0.10, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
+        llm = LLM(path, dtype=dtype, memory_limit=0.01, chunk_length=chunk_length, cuda_graph=cuda_graph, apply_sparse=apply_sparse, sink_window_size=sink_window_size, block_window_size=block_window_size, sparse_topk_k=sparse_topk_k, apply_compress_lse=apply_compress_lse)
         our_generate = lambda: llm.generate(input_ids, num_generate, teminators=teminators)
 
 llm.init_storage()
