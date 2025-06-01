@@ -41,7 +41,6 @@ class LLM(torch.nn.Module):
         self.cuda_graph = cuda_graph
 
         self.memory_limit = int(torch.cuda.get_device_properties(0).total_memory * memory_limit)
-        self.memory_pool = torch.nn.Parameter(torch.empty(self.memory_limit, dtype=torch.uint8, device="cuda"), requires_grad=False)
 
         self.chunk_length = chunk_length
         if not hasattr(self.config, "head_dim"):
@@ -54,7 +53,6 @@ class LLM(torch.nn.Module):
         if apply_sparse:
             C.init_minicpm4_model(
                 self.memory_limit,
-                self.memory_pool.data.data_ptr(),
                 self.config.vocab_size,
                 self.config.num_hidden_layers,
                 self.config.hidden_size,
@@ -76,7 +74,6 @@ class LLM(torch.nn.Module):
         else:
             C.init_base_model(
                 self.memory_limit,
-                self.memory_pool.data.data_ptr(),
                 self.config.vocab_size,
                 self.config.num_hidden_layers,
                 self.config.hidden_size,

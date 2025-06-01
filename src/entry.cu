@@ -65,7 +65,6 @@ Model* model;
 
 void init_base_model(
     int64_t memory_limit,
-    std::uintptr_t memory_pool,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,
@@ -85,7 +84,6 @@ void init_base_model(
     DTYPE_SWITCH(torch_dtype, [&] {
         model = new ModelImpl<elem_type>(
             memory_limit,
-            reinterpret_cast<void*>(memory_pool),
             vocab_size,
             num_hidden_layers,
             hidden_size,
@@ -105,7 +103,6 @@ void init_base_model(
 
 void init_minicpm4_model(
     int64_t memory_limit,
-    std::uintptr_t memory_pool,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,
@@ -129,7 +126,6 @@ void init_minicpm4_model(
     DTYPE_SWITCH(torch_dtype, [&] {
         model = new MiniCPM4Impl<elem_type>(
             memory_limit,
-            reinterpret_cast<void*>(memory_pool),
             vocab_size,
             num_hidden_layers,
             hidden_size,
@@ -153,7 +149,6 @@ void init_minicpm4_model(
 
 void init_w4a16_gptq_marlin_base_model(
     int64_t memory_limit,
-    std::uintptr_t memory_pool,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,
@@ -177,7 +172,6 @@ void init_w4a16_gptq_marlin_base_model(
 
     model = new W4A16GPTQMarlinModelImpl<half>(
         memory_limit,
-        reinterpret_cast<void*>(memory_pool),
         vocab_size,
         num_hidden_layers,
         hidden_size,
@@ -197,7 +191,6 @@ void init_w4a16_gptq_marlin_base_model(
 
 void init_w4a16_gptq_marlin_minicpm4_model(
     int64_t memory_limit,
-    std::uintptr_t memory_pool,
     int vocab_size,
     int num_hidden_layers,
     int hidden_size,
@@ -224,7 +217,6 @@ void init_w4a16_gptq_marlin_minicpm4_model(
 
     model = new MiniCPM4W4A16GPTQMarlinModelImpl<half>(
         memory_limit,
-        reinterpret_cast<void*>(memory_pool),
         vocab_size,
         num_hidden_layers,
         hidden_size,

@@ -10,10 +10,26 @@ struct Memory {
     uint8_t* memory_pool;
     int64_t model_offset;
 
-    Memory(int64_t memory_limit, void* memory_pool) {
+    Memory(int64_t memory_limit) {
         this->memory_limit = memory_limit;
-        this->memory_pool = (uint8_t*)memory_pool;
         this->model_offset = 0;
+        
+        cudaError_t err = cudaMalloc(reinterpret_cast<void**>(&this->memory_pool), memory_limit);
+        if (err != cudaSuccess) {
+            print_stack_trace();
+            fprintf(stderr, "\nError: cudaMalloc failed in Memory constructor: %s, size: %ld\n\n", cudaGetErrorString(err), memory_limit);
+            this->memory_pool = nullptr;
+        }
+    }
+
+    // 添加析构函数防止内存泄漏
+    ~Memory() {
+        if (memory_pool != nullptr) {
+            cudaError_t err = cudaFree(memory_pool);
+            if (err != cudaSuccess) {
+                fprintf(stderr, "\nWarning: cudaFree failed in Memory destructor: %s\n\n", cudaGetErrorString(err));
+            }
+        }
     }
 
 #ifdef DISABLE_MEMPOOL

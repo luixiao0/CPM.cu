@@ -51,7 +51,6 @@ struct W4A16GMSpecW4A16GMImpl: Model {
         this->model = model;
         this->draft_model = new W4A16GPTQMarlinModelImpl<T>(
             0,
-            nullptr,
             draft_vocab_size,
             draft_num_hidden_layers,
             draft_hidden_size,

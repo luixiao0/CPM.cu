@@ -28,7 +28,6 @@ struct MiniCPM4Impl : Model {
 
     MiniCPM4Impl(
         int64_t memory_limit,
-        void* memory_pool,
         int vocab_size,
         int num_hidden_layers,
         int hidden_size,
@@ -58,7 +57,7 @@ struct MiniCPM4Impl : Model {
         this->chunk_length = chunk_length;
         this->residual_scale = scale_residual;
         
-        memory = new Memory(memory_limit, memory_pool);
+        memory = new Memory(memory_limit);
 
         kv_caches = new MiniCPM4KVCacheManager<T>(num_hidden_layers, num_key_value_heads, head_dim, sparse_topk_k, apply_compress_lse);
 
