@@ -51,7 +51,7 @@ struct RotaryEmbedding {
     }
 
     void init_weight_ptr(Memory* memory) {
-        this->inv_freq = (float*)memory->allocate_for_model_cudaMalloc(half_dim * sizeof(float));
+        this->inv_freq = (float*)memory->allocate_for_model(half_dim * sizeof(float));
     }
 
     void load_to_storage(std::string name, void* ptr) {

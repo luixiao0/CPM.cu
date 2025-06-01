@@ -95,6 +95,7 @@ def get_compile_args():
         cxx_args = common_cxx_args + [
             "-g3",           # 最详细的调试信息
             "-O0",           # 禁用优化
+            "-DDISABLE_MEMPOOL",
             "-DDEBUG", 
             "-fno-inline",   # 禁用内联
             "-fno-omit-frame-pointer",  # 保留栈帧指针
@@ -103,6 +104,7 @@ def get_compile_args():
             "-O0", 
             "-g",            # 主机端调试信息
             "-lineinfo",     # 生成行号信息
+            "-DDISABLE_MEMPOOL",
             "-DDEBUG", 
             "-DCUDA_DEBUG",
             "-Xcompiler", "-g3",              # 传递给主机编译器

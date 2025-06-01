@@ -258,8 +258,6 @@ struct MiniCPM4EagleImpl : Model {
     }
 
     void draft(int32_t* tree_draft_ids, int32_t* tree_position_ids, int32_t* cache_length, uint64_t* tree_attn_mask, int32_t* tree_parent) {
-        static int draft_count = 0;
-        printf("draft %d\n", draft_count++);
         cudaMemcpy(this->eagle_original_length, cache_length, sizeof(int32_t), cudaMemcpyDeviceToHost);
         this->eagle_padded_length = (this->eagle_original_length[0] + 256 - 1) / 128 * 128;
 
@@ -290,7 +288,6 @@ struct MiniCPM4EagleImpl : Model {
             init_tree(calc_stream, topk_per_iter, this->eagle_mask_2d);
         }
         for (int d = 1; d < this->num_iter; ++d) {
-            // assert(false);
             add(calc_stream, 1, this->eagle_cache_length, topk_per_iter);
             this->model->embedding->prefill(calc_stream, topk_per_iter, this->topk_func_2->topk_pos);
             if (use_input_norm) {

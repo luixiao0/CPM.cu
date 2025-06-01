@@ -104,11 +104,11 @@ struct Attention {
         int64_t v_proj_end = this->v_proj->init_output_ptr(memory, num_tokens, k_proj_end);
         
         int64_t attn_output_end = memory->allocate((void**)&this->attn_output, offset, num_tokens * this->num_attention_heads * this->head_dim * sizeof(T));
-        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, attn_output_end, num_tokens * this->num_attention_heads * sizeof(float));
+        int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, num_tokens * this->num_attention_heads * sizeof(float));
         int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
 
-        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, oaccum_end);
+        int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, v_proj_end);
         this->output = this->o_proj->output;
 
         return std::max(oaccum_end, o_proj_end);
@@ -175,7 +175,15 @@ struct Attention {
 
     void decode(const Stream& stream, int32_t num_tokens, int32_t padded_length, T* input, T* prev_output, int32_t* position_ids, int32_t* cache_length, const Mask& mask, KVCache<T>* kv_cache) {
         this->attn_norm->prefill(stream, num_tokens, input, prev_output);
-        T *q, *k, *v;
+        T *q = nullptr;
+#ifdef DISABLE_MEMPOOL
+        this->q_proj->prefill(stream, num_tokens, this->attn_norm->output);
+        this->k_proj->prefill(stream, num_tokens, this->attn_norm->output);
+        this->v_proj->prefill(stream, num_tokens, this->attn_norm->output);
+        q = this->q_proj->output;
+        kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, this->q_proj->output, this->k_proj->output, position_ids);
+        copy_to_kvcache(stream, num_tokens, this->k_proj->output, this->v_proj->output, kv_cache, cache_length);
+#else
         int merge_dim_out = (this->num_attention_heads + 2 * this->num_key_value_heads) * this->head_dim;
         // if (num_tokens > 1) {
         //     linear<T>(stream, num_tokens, this->hidden_size, merge_dim_out, this->attn_norm->output, this->q_proj->weight, this->v_proj->output);
@@ -190,11 +198,11 @@ struct Attention {
         this->k_proj->prefill(stream, num_tokens, this->attn_norm->output);
         this->v_proj->prefill(stream, num_tokens, this->attn_norm->output);
         q = this->q_proj->output;
-        k = this->k_proj->output;
-        v = this->v_proj->output;
+        T* k = q + num_tokens * this->num_attention_heads * this->head_dim;
+        T* v = k + num_tokens * this->num_key_value_heads * this->head_dim;
         kv_cache->rotary_embedding->prefill(stream, num_tokens, this->num_attention_heads, this->num_key_value_heads, q, k, position_ids);
-
         copy_to_kvcache(stream, num_tokens, k, v, kv_cache, cache_length);
+#endif
 
         cuda_perf_start_on_stream_f(DECODE_ATTN_CORE, stream.stream);
         mha_fwd_kvcache(

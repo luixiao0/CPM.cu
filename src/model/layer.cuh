@@ -29,7 +29,7 @@ struct Layer {
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
         int64_t attn_end = this->attn->init_output_ptr(memory, num_tokens, offset);
-        int64_t ffn_end = this->ffn->init_output_ptr(memory, num_tokens, attn_end);
+        int64_t ffn_end = this->ffn->init_output_ptr(memory, num_tokens, offset);
         this->output = this->ffn->output;
         return std::max(attn_end, ffn_end);
     }

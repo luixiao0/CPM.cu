@@ -52,7 +52,7 @@ struct Linear {
     void init_weight_ptr(Memory* memory) {
         weight = (T*)memory->allocate_for_model(dim_in * dim_out * sizeof(T));
         if constexpr (has_bias) {
-            bias = (T*)memory->allocate_for_model_cudaMalloc(dim_out * sizeof(T));
+            bias = (T*)memory->allocate_for_model(dim_out * sizeof(T));
         }
     }
 
