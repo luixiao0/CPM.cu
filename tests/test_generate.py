@@ -8,12 +8,12 @@ import time
 import numpy as np
 
 test_minicpm4 = True
-apply_eagle = True
-apply_quant = True
-apply_sparse = True # TODO Maybe lead to illegal memory access
+apply_eagle = False
+apply_quant = True # TODO: eagle+quant+sparse memcheck failed at build_dynamic_tree, only quant memcheck get incorrect result
+apply_sparse = False # TODO: Maybe lead to illegal memory access
 apply_compress_lse = True
 
-num_generate = 256
+num_generate = 64
 sink_window_size = 1
 # block_window_size = 2048
 # sparse_topk_k = 0
@@ -68,7 +68,6 @@ prompt_content = "北京有哪些好玩的地方"
 prompt = make_input(681725493, 250, 500) # 15k
 # prompt = make_input(681725493, 10, 50)
 # prompt = "Beijing is the"
-# prompt = prompt_content
 
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 

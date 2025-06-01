@@ -200,9 +200,9 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         T *q, *k, *v;
 
         if (num_tokens > 1) {
-            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp, this->v_proj_output);
-            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj_output, this->q_proj_output);
-            q = this->q_proj_output;
+            this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp, this->permute_qkv_output);
+            permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->qkv_proj->output, this->permute_qkv_output); // TODO: Double check
+            q = this->permute_qkv_output;
         } else {
             this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
             q = this->qkv_proj->output;
