@@ -27,9 +27,9 @@ default_config = {
     'block_window_size': 32,
     'sparse_topk_k': 64,
     'num_generate': 512,
-    'chunk_length': 512,
+    'chunk_length': 2048,
     'memory_limit': 0.9,
-    'cuda_graph': False,
+    'cuda_graph': True,
     'dtype': torch.float16,
     'use_teminators': True,
 }
