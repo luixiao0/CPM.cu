@@ -23,7 +23,7 @@ struct Memory {
         size_t free_memory, total_memory;
         cudaError_t err = cudaMemGetInfo(&free_memory, &total_memory);
         if (err != cudaSuccess) {
-            fprintf(stderr, "\nError: cudaMemGetInfo failed: %s\n\n", cudaGetErrorString(err));
+            fprintf(stderr, "Error: cudaMemGetInfo failed: %s\n\n", cudaGetErrorString(err));
             this->memory_limit = 0;
             this->model_offset = 0;
 #ifndef DISABLE_MEMPOOL
@@ -45,8 +45,8 @@ struct Memory {
 #ifndef DISABLE_MEMPOOL
         err = cudaMalloc(reinterpret_cast<void**>(&this->memory_pool), this->memory_limit);
         if (err != cudaSuccess) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: cudaMalloc failed in Memory constructor: %s, size: %ld\n\n", cudaGetErrorString(err), this->memory_limit);
+            print_stack_trace(5);
+            fprintf(stderr, "Error: cudaMalloc failed in Memory constructor: %s, size: %ld\n\n", cudaGetErrorString(err), this->memory_limit);
             this->memory_pool = nullptr;
         }
 #else
@@ -61,7 +61,7 @@ struct Memory {
         if (memory_pool != nullptr) {
             cudaError_t err = cudaFree(memory_pool);
             if (err != cudaSuccess) {
-                fprintf(stderr, "\nWarning: cudaFree failed in Memory destructor: %s\n\n", cudaGetErrorString(err));
+                fprintf(stderr, "Warning: cudaFree failed in Memory destructor: %s\n\n", cudaGetErrorString(err));
             }
         }
 #else
@@ -70,7 +70,7 @@ struct Memory {
             if (ptr != nullptr) {
                 cudaError_t err = cudaFree(ptr);
                 if (err != cudaSuccess) {
-                    fprintf(stderr, "\nWarning: cudaFree failed in Memory destructor: %s\n\n", cudaGetErrorString(err));
+                    fprintf(stderr, "Warning: cudaFree failed in Memory destructor: %s\n\n", cudaGetErrorString(err));
                 }
             }
         }
@@ -84,24 +84,24 @@ struct Memory {
         model_offset += size;
         model_offset = ROUND_UP(model_offset, ALIGN_SIZE); // Align to 16 bytes
         if (model_offset > this->memory_limit) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: memory limit exceeded, offset: %ld, size: %ld, memory_limit: %ld\n\n", model_offset, size, this->memory_limit);
+            print_stack_trace(5);
+            fprintf(stderr, "Error: memory limit exceeded, offset: %ld, size: %ld, memory_limit: %ld\n\n", model_offset, size, this->memory_limit);
             return nullptr;
         }
         return (void*)ret;
     }
     int64_t allocate(void** ptr, int64_t offset, size_t size = 0) {
         if (size == 0) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: size is 0\n\n");
+            print_stack_trace(5);
+            fprintf(stderr, "Error: size is 0\n\n");
             return -1;
         }
         *ptr = memory_pool + offset;
         offset += size;
         offset = ROUND_UP(offset, ALIGN_SIZE); // Align to 16 bytes
         if (offset > this->memory_limit) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: memory limit exceeded, offset: %ld, size: %ld, memory_limit: %ld\n\n", offset, size, this->memory_limit);
+            print_stack_trace(5);
+            fprintf(stderr, "Error: memory limit exceeded, offset: %ld, size: %ld, memory_limit: %ld\n\n", offset, size, this->memory_limit);
             *ptr = nullptr;
             return -1;
         }
@@ -114,16 +114,16 @@ struct Memory {
         
         // Check if allocation would exceed memory limit
         if (allocated_size + aligned_size > this->memory_limit) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: memory limit exceeded, allocated_size: %ld, new_size: %ld, memory_limit: %ld\n\n", 
+            print_stack_trace(5);
+            fprintf(stderr, "Error: memory limit exceeded, allocated_size: %ld, new_size: %ld, memory_limit: %ld\n\n", 
                     allocated_size, aligned_size, this->memory_limit);
             return nullptr;
         }
         
         cudaError_t err = cudaMalloc(&ptr, aligned_size);
         if (err != cudaSuccess) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: cudaMalloc failed: %s, size: %ld\n\n", cudaGetErrorString(err), size);
+            print_stack_trace(5);
+            fprintf(stderr, "Error: cudaMalloc failed: %s, size: %ld\n\n", cudaGetErrorString(err), size);
             return nullptr;
         }
         
@@ -133,8 +133,8 @@ struct Memory {
     }
     int64_t allocate(void** ptr, int64_t offset, size_t size = 0) { // 0 for reuse previous allocated memory, just need start offset, return value is useless
         if (size == 0) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: size is 0\n\n");
+            print_stack_trace(5);
+            fprintf(stderr, "Error: size is 0\n\n");
             return -1;
         }
         
@@ -142,8 +142,8 @@ struct Memory {
         
         // Check if allocation would exceed memory limit
         if (allocated_size + aligned_size > this->memory_limit) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: memory limit exceeded, allocated_size: %ld, new_size: %ld, memory_limit: %ld\n\n", 
+            print_stack_trace(5);
+            fprintf(stderr, "Error: memory limit exceeded, allocated_size: %ld, new_size: %ld, memory_limit: %ld\n\n", 
                     allocated_size, aligned_size, this->memory_limit);
             *ptr = nullptr;
             return -1;
@@ -151,8 +151,8 @@ struct Memory {
         
         cudaError_t err = cudaMalloc(ptr, aligned_size);
         if (err != cudaSuccess) {
-            print_stack_trace();
-            fprintf(stderr, "\nError: cudaMalloc failed: %s, size: %ld\n\n", cudaGetErrorString(err), size);
+            print_stack_trace(5);
+            fprintf(stderr, "Error: cudaMalloc failed: %s, size: %ld\n\n", cudaGetErrorString(err), size);
             *ptr = nullptr;
             return -1;
         }

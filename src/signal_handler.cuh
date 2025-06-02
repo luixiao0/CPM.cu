@@ -20,7 +20,7 @@ void init_signal_handlers();
 void signal_handler(int sig);
 
 // 打印栈帧信息
-void print_stack_trace();
+void print_stack_trace(int max_frames = 50);
 
 // 获取符号名称（带demangling）
 std::string get_symbol_name(const char* symbol); 

@@ -41,7 +41,7 @@ void signal_handler(int sig) {
     std::cerr << "====================" << std::endl;
     
     // 打印栈帧信息
-    print_stack_trace();
+    print_stack_trace(50);
     
     std::cerr << "\nProgram terminated due to signal " << sig << std::endl;
     std::cerr.flush();
@@ -60,9 +60,8 @@ void signal_handler(int sig) {
     raise(sig);
 }
 
-void print_stack_trace() {
-    const int max_frames = 50;
-    void *array[max_frames];
+void print_stack_trace(int max_frames) {
+    void **array = new void*[max_frames];
     
     // 获取调用栈
     int size = backtrace(array, max_frames);
@@ -70,6 +69,7 @@ void print_stack_trace() {
     
     if (strings == nullptr) {
         std::cerr << "Failed to get backtrace symbols (backtrace may not be available on this system)" << std::endl;
+        delete[] array;
         return;
     }
     
@@ -79,10 +79,9 @@ void print_stack_trace() {
         std::cerr << "\n=== MODULE INFO ===" << std::endl;
         std::cerr << "Base address: " << dl_info.dli_fbase << std::endl;
         std::cerr << "Module path: " << dl_info.dli_fname << std::endl;
-        std::cerr << "===================" << std::endl;
     }
     
-    std::cerr << "\n=== STACK TRACE ===" << std::endl;
+    std::cerr << "=== STACK TRACE ===" << std::endl;
     std::cerr << "Call stack (" << size << " frames):" << std::endl;
     
     for (int i = 0; i < size; i++) {
@@ -93,6 +92,7 @@ void print_stack_trace() {
     std::cerr << "==================" << std::endl;
     
     free(strings);
+    delete[] array;
 }
 
 std::string get_symbol_name(const char* symbol) {
