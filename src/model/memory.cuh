@@ -8,6 +8,7 @@
 
 #define ALIGN_SIZE 16
 
+// TODO: refactor this for better encapsulation
 struct Memory {
     int64_t memory_limit;
     int64_t model_offset;
@@ -75,6 +76,15 @@ struct Memory {
             }
         }
         allocated_ptrs.clear();
+#endif
+    }
+
+    // Get remaining available memory from a specific offset
+    int64_t get_remaining_memory(int64_t offset) const {
+#ifndef DISABLE_MEMPOOL
+        return this->memory_limit - offset;
+#else
+        return this->memory_limit - this->allocated_size;
 #endif
     }
 

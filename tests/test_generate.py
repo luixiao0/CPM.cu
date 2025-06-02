@@ -21,7 +21,7 @@ block_window_size = 32
 sparse_topk_k = 64
 eagle_window_size = 64 * 128
 frspec_vocab_size = 0
-chunk_length = 256 # TODO minicpm4 change this to 1024 and test correctness
+chunk_length = 512 # TODO minicpm4 change this to 1024 and test correctness
 cuda_graph = False
 
 if not test_minicpm4:
