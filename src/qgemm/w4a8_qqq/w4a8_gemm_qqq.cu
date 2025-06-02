@@ -909,11 +909,10 @@ const int STAGES = 4;  // 4 pipeline stages fit into shared memory
 static constexpr int min_thread_n = 64;
 static constexpr int min_thread_k = 64;
 
-static constexpr int tile_size = 16;
+// static constexpr int tile_size = 16;
 static constexpr int max_par = 16;
 
-static constexpr int pack_factor_4bit =
-    8;  // We have 8 4-bit vals inside a 32 bit
+// static constexpr int pack_factor_4bit =  8;  // We have 8 4-bit vals inside a 32 bit
 
 #define __CALL_IF(THREAD_M_BLOCKS, THREAD_N_BLOCKS, THREAD_K_BLOCKS,           \
                   GROUP_BLOCKS, NUM_THREADS)                                   \

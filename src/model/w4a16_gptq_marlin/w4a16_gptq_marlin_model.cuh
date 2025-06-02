@@ -51,7 +51,6 @@ struct W4A16GPTQMarlinModelImpl: Model {
         this->num_key_value_heads = num_key_value_heads;
         this->head_dim = head_dim;
         this->rms_norm_eps = rms_norm_eps;
-        this->group_size = group_size;
 
         this->chunk_length = chunk_length;
         this->residual_scale = scale_residual;
