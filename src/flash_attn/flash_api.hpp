@@ -383,7 +383,7 @@ void mha_fwd_kvcache(
     if (seqlens_k != nullptr) {
         params.cu_seqlens_k = seqlens_k;
         params.is_seqlens_k_cumulative = false;
-        params.num_splits = 4; // TODO minicpm4 cheange this dynamically
+        params.num_splits = 16;
     } else {
         params.num_splits = 1;
     }
