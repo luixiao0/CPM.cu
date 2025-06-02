@@ -300,6 +300,7 @@ struct EagleImpl : Model {
         this->num_iter = num_iter;
         this->topk_per_iter = topk_per_iter;
         this->tree_size = tree_size;
+        assert(this->tree_size <= 64); // tree_size must be <= 64
         this->total_tried = topk_per_iter * topk_per_iter * (num_iter - 1) + topk_per_iter;
 
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);
