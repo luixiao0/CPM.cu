@@ -30,12 +30,12 @@ eagle_window_size = 64 * 128
 frspec_vocab_size = 8192
 chunk_length = 384 # TODO minicpm4 change this to 1024 and test correctness
 cuda_graph = False
+dtype = torch.float16
 
 if not test_minicpm4:
     print(f"test_minicpm4 is False, set apply_sparse to False")
     apply_sparse = False
 
-dtype = torch.float16
 model_type = "base" if not apply_eagle else "eagle"
 
 path_prefix = args.path_prefix
@@ -54,6 +54,20 @@ if not apply_quant:
         path = f"{path_prefix}/Meta-Llama-3-8B-Instruct"
 else:
     path = f"{path_prefix}/minicpm4_marlin"
+
+def print_config():
+    """Print all configuration parameters"""
+    print("=" * 50)
+    print("Configuration Parameters:")
+    print("=" * 50)
+    print(f"Features: eagle={apply_eagle}, quant={apply_quant}, sparse={apply_sparse}")
+    print(f"Generation: num_generate={num_generate}, chunk_length={chunk_length}")
+    print(f"Others: dtype={dtype}, cuda_graph={cuda_graph}")
+    print(f"Sparse Attention: sink_window={sink_window_size}, block_window={block_window_size}, sparse_topk_k={sparse_topk_k}, compress_lse={apply_compress_lse}")
+    if apply_eagle:
+        print(f"Eagle: window_size={eagle_window_size}, frspec_vocab_size={frspec_vocab_size}")
+    print("=" * 50)
+    print()
 
 def make_input(digits, a = 2500, b = 4000):
     head = "There is a pass key hidden in the context. Find it and remember it. I will quiz you about it later. "
@@ -76,6 +90,9 @@ prompt = make_input(681725493, 2000, 4000) # 120k
 # prompt = make_input(681725493, 150, 250) # 8k
 # prompt = make_input(681725493, 10, 50)
 # prompt = "Beijing is the"
+
+# Print all configuration parameters
+print_config()
 
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
 
