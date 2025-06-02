@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <stdexcept>
+
 /// @param COND       - a boolean expression to switch by
 /// @param CONST_NAME - a name given for the constexpr bool variable.
 /// @param ...       - code to execute for true and false
@@ -76,18 +78,40 @@
   #define LOCAL_SWITCH BOOL_SWITCH
 #endif
 
-#define FP16_SWITCH(COND, ...)               \
-  [&] {                                      \
-    if (COND) {                              \
-      using elem_type = cutlass::half_t;     \
-      return __VA_ARGS__();                  \
-    } else {                                 \
+#if defined(ENABLE_DTYPE_FP16) && defined(ENABLE_DTYPE_BF16)
+#define FP16_SWITCH(COND, ...) \
+  [&] { \
+    if (COND) { \
+      using elem_type = cutlass::half_t; \
+      return __VA_ARGS__(); \
+    } else { \
       using elem_type = cutlass::bfloat16_t; \
-      return __VA_ARGS__();                  \
-    }                                        \
+      return __VA_ARGS__(); \
+    } \
   }()
+#elif defined(ENABLE_DTYPE_FP16)
+#define FP16_SWITCH(COND, ...) \
+  [&] { \
+    if (!(COND)) { \
+      throw std::runtime_error("BF16 support not compiled. Please recompile with LLAMACU_DTYPE=bf16 or LLAMACU_DTYPE=fp16,bf16"); \
+    } \
+    using elem_type = cutlass::half_t; \
+    return __VA_ARGS__(); \
+  }()
+#elif defined(ENABLE_DTYPE_BF16)
+#define FP16_SWITCH(COND, ...) \
+  [&] { \
+    if (COND) { \
+      throw std::runtime_error("FP16 support not compiled. Please recompile with LLAMACU_DTYPE=fp16 or LLAMACU_DTYPE=fp16,bf16"); \
+    } \
+    using elem_type = cutlass::bfloat16_t; \
+    return __VA_ARGS__(); \
+  }()
+#else
+#error "At least one of ENABLE_DTYPE_FP16 or ENABLE_DTYPE_BF16 must be defined"
+#endif
 
- // TODO only compile 64 for debug
+// TODO only compile 64 for debug
 #define HEADDIM_SWITCH(HEADDIM, ...)   \
   [&] {                                    \
       constexpr static int kHeadDim = 128; \

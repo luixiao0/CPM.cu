@@ -2134,3 +2134,40 @@ void gptq_marlin_gemm(T* a, int32_t* b_q_weight,
 
   return;
 }
+
+// Explicit template instantiations
+#ifdef ENABLE_DTYPE_FP16
+template void gptq_marlin_gemm<__half>(__half* a, int32_t* b_q_weight,
+                               __half* b_scales, int32_t* b_zeros,
+                               int32_t* g_idx, int32_t* perm,
+                               int32_t* workspace,
+                               vllm::ScalarType const& b_q_type,
+                               int64_t size_m, int64_t size_n, int64_t size_k,
+                               bool is_k_full, bool has_zp,
+                               bool use_fp32_reduce, 
+                               __half* c,
+                               int num_groups, int group_size,
+                               int b_q_weight_size1,
+                               bool has_act_order,
+                               cudaStream_t stream,
+                               __half* a_tmp,
+                               float* c_tmp);
+#endif
+
+#ifdef ENABLE_DTYPE_BF16
+template void gptq_marlin_gemm<__nv_bfloat16>(__nv_bfloat16* a, int32_t* b_q_weight,
+                               __nv_bfloat16* b_scales, int32_t* b_zeros,
+                               int32_t* g_idx, int32_t* perm,
+                               int32_t* workspace,
+                               vllm::ScalarType const& b_q_type,
+                               int64_t size_m, int64_t size_n, int64_t size_k,
+                               bool is_k_full, bool has_zp,
+                               bool use_fp32_reduce, 
+                               __nv_bfloat16* c,
+                               int num_groups, int group_size,
+                               int b_q_weight_size1,
+                               bool has_act_order,
+                               cudaStream_t stream,
+                               __nv_bfloat16* a_tmp,
+                               float* c_tmp);
+#endif
