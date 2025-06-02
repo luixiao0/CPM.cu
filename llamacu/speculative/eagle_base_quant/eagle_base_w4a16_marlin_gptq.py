@@ -2,7 +2,7 @@ from ... import C
 from ..eagle import EagleConfig
 from ..tree_drafter_base_quant.tree_drafter_w4a16_gptq_marlin import W4A16GPTQMarlinLLM_with_tree_drafter
 
-import math
+import math, torch
 
 
 class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
@@ -36,42 +36,46 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
             if base_has:
                 assert getattr(self.config, attr) == getattr(self.eagle_config, attr), f"{attr} in base config and eagle config should be the same"
         scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers + 1) if hasattr(self.config, "scale_depth") else 1.0
-        print(f"eagle scale_residual: {scale_residual}")
         self.use_rotation = use_rotation
+        self.apply_eagle_quant = apply_eagle_quant
+        if apply_eagle_quant and hasattr(self.eagle_config, "quantization_config"):
+            self.group_size = self.eagle_config.quantization_config.get('group_size', 0)
+        else:
+            self.group_size = 0
+        assert self.group_size == 128 or self.group_size == 0, "only group_size 128 is supported in quantization mode"
 
-        if not apply_eagle_quant:
-            if not use_rope and not use_input_norm and not use_attn_norm:
-                if not use_rotation:
-                    C.init_eagle_model(
-                        self.eagle_config.eagle_num_layers,
-                        num_iter,
-                        topk_per_iter,
-                        self.tree_size,
-                        self.dtype_int
-                    )
-                else:
-                    C.init_eagle_w4a16_gptq_marlin_rot_model(
-                        self.eagle_config.eagle_num_layers,
-                        num_iter,
-                        topk_per_iter,
-                        self.tree_size,
-                        self.dtype_int
-                    )
-            else:
-                C.init_minicpm4_eagle_model(
+        if not use_rope and not use_input_norm and not use_attn_norm and not apply_eagle_quant:
+            if not use_rotation:
+                C.init_eagle_model(
                     self.eagle_config.eagle_num_layers,
                     num_iter,
                     topk_per_iter,
                     self.tree_size,
-                    self.dtype_int,
-                    eagle_window_size,
-                    frspec_vocab_size,
-                    scale_residual,
-                    use_input_norm, 
-                    use_attn_norm
+                    self.dtype_int
+                )
+            else:
+                C.init_eagle_w4a16_gptq_marlin_rot_model(
+                    self.eagle_config.eagle_num_layers,
+                    num_iter,
+                    topk_per_iter,
+                    self.tree_size,
+                    self.dtype_int
                 )
         else:
-            pass
+            C.init_minicpm4_eagle_model(
+                self.eagle_config.eagle_num_layers,
+                num_iter,
+                topk_per_iter,
+                self.tree_size,
+                self.dtype_int,
+                apply_eagle_quant,
+                self.group_size,
+                eagle_window_size,
+                frspec_vocab_size,
+                scale_residual,
+                use_input_norm, 
+                use_attn_norm
+            )
 
     def _load(self, name, param, dtype=None, cls=None):
         if cls == self.drafter_type:
@@ -80,7 +84,9 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
                 return
             if dtype is None:
                 dtype = self.dtype
-            param = param.contiguous().to(dtype)
+            param = param.contiguous()
+            if not self.apply_eagle_quant:
+                param = param.to(dtype)
             if (not self.use_rotation) and 'embed_tokens' in name:
                 return
             if 'fc' in name:

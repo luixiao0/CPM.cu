@@ -205,7 +205,6 @@ if __name__=="__main__":
     quant_path = args.quant_path
     output_path = args.output_path
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+    os.makedirs(output_path, exist_ok=True)
 
     convert_w4a16_checkpoint(orig_model_path, quant_path, output_path)

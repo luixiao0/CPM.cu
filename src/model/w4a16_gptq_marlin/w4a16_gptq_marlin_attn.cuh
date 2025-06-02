@@ -19,10 +19,12 @@ struct W4A16GPTQMarlinAttention {
     T* attn_output;
     float *softmax_lse, *softmax_lse_accum, *oaccum;
 
+    int window_size;
+
     T* q_proj_output, *v_proj_output, *k_proj_output; 
     T* permute_qkv_output;
 
-    W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size) {
+    W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int window_size = 0) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
@@ -34,6 +36,8 @@ struct W4A16GPTQMarlinAttention {
         this->qkv_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, (num_attention_heads + 2*num_key_value_heads) * head_dim, group_size);
         
         this->o_proj = new W4A16GPTQMarlinLinear<T>(hidden_size, num_attention_heads * head_dim, group_size);
+
+        this->window_size = window_size;
     }
 
     void init_weight_ptr(Memory* memory) {
@@ -110,7 +114,9 @@ struct W4A16GPTQMarlinAttention {
             -1,
             -1,
             0,
-            stream.stream
+            stream.stream,
+            nullptr,
+            this->window_size
         );
         cuda_perf_stop_on_stream_f(Q_PREFILL_ATTN_CORE, stream.stream);
 
@@ -164,7 +170,9 @@ struct W4A16GPTQMarlinAttention {
             -1,
             -1,
             0,
-            stream.stream
+            stream.stream,
+            nullptr,
+            this->window_size
         );
         cuda_perf_stop_on_stream_f(Q_DECODE_ATTN_CORE, stream.stream);
         // flash attention and put output to attn_norm->output

@@ -1,6 +1,6 @@
 from .. import C
 from .tree_drafter import LLM_with_tree_drafter
-import math
+import math, torch
 from transformers import PretrainedConfig
 
 class EagleConfig(PretrainedConfig):
@@ -21,6 +21,7 @@ class LLM_with_eagle(LLM_with_tree_drafter):
                  tree_size=60,
                  eagle_window_size=0,
                  frspec_vocab_size=0,
+                 apply_eagle_quant: bool=False,
                  use_rope: bool=False,
                  use_input_norm: bool=False,
                  use_attn_norm: bool=False,
@@ -41,9 +42,14 @@ class LLM_with_eagle(LLM_with_tree_drafter):
             if base_has:
                 assert getattr(self.config, attr) == getattr(self.eagle_config, attr), f"{attr} in base config and eagle config should be the same"
         scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers + 1) if hasattr(self.config, "scale_depth") else 1.0
-        print(f"eagle scale_residual: {scale_residual}")
+        self.apply_eagle_quant = apply_eagle_quant
+        if apply_eagle_quant and hasattr(self.eagle_config, "quantization_config"):
+            self.group_size = self.eagle_config.quantization_config.get('group_size', 0)
+        else:
+            self.group_size = 0
+        assert self.group_size == 128 or self.group_size == 0, "only group_size 128 is supported in quantization mode"
 
-        if not use_rope and not use_input_norm and not use_attn_norm:
+        if not use_rope and not use_input_norm and not use_attn_norm and not apply_eagle_quant:
             C.init_eagle_model(
                 self.eagle_config.eagle_num_layers,
                 num_iter,
@@ -58,6 +64,8 @@ class LLM_with_eagle(LLM_with_tree_drafter):
                 topk_per_iter,
                 self.tree_size,
                 self.dtype_int,
+                apply_eagle_quant,
+                self.group_size,
                 eagle_window_size,
                 frspec_vocab_size,
                 scale_residual,
@@ -72,7 +80,9 @@ class LLM_with_eagle(LLM_with_tree_drafter):
                 return
             if dtype is None:
                 dtype = self.dtype
-            param = param.contiguous().to(dtype)
+            param = param.contiguous()
+            if not self.apply_eagle_quant:
+                param = param.to(dtype)
             if 'embed_tokens' in name:
                 return
             if 'fc' in name:

@@ -4,8 +4,9 @@
 #include "../eagle.cuh"
 #include "minicpm4_model.cuh"
 #include "minicpm4_w4a16_gptq_marlin_model.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
 
-template<typename T, class ModelType>
+template<typename T, class ModelType, class LayerType>
 struct MiniCPM4EagleImpl : Model {
     int num_layers;
     int num_iter;
@@ -18,7 +19,7 @@ struct MiniCPM4EagleImpl : Model {
 
     ModelType* model = nullptr;
     KVCacheManager<T>* kv_caches = nullptr;
-    std::vector<Layer<T>*> layers;
+    std::vector<LayerType*> layers;
     Linear<T, true, true> *fc1 = nullptr;
     Linear<T> *fc2 = nullptr;
     Linear<T>* lm_head = nullptr;
@@ -49,6 +50,7 @@ struct MiniCPM4EagleImpl : Model {
         int num_iter,
         int topk_per_iter,
         int tree_size,
+        int group_size = 128,
         int eagle_window_size = 0,
         int frspec_vocab_size = 0,
         float residual_scale = 1.0f,
@@ -74,7 +76,11 @@ struct MiniCPM4EagleImpl : Model {
             input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
         }
         for (int i = 0; i < num_layers; i++) {
-            layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, this->residual_scale, eagle_window_size));
+            if constexpr (std::is_same_v<LayerType, W4A16GPTQMarlinLayer<T>>) {
+                layers.push_back(new W4A16GPTQMarlinLayer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, group_size, this->residual_scale, eagle_window_size));
+            } else {
+                layers.push_back(new Layer<T>(this->model->hidden_size, this->model->intermediate_size, this->model->num_attention_heads, this->model->num_key_value_heads, this->model->head_dim, this->model->rms_norm_eps, this->residual_scale, eagle_window_size));
+            }
         }
         if (this->frspec_vocab_size != this->model->vocab_size) {
             lm_head = new Linear<T>(this->model->hidden_size, this->frspec_vocab_size);

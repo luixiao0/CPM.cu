@@ -17,9 +17,9 @@ struct W4A16GPTQMarlinLayer {
     float residual_scale;
     int hidden_size;
 
-    W4A16GPTQMarlinLayer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, float residual_scale = 1.0f) {
+    W4A16GPTQMarlinLayer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, float residual_scale = 1.0f, int window_size = 0) {
         this->intermediate_size = intermediate_size;
-        this->attn = new W4A16GPTQMarlinAttention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size);
+        this->attn = new W4A16GPTQMarlinAttention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, window_size);
         this->ffn = new W4A16GPTQMarlinGatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps, group_size);
         this->residual_scale = residual_scale;
         this->hidden_size = hidden_size;

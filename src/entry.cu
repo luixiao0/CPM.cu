@@ -57,6 +57,17 @@
     } \
   }()
 
+#define EAGLE_QUANT_SWITCH(COND, T, ...)               \
+  [&] {                                      \
+    if (COND == true) {                              \
+      using LayerType = W4A16GPTQMarlinLayer<T>; \
+      return __VA_ARGS__();                  \
+    } else { \
+      using LayerType = Layer<T>; \
+      return __VA_ARGS__();                  \
+    }                                        \
+  }()
+
 Model* model;
 
 void init_base_model(
@@ -264,6 +275,8 @@ void init_minicpm4_eagle_model(
     int topk_per_iter,
     int tree_size,
     int torch_dtype,
+    bool apply_eagle_quant,
+    int group_size,
     int eagle_window_size,
     int frspec_vocab_size,
     float residual_scale,
@@ -274,18 +287,21 @@ void init_minicpm4_eagle_model(
     DTYPE_SWITCH(torch_dtype, [&] {
         MODEL_TYPE_SWITCH(model, elem_type, [&] {
             dispatch_model = true;
-            model = new MiniCPM4EagleImpl<elem_type, ModelType>(
-                typed_model,
-                num_layers,
-                num_iter,
-                topk_per_iter,
-                tree_size,
-                eagle_window_size,
-                frspec_vocab_size,
-                residual_scale,
-                use_input_norm,
-                use_attn_norm
-            );
+            EAGLE_QUANT_SWITCH(apply_eagle_quant, elem_type, [&] {
+                model = new MiniCPM4EagleImpl<elem_type, ModelType, LayerType>(
+                    typed_model,
+                    num_layers,
+                    num_iter,
+                    topk_per_iter,
+                    tree_size,
+                    group_size,
+                    eagle_window_size,
+                    frspec_vocab_size,
+                    residual_scale,
+                    use_input_norm,
+                    use_attn_norm
+                );
+            });
         });
     });
     if (!dispatch_model) {
