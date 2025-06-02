@@ -56,9 +56,10 @@ struct MiniCPM4Attention {
         
         int64_t attn_output_end = memory->allocate((void**)&this->attn_output, offset, num_tokens * this->num_attention_heads * this->head_dim * sizeof(T));
         int64_t softmax_lse_end = memory->allocate((void**)&this->softmax_lse, v_proj_end, num_tokens * this->num_attention_heads * sizeof(float)); // TODO minicpm4 support larger num_splits
-        const int max_num_splits = 128; // This is a magic number, which should be larger than num_splits in flash_attn
-        int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, max_num_splits * num_tokens * this->num_attention_heads * sizeof(float));
-        int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, max_num_splits * num_tokens * this->num_attention_heads * this->head_dim * sizeof(float));
+        const int max_num_splits = 128; // Maximum number of splits for attention computation
+        const int max_spec_tree_size = 64; // Maximum size of speculative decoding tree
+        int64_t softmax_lse_accum_end = memory->allocate((void**)&this->softmax_lse_accum, softmax_lse_end, max(max_num_splits * max_spec_tree_size, num_tokens) * this->num_attention_heads * sizeof(float));
+        int64_t oaccum_end = memory->allocate((void**)&this->oaccum, softmax_lse_accum_end, max(max_num_splits * max_spec_tree_size, num_tokens) * this->num_attention_heads * this->head_dim * sizeof(float));
 
         int64_t o_proj_end = this->o_proj->init_output_ptr(memory, num_tokens, v_proj_end);
         this->output = this->o_proj->output;
