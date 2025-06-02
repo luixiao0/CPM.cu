@@ -218,6 +218,16 @@ __global__ void build_dynamic_tree_kernel(int32_t tree_size, int32_t pos_offset,
 }
 
 void build_dynamic_tree(const Stream& stream, int32_t tree_size, int32_t pos_offset, int32_t topk_per_iter, const int32_t* tried_history_parent, const int32_t* topk_pos, int32_t* tree_pos, uint64_t* tree_mask, int32_t* tree_parent) {
+
+#ifdef DEBUG
+    // Check if all elements in topk_pos are the same
+    int32_t h_topk_pos[tree_size];
+    cudaMemcpy(h_topk_pos, topk_pos, tree_size * sizeof(int32_t), cudaMemcpyDeviceToHost);
+    for (int i = 1; i < tree_size; i++) {
+        if (h_topk_pos[i] != h_topk_pos[0]) break;
+        if (i == tree_size - 1) throw std::runtime_error("All topk_pos elements are identical");
+    }
+#endif
     build_dynamic_tree_kernel<<<1, tree_size, 0, stream.stream>>>(tree_size, pos_offset, topk_per_iter, tried_history_parent, topk_pos, tree_pos, tree_mask, tree_parent);
 }
 
