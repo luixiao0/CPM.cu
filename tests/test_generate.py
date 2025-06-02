@@ -293,8 +293,7 @@ def print_generation_summary(mode, prefill_stats, decode_stats, config):
 
 def run_stream_generation(llm, input_ids, config, teminators, tokenizer):
     """Run streaming generation and display results"""
-    print("Using stream generation...")
-    print("Generated text (streaming output):")
+    print("\nGenerated text (streaming output):")
     print("-" * 50)
     
     # Statistics tracking

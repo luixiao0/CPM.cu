@@ -77,6 +77,12 @@ class LLM_with_tree_drafter(LLM):
         
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
         
+        # Set progress flag before prefill for stream mode
+        if use_stream:
+            self._show_prefill_progress = True
+        else:
+            self._show_prefill_progress = False
+
         # Measure prefill time
         torch.cuda.synchronize()
         prefill_start = time.time()

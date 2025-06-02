@@ -41,6 +41,9 @@ class LLM(torch.nn.Module):
         self.cuda_graph = cuda_graph
 
         self.chunk_length = chunk_length
+        # Flag for showing prefill progress (used in stream mode)
+        self._show_prefill_progress = False
+        
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
         scale_embed = self.config.scale_emb if hasattr(self.config, "scale_emb") else 1.0
@@ -173,7 +176,13 @@ class LLM(torch.nn.Module):
         if input_ids.numel() > self.max_total_length:
             raise ValueError(f"Input token count ({input_ids.numel()}) exceeds maximum supported length ({self.max_total_length}) under current memory limit")
         
-        for i in range(0, input_ids.numel(), self.chunk_length):
+        total_length = input_ids.numel()
+        num_chunks = (total_length + self.chunk_length - 1) // self.chunk_length
+        
+        if self._show_prefill_progress:
+            print("Prefill progress: 0%", end="", flush=True)
+        
+        for chunk_idx, i in enumerate(range(0, input_ids.numel(), self.chunk_length)):
             # torch.cuda.nvtx.range_push(f"chunk from {i}")
             C.prefill(
                 min(input_ids.numel() - i, self.chunk_length), i,
@@ -181,6 +190,15 @@ class LLM(torch.nn.Module):
                 self.logits.data_ptr()
             )
             # torch.cuda.nvtx.range_pop()
+            
+            # Show progress for stream mode - update in place
+            if self._show_prefill_progress:
+                progress = int((chunk_idx + 1) * 100 / num_chunks)
+                print(f"\rPrefill progress: {progress}%", end="", flush=True)
+        
+        if self._show_prefill_progress:
+            print()  # Move to new line after completion
+        
         return self.logits[:1].clone()
 
     def decode(self, input_ids, position_ids, cache_length, mask_2d = None):
@@ -214,6 +232,10 @@ class LLM(torch.nn.Module):
 
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
+        
+        # Set progress flag before prefill for stream mode
+        if use_stream:
+            self._show_prefill_progress = True
         
         # Measure prefill time
         torch.cuda.synchronize()
