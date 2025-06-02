@@ -63,51 +63,159 @@ class LLM_with_tree_drafter(LLM):
 
             super().load_from_hf()
 
-    def generate(self, input_ids, generation_length=100, teminators=[]):
+    def generate(self, input_ids, generation_length=100, teminators=[], use_stream=False):
+        """
+        Generate text with optional streaming output for tree drafter.
+        Returns (tokens, accept_lengths, decode_time, prefill_time) if use_stream=False, or generator yielding {'token', 'text', 'is_finished', 'accept_length', 'prefill_time', 'decode_time'} if use_stream=True.
+        """
         assert input_ids.dtype == torch.int32
 
         prefix_length = input_ids.numel()
+        # Check if input length exceeds maximum supported length
+        if prefix_length > self.max_total_length:
+            raise ValueError(f"Input token count ({prefix_length}) exceeds maximum supported length ({self.max_total_length}) under current memory limit")
+        
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
+        
+        # Measure prefill time
+        torch.cuda.synchronize()
+        prefill_start = time.time()
         logits = self.prefill(input_ids, position_ids)
+        torch.cuda.synchronize()
+        prefill_time = time.time() - prefill_start
+        
         self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
 
-        tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
-        tokens[0].copy_(self.tree_draft_ids[0])
-        accept_lengths = []
-        i = 0
-        model_step = 0
-        terminal = False
-        torch.cuda.synchronize()
-        start_time = time.time()
-        while i < generation_length-1 and not terminal:
-            self.cache_length[0] = prefix_length + i
+        if use_stream:
+            # Stream generation for tree drafter (optimized)
+            def _stream_generator():
+                # Keep minimal context for correct spacing
+                prev_token = None
+                
+                # yield first token
+                token = self.tree_draft_ids[0].item()
+                text = self.tokenizer.decode([token], skip_special_tokens=False)
+                prev_token = token
+                
+                yield {
+                    'token': token,
+                    'text': text,
+                    'is_finished': token in teminators,
+                    'accept_length': 1,
+                    'prefill_time': prefill_time,
+                    'decode_time': 0.0  # First token comes from prefill
+                }
+                
+                if token in teminators:
+                    return
 
-            # torch.cuda.nvtx.range_push(f"draft")
-            C.draft(self.tree_draft_ids.data_ptr(), self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(), self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr())
-            # torch.cuda.nvtx.range_pop()
+                decode_start_time = time.time()
 
-            logits = self.decode(self.tree_draft_ids, self.tree_position_ids, self.cache_length, mask_2d=self.tree_attn_mask)
-            self.tree_gt_ids.copy_(logits.argmax(dim=-1))
+                i = 0
+                while i < generation_length-1:
+                    self.cache_length[0] = prefix_length + i
 
-            # torch.cuda.nvtx.range_push(f"verify")
-            accept_length = C.verify_and_fix(
-                self.tree_draft_ids.numel(), self.tree_draft_ids.data_ptr(), self.tree_gt_ids.data_ptr(),
-                self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(),
-                self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr()
-            )
-            # torch.cuda.nvtx.range_pop()
+                    # draft step
+                    C.draft(self.tree_draft_ids.data_ptr(), self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(), self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr())
 
-            model_step += 1
-            accept_lengths.append(accept_length)
-            for temin in teminators:
-                if temin in self.tree_draft_ids[:accept_length]:
-                    terminal = True
-            append_length = min(accept_length, generation_length - 1 - i)
-            tokens[1+i:1+i+append_length].copy_(self.tree_draft_ids[:append_length])
-            self.tree_draft_ids[0] = self.tree_draft_ids[accept_length - 1]
-            i += accept_length
-        torch.cuda.synchronize()
-        decode_time = time.time() - start_time
-        tokens = tokens[:1+i].tolist()
+                    logits = self.decode(self.tree_draft_ids, self.tree_position_ids, self.cache_length, mask_2d=self.tree_attn_mask)
+                    self.tree_gt_ids.copy_(logits.argmax(dim=-1))
 
-        return tokens, accept_lengths, model_step, decode_time
+                    # verify step
+                    accept_length = C.verify_and_fix(
+                        self.tree_draft_ids.numel(), self.tree_draft_ids.data_ptr(), self.tree_gt_ids.data_ptr(),
+                        self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(),
+                        self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr()
+                    )
+
+                    # yield accepted tokens (optimized with minimal context)
+                    if accept_length > 0:
+                        accepted_tokens = self.tree_draft_ids[:accept_length].tolist()
+                        
+                        # For correct spacing, decode with previous token context
+                        if prev_token is not None:
+                            context_tokens = [prev_token] + accepted_tokens
+                            context_text = self.tokenizer.decode(context_tokens, skip_special_tokens=False)
+                            prev_text = self.tokenizer.decode([prev_token], skip_special_tokens=False)
+                            new_text = context_text[len(prev_text):]
+                        else:
+                            new_text = self.tokenizer.decode(accepted_tokens, skip_special_tokens=False)
+                        
+                        # Yield tokens with batch text for first token, empty for others
+                        for j in range(accept_length):
+                            if i + j >= generation_length - 1:
+                                break
+                                
+                            token = accepted_tokens[j]
+                            
+                            # Give all new text to first token, empty to others
+                            if j == 0:
+                                text = new_text
+                            else:
+                                text = ""
+                            
+                            terminal = token in teminators
+                            is_finished = terminal or (i + j == generation_length - 2)
+                            
+                            # Only calculate time for the last token in the batch to reduce overhead
+                            decode_time = time.time() - decode_start_time if j == accept_length - 1 else 0.0
+                            
+                            yield {
+                                'token': token,
+                                'text': text,
+                                'is_finished': is_finished,
+                                'accept_length': accept_length if j == 0 else 0,  # only report accept_length for first token in batch
+                                'prefill_time': 0.0,  # Only report prefill_time for first token
+                                'decode_time': decode_time
+                            }
+                            
+                            if terminal:
+                                return
+                        
+                        # Update prev_token to the last accepted token
+                        prev_token = accepted_tokens[-1]
+
+                    self.tree_draft_ids[0] = self.tree_draft_ids[accept_length - 1]
+                    i += accept_length
+                    
+            return _stream_generator()
+        else:
+            # Original batch generation
+            tokens = torch.empty((generation_length), dtype=torch.int32, device="cuda")
+            tokens[0].copy_(self.tree_draft_ids[0])
+            accept_lengths = []
+            i = 0
+            terminal = False
+            torch.cuda.synchronize()
+            decode_start = time.time()
+            while i < generation_length-1 and not terminal:
+                self.cache_length[0] = prefix_length + i
+
+                # torch.cuda.nvtx.range_push(f"draft")
+                C.draft(self.tree_draft_ids.data_ptr(), self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(), self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr())
+                # torch.cuda.nvtx.range_pop()
+
+                logits = self.decode(self.tree_draft_ids, self.tree_position_ids, self.cache_length, mask_2d=self.tree_attn_mask)
+                self.tree_gt_ids.copy_(logits.argmax(dim=-1))
+
+                # torch.cuda.nvtx.range_push(f"verify")
+                accept_length = C.verify_and_fix(
+                    self.tree_draft_ids.numel(), self.tree_draft_ids.data_ptr(), self.tree_gt_ids.data_ptr(),
+                    self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(),
+                    self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr()
+                )
+                # torch.cuda.nvtx.range_pop()
+
+                accept_lengths.append(accept_length)
+                for temin in teminators:
+                    if temin in self.tree_draft_ids[:accept_length]:
+                        terminal = True
+                append_length = min(accept_length, generation_length - 1 - i)
+                tokens[1+i:1+i+append_length].copy_(self.tree_draft_ids[:append_length])
+                self.tree_draft_ids[0] = self.tree_draft_ids[accept_length - 1]
+                i += accept_length
+            torch.cuda.synchronize()
+            decode_time = time.time() - decode_start
+            tokens = tokens[:1+i].tolist()
+
+            return tokens, accept_lengths, decode_time, prefill_time

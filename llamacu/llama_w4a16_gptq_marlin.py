@@ -182,6 +182,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
 
     def prefill(self, input_ids, position_ids):
         assert input_ids.dtype == torch.int32
+        # Check if input length exceeds maximum supported length
+        if input_ids.numel() > self.max_total_length:
+            raise ValueError(f"Input token count ({input_ids.numel()}) exceeds maximum supported length ({self.max_total_length}) under current memory limit")
+        
         for i in range(0, input_ids.numel(), self.chunk_length):
             # torch.cuda.nvtx.range_push(f"chunk from {i}")
             C.prefill(
@@ -214,34 +218,108 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         # torch.cuda.nvtx.range_pop()
         return self.logits[:input_ids.numel()].clone()
 
-    def generate(self, input_ids, generation_length=100, teminators=[]):
+    def generate(self, input_ids, generation_length=100, teminators=[], use_stream=False):
+        """
+        Generate text with optional streaming output.
+        Returns (tokens, decode_time, prefill_time) if use_stream=False, or generator yielding {'token', 'text', 'is_finished', 'prefill_time', 'decode_time'} if use_stream=True.
+        """
         assert input_ids.dtype == torch.int32
 
         prefix_length = input_ids.numel()
         position_ids = torch.arange(prefix_length, dtype=torch.int32, device="cuda")
+        
+        # Measure prefill time
+        torch.cuda.synchronize()
+        prefill_start = time.time()
         logits = self.prefill(input_ids, position_ids)
+        torch.cuda.synchronize()
+        prefill_time = time.time() - prefill_start
+        
         token = logits[0].argmax(dim=-1).item()
 
-        tokens = [token]
         if not hasattr(self, "input_ids"):
             self.input_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.position_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
             self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
-        torch.cuda.synchronize()
-        start_time = time.time()
-        for i in range(generation_length-1):
-            self.input_ids[0] = token
-            self.position_ids[0] = prefix_length + i
-            self.cache_length[0] = prefix_length + i
 
-            logits = self.decode(self.input_ids, self.position_ids, self.cache_length)
-            token = logits[0].argmax(dim=-1).item()
-            tokens.append(token)
-            if token in teminators:
-                break
-        torch.cuda.synchronize()
-        decode_time = time.time() - start_time
-        return tokens, decode_time
+        if use_stream:
+            # Stream generation (optimized)
+            def _stream_generator():
+                nonlocal token
+                # Keep minimal context for correct spacing
+                prev_token = token
+                
+                # yield first token
+                text = self.tokenizer.decode([token], skip_special_tokens=False)
+                
+                yield {
+                    'token': token,
+                    'text': text,
+                    'is_finished': token in teminators,
+                    'prefill_time': prefill_time,
+                    'decode_time': 0.0  # First token comes from prefill
+                }
+                
+                if token in teminators:
+                    return
+
+                decode_start_time = time.time()
+                
+                for i in range(generation_length-1):
+                    self.input_ids[0] = token
+                    self.position_ids[0] = prefix_length + i
+                    self.cache_length[0] = prefix_length + i
+
+                    logits = self.decode(self.input_ids, self.position_ids, self.cache_length)
+                    token = logits[0].argmax(dim=-1).item()
+                    
+                    # For correct spacing, decode with previous token context
+                    if prev_token is not None:
+                        context_tokens = [prev_token, token]
+                        context_text = self.tokenizer.decode(context_tokens, skip_special_tokens=False)
+                        prev_text = self.tokenizer.decode([prev_token], skip_special_tokens=False)
+                        text = context_text[len(prev_text):]
+                    else:
+                        text = self.tokenizer.decode([token], skip_special_tokens=False)
+                    
+                    is_finished = token in teminators or i == generation_length - 2
+                    
+                    # Calculate time only when needed to reduce overhead
+                    decode_time = time.time() - decode_start_time
+                        
+                    yield {
+                        'token': token,
+                        'text': text,
+                        'is_finished': is_finished,
+                        'prefill_time': 0.0,  # Only report prefill_time for first token
+                        'decode_time': decode_time
+                    }
+                    
+                    if token in teminators:
+                        break
+                    
+                    # Update prev_token
+                    prev_token = token
+            
+            return _stream_generator()
+        else:
+            # Original batch generation
+            tokens = [token]
+            torch.cuda.synchronize()
+            decode_start = time.time()
+            for i in range(generation_length-1):
+                self.input_ids[0] = token
+                self.position_ids[0] = prefix_length + i
+                self.cache_length[0] = prefix_length + i
+
+                logits = self.decode(self.input_ids, self.position_ids, self.cache_length)
+                token = logits[0].argmax(dim=-1).item()
+                tokens.append(token)
+                if token in teminators:
+                    break
+            torch.cuda.synchronize()
+            decode_time = time.time() - decode_start
+            return tokens, decode_time, prefill_time
 
     def print_perf_summary(self):
         C.print_perf_summary()

@@ -357,8 +357,7 @@ def run_batch_generation(llm, input_ids, config, teminators, tokenizer):
     
     torch.cuda.synchronize()
     start_time = time.time()
-    # gen_result = llm.generate(input_ids, config['num_generate'], teminators=teminators, use_stream=False)
-    gen_result = llm.generate(input_ids, config['num_generate'], teminators=teminators)
+    gen_result = llm.generate(input_ids, config['num_generate'], teminators=teminators, use_stream=False)
     torch.cuda.synchronize()
     end_time = time.time()
     
@@ -370,9 +369,7 @@ def run_batch_generation(llm, input_ids, config, teminators, tokenizer):
         mean_accept_length = np.mean(accept_lengths)
     else:
         # Base models return: (tokens, decode_time, prefill_time)
-        # tokens, decode_time, prefill_time = gen_result
-        tokens, decode_time = gen_result
-        prefill_time = 0.0
+        tokens, decode_time, prefill_time = gen_result
         decode_length = len(tokens)
         mean_accept_length = None
 
