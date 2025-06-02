@@ -216,3 +216,6 @@ checkpoints/*
 
 # FR-Spec Index
 fr_index
+
+# Prompt Files
+tests/*.txt
