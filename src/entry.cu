@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <cuda_runtime.h>
 #include <type_traits>
+#include <stdexcept>
 
 #include "utils.cuh"
 #include "trait.cuh"
@@ -24,16 +25,38 @@
 #include "model/hier_spec_quant/hier_ea_w4a16_gm_rot_spec_w4a16_gm.cuh"
 
 
-#define DTYPE_SWITCH(COND, ...)               \
-  [&] {                                      \
-    if (COND == 0) {                              \
-      using elem_type = __half;     \
-      return __VA_ARGS__();                  \
-    } else {                                 \
+#if defined(ENABLE_DTYPE_FP16) && defined(ENABLE_DTYPE_BF16)
+#define DTYPE_SWITCH(COND, ...) \
+  [&] { \
+    if (COND == 0) { \
+      using elem_type = __half; \
+      return __VA_ARGS__(); \
+    } else { \
       using elem_type = __nv_bfloat16; \
-      return __VA_ARGS__();                  \
-    }                                        \
+      return __VA_ARGS__(); \
+    } \
   }()
+#elif defined(ENABLE_DTYPE_FP16)
+#define DTYPE_SWITCH(COND, ...) \
+  [&] { \
+    if (COND != 0) { \
+      throw std::runtime_error("BF16 support not compiled. Please recompile with LLAMACU_DTYPE=bf16 or LLAMACU_DTYPE=fp16,bf16"); \
+    } \
+    using elem_type = __half; \
+    return __VA_ARGS__(); \
+  }()
+#elif defined(ENABLE_DTYPE_BF16)
+#define DTYPE_SWITCH(COND, ...) \
+  [&] { \
+    if (COND == 0) { \
+      throw std::runtime_error("FP16 support not compiled. Please recompile with LLAMACU_DTYPE=fp16 or LLAMACU_DTYPE=fp16,bf16"); \
+    } \
+    using elem_type = __nv_bfloat16; \
+    return __VA_ARGS__(); \
+  }()
+#else
+#error "At least one of ENABLE_DTYPE_FP16 or ENABLE_DTYPE_BF16 must be defined"
+#endif
 
 #define MODEL_TYPE_SWITCH(MODEL_PTR, T, ...)  \
   [&] {                                       \

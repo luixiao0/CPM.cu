@@ -2134,18 +2134,3 @@ void gptq_marlin_gemm(T* a, int32_t* b_q_weight,
 
   return;
 }
-
-
-template void gptq_marlin_gemm<half>(
-    half*, int32_t*, half*, int32_t*, int32_t*, int32_t*, int32_t*,
-    vllm::ScalarType const&, int64_t, int64_t, int64_t,
-    bool, bool, bool, half*, int, int, int, bool,
-    cudaStream_t, half*, float*
-);
-
-template void gptq_marlin_gemm<__nv_bfloat16>(
-    __nv_bfloat16*, int32_t*, __nv_bfloat16*, int32_t*, int32_t*, int32_t*, int32_t*,
-    vllm::ScalarType const&, int64_t, int64_t, int64_t,
-    bool, bool, bool, __nv_bfloat16*, int, int, int, bool,
-    cudaStream_t, __nv_bfloat16*, float*
-);

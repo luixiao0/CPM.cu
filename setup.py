@@ -4,11 +4,11 @@ from setuptools import setup, find_packages
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
 def detect_cuda_arch():
-    """自动检测当前CUDA架构"""
-    # 1. 首先检查环境变量是否指定了架构
+    """Automatically detect current CUDA architecture"""
+    # 1. First check if environment variable specifies architecture
     env_arch = os.getenv("LLAMACU_CUDA_ARCH")
     if env_arch:
-        # 仅支持逗号分隔的简单格式，如 "80,86"
+        # Only support simple comma-separated format, e.g., "80,86"
         arch_list = []
         tokens = env_arch.split(',')
         
@@ -17,7 +17,7 @@ def detect_cuda_arch():
             if not token:
                 continue
                 
-            # 检查格式：必须是纯数字
+            # Check format: must be pure digits
             if not token.isdigit():
                 raise ValueError(
                     f"Invalid CUDA architecture format: '{token}'. "
@@ -30,11 +30,11 @@ def detect_cuda_arch():
             print(f"Using CUDA architectures from environment variable: {arch_list}")
             return arch_list
     
-    # 2. 检查是否有torch库，如果有则自动检测
+    # 2. Check if torch library is available, if so, auto-detect
     try:
         import torch
     except ImportError:
-        # 3. 如果没有环境变量也没有torch，报错
+        # 3. If no environment variable and no torch, throw error
         raise RuntimeError(
             "CUDA architecture detection failed. Please either:\n"
             "1. Set environment variable LLAMACU_CUDA_ARCH (e.g., export LLAMACU_CUDA_ARCH=90), or\n"
@@ -42,7 +42,7 @@ def detect_cuda_arch():
             "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
         )
     
-    # 使用torch自动检测所有GPU架构
+    # Use torch to auto-detect all GPU architectures
     try:
         if torch.cuda.is_available():
             arch_set = set()
@@ -52,7 +52,7 @@ def detect_cuda_arch():
                 arch = f"{major}{minor}"
                 arch_set.add(arch)
             
-            arch_list = sorted(list(arch_set))  # 排序保证一致性
+            arch_list = sorted(list(arch_set))  # Sort for consistency
             print(f"Detected CUDA architectures: {arch_list} (from {device_count} GPU devices)")
             return arch_list
         else:
@@ -74,12 +74,43 @@ def append_nvcc_threads(nvcc_extra_args):
     return nvcc_extra_args + ["--threads", nvcc_threads]
 
 def get_compile_args():
-    """根据是否为debug模式返回不同的编译参数"""
+    """Return different compilation arguments based on debug mode"""
     debug_mode = os.getenv("LLAMACU_DEBUG", "0").lower() in ("1", "true", "yes")
     perf_mode = os.getenv("LLAMACU_PERF", "0").lower() in ("1", "true", "yes")
     
-    # 公共编译参数
-    common_cxx_args = ["-std=c++17"]
+    # Check precision type environment variable
+    dtype_env = os.getenv("LLAMACU_DTYPE", "fp16").lower()
+    
+    # Parse precision type list
+    dtype_list = [dtype.strip() for dtype in dtype_env.split(',')]
+    
+    # Validate precision types
+    valid_dtypes = {"fp16", "bf16"}
+    invalid_dtypes = [dtype for dtype in dtype_list if dtype not in valid_dtypes]
+    if invalid_dtypes:
+        raise ValueError(
+            f"Invalid LLAMACU_DTYPE values: {invalid_dtypes}. "
+            f"Supported values: 'fp16', 'bf16', 'fp16,bf16'"
+        )
+    
+    # Deduplicate and generate compilation definitions
+    dtype_set = set(dtype_list)
+    dtype_defines = []
+    if "fp16" in dtype_set:
+        dtype_defines.append("-DENABLE_DTYPE_FP16")
+    if "bf16" in dtype_set:
+        dtype_defines.append("-DENABLE_DTYPE_BF16")
+    
+    # Print compilation information
+    if len(dtype_set) == 1:
+        dtype_name = list(dtype_set)[0].upper()
+        print(f"Compiling with {dtype_name} support only")
+    else:
+        dtype_names = [dtype.upper() for dtype in sorted(dtype_set)]
+        print(f"Compiling with {' and '.join(dtype_names)} support")
+    
+    # Common compilation arguments
+    common_cxx_args = ["-std=c++17"] + dtype_defines
     common_nvcc_args = [
         "-std=c++17",
         "-U__CUDA_NO_HALF_OPERATORS__",
@@ -88,30 +119,30 @@ def get_compile_args():
         "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
         "--expt-relaxed-constexpr",
         "--expt-extended-lambda",
-    ]
+    ] + dtype_defines
     
     if debug_mode:
         print("Debug mode enabled (LLAMACU_DEBUG=1)")
         cxx_args = common_cxx_args + [
-            "-g3",           # 最详细的调试信息
-            "-O0",           # 禁用优化
+            "-g3",           # Most detailed debug information
+            "-O0",           # Disable optimization
             "-DDISABLE_MEMPOOL",
             "-DDEBUG", 
-            "-fno-inline",   # 禁用内联
-            "-fno-omit-frame-pointer",  # 保留栈帧指针
+            "-fno-inline",   # Disable inlining
+            "-fno-omit-frame-pointer",  # Keep frame pointer
         ]
         nvcc_base_args = common_nvcc_args + [
             "-O0", 
-            "-g",            # 主机端调试信息
-            "-lineinfo",     # 生成行号信息
+            "-g",            # Host-side debug information
+            "-lineinfo",     # Generate line number information
             "-DDISABLE_MEMPOOL",
             "-DDEBUG", 
             "-DCUDA_DEBUG",
-            "-Xcompiler", "-g3",              # 传递给主机编译器
-            "-Xcompiler", "-fno-inline",      # 禁用内联
-            "-Xcompiler", "-fno-omit-frame-pointer",  # 保留栈帧指针
+            "-Xcompiler", "-g3",              # Pass to host compiler
+            "-Xcompiler", "-fno-inline",      # Disable inlining
+            "-Xcompiler", "-fno-omit-frame-pointer",  # Keep frame pointer
         ]
-        # Debug模式下的链接参数
+        # Debug mode linking arguments
         link_args = ["-g", "-rdynamic"]
     else:
         print("Release mode enabled")
@@ -120,10 +151,10 @@ def get_compile_args():
             "-O3",
             "--use_fast_math",
         ]
-        # Release模式下的链接参数
+        # Release mode linking arguments
         link_args = []
     
-    # 添加性能测试控制
+    # Add performance testing control
     if perf_mode:
         print("Performance monitoring enabled (LLAMACU_PERF=1)")
         cxx_args.append("-DENABLE_PERF")
@@ -131,10 +162,10 @@ def get_compile_args():
     else:
         print("Performance monitoring disabled (LLAMACU_PERF=0)")
     
-    return cxx_args, nvcc_base_args, link_args
+    return cxx_args, nvcc_base_args, link_args, dtype_set
 
 def get_all_headers():
-    """获取所有头文件，用于依赖跟踪"""
+    """Get all header files for dependency tracking"""
     header_patterns = [
         "src/**/*.h",
         "src/**/*.hpp", 
@@ -149,33 +180,47 @@ def get_all_headers():
     headers = []
     for pattern in header_patterns:
         abs_headers = glob.glob(os.path.join(this_dir, pattern), recursive=True)
-        # 转换为相对路径
+        # Convert to relative paths
         rel_headers = [os.path.relpath(h, this_dir) for h in abs_headers]
         headers.extend(rel_headers)
     
-    # 过滤掉不存在的文件（检查绝对路径但返回相对路径）
+    # Filter out non-existent files (check absolute path but return relative path)
     headers = [h for h in headers if os.path.exists(os.path.join(this_dir, h))]
     
     return headers
 
-# 尝试构建扩展模块
+def get_flash_attn_sources(enabled_dtypes):
+    """Get flash attention source files based on enabled data types"""
+    sources = []
+    
+    for dtype in enabled_dtypes:
+        if dtype == "fp16":
+            # sources.extend(glob.glob("src/flash_attn/src/*hdim64_fp16*.cu"))
+            sources.extend(glob.glob("src/flash_attn/src/*hdim128_fp16*.cu"))
+        elif dtype == "bf16":
+            # sources.extend(glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"))
+            sources.extend(glob.glob("src/flash_attn/src/*hdim128_bf16*.cu"))
+    
+    return sources
+
+# Try to build extension modules
 ext_modules = []
 cmdclass = {}
 
 try:
-    # 尝试导入torch相关模块
+    # Try to import torch-related modules
     from torch.utils.cpp_extension import BuildExtension, CUDAExtension
     
-    # 获取CUDA架构
+    # Get CUDA architecture
     arch_list = detect_cuda_arch()
     
-    # 获取编译参数
-    cxx_args, nvcc_base_args, link_args = get_compile_args()
+    # Get compilation arguments
+    cxx_args, nvcc_base_args, link_args, dtype_set = get_compile_args()
     
-    # 获取头文件
+    # Get header files
     all_headers = get_all_headers()
     
-    # 为每个架构生成gencode参数
+    # Generate gencode arguments for each architecture
     gencode_args = []
     arch_defines = []
     for arch in arch_list:
@@ -184,7 +229,9 @@ try:
     
     print(f"Using CUDA architecture compile flags: {arch_list}")
     
-    # 创建Ninja构建扩展类
+    flash_attn_sources = get_flash_attn_sources(dtype_set)
+    
+    # Create Ninja build extension class
     class NinjaBuildExtension(BuildExtension):
         def __init__(self, *args, **kwargs) -> None:
             # do not override env MAX_JOBS if already exists
@@ -200,7 +247,7 @@ try:
                 os.environ["MAX_JOBS"] = str(max_jobs)
             super().__init__(*args, **kwargs)
     
-    # 配置扩展模块
+    # Configure extension module
     ext_modules = [
         CUDAExtension(
             name='llamacu.C',
@@ -210,11 +257,7 @@ try:
                 "src/signal_handler.cu",
                 "src/perf.cu",
                 *glob.glob("src/qgemm/gptq_marlin/*cu"),
-                # *glob.glob("src/flash_attn/src/*.cu"),
-                # *glob.glob("src/flash_attn/src/*hdim64_fp16*.cu"),
-                *glob.glob("src/flash_attn/src/*hdim128_fp16*.cu"),
-                # *glob.glob("src/flash_attn/src/*hdim64_bf16*.cu"),
-                *glob.glob("src/flash_attn/src/*hdim128_bf16*.cu"),
+                *flash_attn_sources,
             ],
             libraries=["cublas", "dl"],
             depends=all_headers,
@@ -224,7 +267,7 @@ try:
                     nvcc_base_args + 
                     gencode_args +
                     arch_defines + [
-                        # 添加依赖文件生成选项
+                        # Add dependency file generation options
                         "-MMD", "-MP",
                     ]
                 ),
@@ -242,8 +285,8 @@ try:
     cmdclass = {'build_ext': NinjaBuildExtension}
     
 except Exception as e:
-    print(f"警告: 无法配置CUDA扩展模块: {e}")
-    print("跳过扩展模块构建，仅安装Python包...")
+    print(f"Warning: Unable to configure CUDA extension module: {e}")
+    print("Skipping extension module build, installing Python package only...")
 
 setup(
     name='llamacu',
