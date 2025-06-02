@@ -46,11 +46,11 @@ __global__ void log_softmax_kernel(int32_t dim, T* input) {
     __syncthreads();
     if (threadIdx.x < 32) {
         mx = s_val[threadIdx.x];
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 16), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 8), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 4), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 2), mx);
-        mx = fmaxf(__shfl_down_sync(0x0000ffff, mx, 1), mx);
+        mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 16), mx);
+        mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 8), mx);
+        mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 4), mx);
+        mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 2), mx);
+        mx = fmaxf(__shfl_down_sync(0xffffffff, mx, 1), mx);
     }
     if (threadIdx.x == 0) {
         s_val[0] = mx;
@@ -71,11 +71,11 @@ __global__ void log_softmax_kernel(int32_t dim, T* input) {
     __syncthreads();
     if (threadIdx.x < 32) {
         sum = s_val[threadIdx.x];
-        sum += __shfl_down_sync(0x0000ffff, sum, 16);
-        sum += __shfl_down_sync(0x0000ffff, sum, 8);
-        sum += __shfl_down_sync(0x0000ffff, sum, 4);
-        sum += __shfl_down_sync(0x0000ffff, sum, 2);
-        sum += __shfl_down_sync(0x0000ffff, sum, 1);
+        sum += __shfl_down_sync(0xffffffff, sum, 16);
+        sum += __shfl_down_sync(0xffffffff, sum, 8);
+        sum += __shfl_down_sync(0xffffffff, sum, 4);
+        sum += __shfl_down_sync(0xffffffff, sum, 2);
+        sum += __shfl_down_sync(0xffffffff, sum, 1);
     }
     if (threadIdx.x == 0) {
         s_val[0] = sum;
