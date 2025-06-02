@@ -12,34 +12,22 @@ import argparse
 parser = argparse.ArgumentParser(description='Generate text using LLM models')
 parser.add_argument('--path_prefix', '-pp', type=str, default='/cache/copys/217/data1/liyx/Models', 
                     help='Path prefix for model directories (default: /cache/copys/217/data1/liyx/Models)')
-parser.add_argument('--eagle', '-e', action='store_true', default=True,
-                    help='Apply EAGLE speculative decoding (default: True)')
-parser.add_argument('--no-eagle', '-ne', dest='eagle', action='store_false',
-                    help='Disable EAGLE speculative decoding')
-parser.add_argument('--quant', '-q', action='store_true', default=True,
-                    help='Apply quantization (default: True)')
-parser.add_argument('--no-quant', '-nq', dest='quant', action='store_false',
-                    help='Disable quantization')
-parser.add_argument('--sparse', '-s', action='store_true', default=True,
-                    help='Apply sparse attention (default: True)')
-parser.add_argument('--no-sparse', '-ns', dest='sparse', action='store_false',
-                    help='Disable sparse attention')
 args = parser.parse_args()
 
 test_minicpm4 = True
-apply_eagle = args.eagle
-apply_quant = args.quant # TODO: eagle+quant+sparse memcheck failed at build_dynamic_tree, only quant memcheck get incorrect result
-apply_sparse = args.sparse # TODO: Maybe lead to illegal memory access
+apply_eagle = True
+apply_quant = True # TODO: eagle+quant+sparse memcheck failed at build_dynamic_tree, only quant memcheck get incorrect result
+apply_sparse = True # TODO: Maybe lead to illegal memory access
 
 apply_compress_lse = True
-num_generate = 64
+num_generate = 256
 sink_window_size = 1
 # block_window_size = 2048
 # sparse_topk_k = 0
 block_window_size = 32
 sparse_topk_k = 64
 eagle_window_size = 64 * 128
-frspec_vocab_size = 0
+frspec_vocab_size = 8192
 chunk_length = 384 # TODO minicpm4 change this to 1024 and test correctness
 cuda_graph = False
 
@@ -80,11 +68,12 @@ prompt_content = "北京有哪些好玩的地方"
 # with open("prompt.txt", "r") as f:
 #     prompt_content = f.read()
 
-# prompt = make_input(681725493, 2000, 4000) # 120k
-prompt = make_input(681725493, 1500, 3000) # 90k
+prompt = make_input(681725493, 2000, 4000) # 120k
+# prompt = make_input(681725493, 1500, 3000) # 90k
 # prompt = make_input(681725493, 1000, 2000) # 60k
 # prompt = make_input(681725493, 500, 1000) # 30k
 # prompt = make_input(681725493, 250, 500) # 15k
+# prompt = make_input(681725493, 150, 250) # 8k
 # prompt = make_input(681725493, 10, 50)
 # prompt = "Beijing is the"
 
