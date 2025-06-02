@@ -37,7 +37,12 @@ struct Memory {
         
         // Calculate actual memory size
         this->memory_limit = (int64_t)(total_memory * memory_limit);
-        
+
+#ifndef DISABLE_MEMPOOL
+        printf("Use Pre-allocated Memory Pool\n");
+#else
+        printf("Use Dynamic Memory Allocation, this is for debug\n");
+#endif
         printf("GPU Total Memory: %ld bytes (%.2f GB), ", total_memory, (double)total_memory / (1024*1024*1024));
         printf("Set Allocatable Memory Limit: %ld bytes (%.2f GB), ratio: %.1f%%\n",
                this->memory_limit, (double)this->memory_limit / (1024*1024*1024), memory_limit * 100);
