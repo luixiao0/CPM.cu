@@ -33,7 +33,7 @@ class fwdIterator{
         }
     }
 
-    __device__ int max_no_larger(int target) const {
+    __device__ int _max_no_larger(int target) const {
         if(max_block_idx == 0){
             return -1;
         };
@@ -88,6 +88,11 @@ class fwdIterator{
         
         // 没有找到设置位
         return -1;
+    }
+
+    __device__ int max_no_larger(int target) const {
+        int res = _max_no_larger(target);
+        return res < this->n_block_min ? -1 : res;
     }
 
     uint64_t *blockmask_ptr;
