@@ -194,6 +194,14 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         
         prefill_start_time = None
         if self._show_prefill_progress:
+            # Clear screen and move cursor to top, then show prompt and wait for user input
+            print("\033[2J\033[H", end="", flush=True)  # Clear screen and move to top
+            print("Please Press Enter to Start Prefilling...", end="", flush=True)
+            input()  # Wait for Enter key
+            
+            # Replace the prompt with [Prefilling] - clear entire line first
+            print("\r" + " " * 50 + "\r[Prefilling]", flush=True)
+            
             prefill_start_time = time.time()
             print("Prefilling: 0.0% (0/{} tokens) @ 0.0 tokens/s".format(total_length), end="", flush=True)
         
@@ -220,7 +228,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 final_elapsed_time = time.time() - prefill_start_time
                 final_tokens_per_sec = total_length / final_elapsed_time if final_elapsed_time > 0 else 0.0
                 print(f"\rPrefilling: 100.0% ({total_length}/{total_length} tokens) @ {final_tokens_per_sec:.1f} tokens/s - Complete!")
-            print()  # Move to new line after completion
+            print("\n[Decoding]")  # Show decoding status and move to next line
         
         return self.logits[:1].clone()
 
