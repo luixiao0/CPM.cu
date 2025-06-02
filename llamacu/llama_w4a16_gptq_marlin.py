@@ -192,8 +192,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         total_length = input_ids.numel()
         num_chunks = (total_length + self.chunk_length - 1) // self.chunk_length
         
+        prefill_start_time = None
         if self._show_prefill_progress:
-            print("Prefill progress: 0%", end="", flush=True)
+            prefill_start_time = time.time()
+            print("Prefilling: 0.0% (0/{} tokens) @ 0.0 tokens/s".format(total_length), end="", flush=True)
         
         for chunk_idx, i in enumerate(range(0, input_ids.numel(), self.chunk_length)):
             # torch.cuda.nvtx.range_push(f"chunk from {i}")
@@ -205,11 +207,19 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             # torch.cuda.nvtx.range_pop()
             
             # Show progress for stream mode - update in place
-            if self._show_prefill_progress:
-                progress = int((chunk_idx + 1) * 100 / num_chunks)
-                print(f"\rPrefill progress: {progress}%", end="", flush=True)
+            if self._show_prefill_progress and prefill_start_time is not None:
+                current_tokens = min(i + self.chunk_length, total_length)
+                elapsed_time = time.time() - prefill_start_time
+                progress = (current_tokens * 100.0) / total_length
+                tokens_per_sec = current_tokens / elapsed_time if elapsed_time > 0 else 0.0
+                print(f"\rPrefilling: {progress:.1f}% ({current_tokens}/{total_length} tokens) @ {tokens_per_sec:.1f} tokens/s", end="", flush=True)
         
         if self._show_prefill_progress:
+            # Show final completion status
+            if prefill_start_time is not None:
+                final_elapsed_time = time.time() - prefill_start_time
+                final_tokens_per_sec = total_length / final_elapsed_time if final_elapsed_time > 0 else 0.0
+                print(f"\rPrefilling: 100.0% ({total_length}/{total_length} tokens) @ {final_tokens_per_sec:.1f} tokens/s - Complete!")
             print()  # Move to new line after completion
         
         return self.logits[:1].clone()

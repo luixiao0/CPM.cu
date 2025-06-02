@@ -327,7 +327,6 @@ def run_stream_generation(llm, input_ids, config, teminators, tokenizer):
             print(text, end='', flush=True)
             
             if is_finished:
-                print(f"\n\nGeneration completed.")
                 break
                 
     except KeyboardInterrupt:
