@@ -6,6 +6,13 @@ from llamacu.speculative.eagle_base_quant.eagle_base_w4a16_marlin_gptq import W4
 from transformers import AutoTokenizer
 import time
 import numpy as np
+import argparse
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Generate text using LLM models')
+parser.add_argument('--path_prefix', '--pp', type=str, default='/cache/copys/217/data1/liyx/Models', 
+                    help='Path prefix for model directories (default: /cache/copys/217/data1/liyx/Models)')
+args = parser.parse_args()
 
 test_minicpm4 = True
 apply_eagle = True
@@ -31,7 +38,7 @@ if not test_minicpm4:
 dtype = torch.float16
 model_type = "base" if not apply_eagle else "eagle"
 
-path_prefix = "/cache/copys/217/data1/liyx/Models"
+path_prefix = args.path_prefix
 if test_minicpm4:
     eagle_path = f"{path_prefix}/job_35949"
     # eagle_path = "/data1/liyx/job_35949_llamaformat"
