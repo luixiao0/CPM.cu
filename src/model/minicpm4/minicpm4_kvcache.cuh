@@ -289,7 +289,7 @@ struct MiniCPM4KVCacheManager {
 
         offset = memory->allocate((void**)&this->d_flat_caches, offset, num_hidden_layers * 2 * sizeof(T*));
 
-        budget = int64_t(memory->get_remaining_memory(offset) * ratio) / (this->num_hidden_layers * 2 * this->dim * sizeof(T));
+        budget = int64_t(memory->get_remaining_memory(offset) * ratio * 0.999) / (this->num_hidden_layers * 2 * this->dim * sizeof(T)) - 1;
         for (int i = 0; i < this->num_hidden_layers; i++) {
             caches.push_back(new MiniCPM4KVCache<T>(this->dim, this->rotary_embedding, this->blockmask, stage1_score, pool_score, topk_func, apply_compress_lse));
         }

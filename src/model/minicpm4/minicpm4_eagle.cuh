@@ -166,7 +166,7 @@ struct MiniCPM4EagleImpl : Model {
             kv_cache_offset = this->model->kv_caches->init_output_ptr(this->model->memory, kv_cache_offset, ratio);
         }
         kv_caches->init_output_ptr(this->model->memory, kv_cache_offset);
-        return min(kv_caches->budget + 1, this->model->kv_caches->budget);
+        return min(kv_caches->budget, this->model->kv_caches->budget);
     }
 
     void load_to_storage(std::string name, void* ptr) {
