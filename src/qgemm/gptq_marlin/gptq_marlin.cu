@@ -2088,8 +2088,9 @@ void marlin_mm(const void* A, const void* B, void* C, void* C_tmp, void* s,
 //                                void* c
 //                                ) {
 
-void gptq_marlin_gemm(half* a, int32_t* b_q_weight,
-                               half* b_scales, int32_t* b_zeros,
+template <typename T>
+void gptq_marlin_gemm(T* a, int32_t* b_q_weight,
+                               T* b_scales, int32_t* b_zeros,
                                int32_t* g_idx, int32_t* perm,
                                int32_t* workspace,
                                vllm::ScalarType const& b_q_type, // init in linear
@@ -2097,103 +2098,17 @@ void gptq_marlin_gemm(half* a, int32_t* b_q_weight,
                                bool is_k_full, bool has_zp,
                                bool use_fp32_reduce, 
                                // TODO: new args
-                               half* c,
+                               T* c,
                                int num_groups, int group_size,
                                int b_q_weight_size1,
                                bool has_act_order,
                                cudaStream_t stream,
-                               half* a_tmp,
+                               T* a_tmp,
                                float* c_tmp
                                ) {
 
-  // No check here
-  // if (has_zp) {
-  //   TORCH_CHECK(
-  //       b_q_type == vllm::kU4 || b_q_type == vllm::kU8,
-  //       "b_q_type must be u4 or u8 when has_zp = True. Got = ", b_q_type.str());
-  // } else {
-  //   TORCH_CHECK(
-  //       b_q_type == vllm::kU4B8 || b_q_type == vllm::kU8B128,
-  //       "b_q_type must be uint4b8 or uint8b128 when has_zp = False. Got = ",
-  //       b_q_type.str());
-  // }
-
   int pack_factor = 32 / b_q_type.size_bits();
 
-  // No check here
-  // // Verify A
-  // TORCH_CHECK(a.size(0) == size_m, "Shape mismatch: a.size(0) = ", a.size(0),
-  //             ", size_m = ", size_m);
-  // TORCH_CHECK(a.size(1) == size_k, "Shape mismatch: a.size(1) = ", a.size(1),
-  //             ", size_k = ", size_k);
-
-  // // Verify B
-  // TORCH_CHECK(size_k % marlin::tile_size == 0, "size_k = ", size_k,
-  //             " is not divisible by tile_size = ", marlin::tile_size);
-  // TORCH_CHECK((size_k / marlin::tile_size) == b_q_weight.size(0),
-  //             "Shape mismatch: b_q_weight.size(0) = ", b_q_weight.size(0),
-  //             ", size_k = ", size_k, ", tile_size = ", marlin::tile_size);
-  // TORCH_CHECK(b_q_weight.size(1) % marlin::tile_size == 0,
-  //             "b_q_weight.size(1) = ", b_q_weight.size(1),
-  //             " is not divisible by tile_size = ", marlin::tile_size);
-  // int actual_size_n = (b_q_weight_size1 / marlin::tile_size) * pack_factor;
-  
-  // No check here
-  // TORCH_CHECK(size_n == actual_size_n, "size_n = ", size_n,
-  //             ", actual_size_n = ", actual_size_n);
-
-  // // Verify device and strides
-  // TORCH_CHECK(a.device().is_cuda(), "A is not on GPU");
-  // TORCH_CHECK(a.is_contiguous(), "A is not contiguous");
-
-  // TORCH_CHECK(b_q_weight.device().is_cuda(), "b_q_weight is not on GPU");
-  // TORCH_CHECK(b_q_weight.is_contiguous(), "b_q_weight is not contiguous");
-
-  // TORCH_CHECK(b_scales.device().is_cuda(), "b_scales is not on GPU");
-  // TORCH_CHECK(b_scales.is_contiguous(), "b_scales is not contiguous");
-
-  // TORCH_CHECK(b_zeros.device().is_cuda(), "b_zeros is not on GPU");
-  // TORCH_CHECK(b_zeros.is_contiguous(), "b_zeros is not contiguous");
-
-  // TORCH_CHECK(g_idx.device().is_cuda(), "g_idx is not on GPU");
-  // TORCH_CHECK(g_idx.is_contiguous(), "g_idx is not contiguous");
-
-  // TORCH_CHECK(perm.device().is_cuda(), "perm is not on GPU");
-  // TORCH_CHECK(perm.is_contiguous(), "perm is not contiguous");
-
-  // TODO: convert to cuda code: malloc adavance in linear object
-  // Alloc buffers
-  // const at::cuda::OptionalCUDAGuard device_guard(device_of(a));
-  // auto options = torch::TensorOptions().dtype(a.dtype()).device(a.device());
-  // torch::Tensor c = torch::empty({size_m, size_n}, options);
-  // torch::Tensor a_tmp = torch::empty({size_m, size_k}, options);
-  // half* a_tmp;
-  // cudaError_t err = cudaMalloc(&a_tmp, size_m * size_k * sizeof(half));
-  // if (err != cudaSuccess) {
-  //       std::cerr << "CUDA malloc failed for c: " << cudaGetErrorString(err) << std::endl;
-  //       return;
-  // }
-
-  //  TODO: convert to cuda code: malloc adavance in linear object
-  // // Alloc C tmp buffer that is going to be used for the global reduce
-  // int reduce_max_m = marlin::determine_reduce_max_m(size_m, marlin::max_par);
-  // int reduce_n = size_n;
-  // auto options_fp32 =
-  //     torch::TensorOptions().dtype(at::kFloat).device(a.device());
-  // if (!use_fp32_reduce) {
-  //   reduce_max_m = 0;
-  //   reduce_n = 0;
-  // }
-  // torch::Tensor c_tmp = torch::empty({reduce_max_m, reduce_n}, options_fp32);
-  // float* c_tmp = nullptr;
-  // err = cudaMalloc(&c_tmp, reduce_max_m * reduce_n * sizeof(float));
-  // if (err != cudaSuccess) {
-  //     std::cerr << "CUDA malloc failed for c_tmp: " << cudaGetErrorString(err) << std::endl;
-  //     return;
-  // }
-
-  // thread_k: `k` size of a thread_tile in `weights` (can usually be left as
-  // auto -1)
   int thread_k = -1;
   // thread_n: `n` size of a thread_tile in `weights` (can usually be left as
   // auto -1)
@@ -2201,73 +2116,14 @@ void gptq_marlin_gemm(half* a, int32_t* b_q_weight,
   // sms: number of SMs to use for the kernel (can usually be left as auto -1)
   int sms = -1;
 
-  // No check here
-  // // Verify g_idx and perm
-  // TORCH_CHECK((g_idx.size(0) == 0 && perm.size(0) == 0) ||
-  //                 (g_idx.size(0) == size_k && perm.size(0) == size_k),
-  //             "Unexpected g_idx.size(0) = ", g_idx.size(0),
-  //             " and perm.size(0) = ", perm.size(0),
-  //             ", where size_k = ", size_k);
-
-  // TODO: num_groups, group_size are passed by function call and has_act_order always be false
-  // // Detect groupsize and act_order
-  // int num_groups = -1;
-  // int group_size = -1;
-  // bool has_act_order = g_idx.size(0) != 0;
-
-  // int rank = b_scales.sizes().size();
-  // TORCH_CHECK(rank == 2, "b_scales rank = ", rank, " is not 2");
-  // TORCH_CHECK(b_scales.size(1) == size_n, "b_scales dim 1 = ", b_scales.size(1),
-  //             " is not size_n = ", size_n);
-  // num_groups = b_scales.size(0);
-
-  // if (has_act_order) {
-  //   if (is_k_full) {
-  //     TORCH_CHECK(num_groups > 1, "For act_order, num_groups must be > 1");
-  //     TORCH_CHECK(size_k % num_groups == 0, "size_k = ", size_k,
-  //                 ", is not divisible by num_groups = ", num_groups);
-  //     group_size = size_k / num_groups;
-  //   } else {
-  //     group_size = 0;
-  //   }
-
-  // } else {
-  //   if (num_groups > 1) {
-  //     TORCH_CHECK(
-  //         size_k % num_groups == 0, "size_k = ", size_k,
-  //         ", is not divisible by b_scales.size(0) = ", b_scales.size(0));
-  //     group_size = size_k / num_groups;
-  //   } else {
-  //     group_size = -1;
-  //   }
-  // }
-
-  // no check and zp always be false
-  // // Verify b_zeros
-  // if (has_zp) {
-  //   int rank = b_zeros.sizes().size();
-  //   TORCH_CHECK(rank == 2, "b_zeros rank = ", rank, " is not 2");
-  //   TORCH_CHECK(b_zeros.size(0) == num_groups,
-  //               "b_zeros dim 0 = ", b_zeros.size(0),
-  //               " is not num_groups = ", num_groups);
-  //   TORCH_CHECK(b_zeros.size(1) == size_n / pack_factor,
-  //               "b_zeros dim 1 = ", b_zeros.size(1),
-  //               " is not size_n / pack_factor = ", size_n / pack_factor);
-  // }
-
   // Verify workspace size
   TORCH_CHECK(size_n % marlin::min_thread_n == 0, "size_n = ", size_n,
               ", is not divisible by min_thread_n = ", marlin::min_thread_n);
-  // int min_workspace_size = (size_n / marlin::min_thread_n) * marlin::max_par;
-  // TORCH_CHECK(workspace.numel() >= min_workspace_size,
-  //             "workspace.numel = ", workspace.numel(),
-  //             " is below min_workspace_size = ", min_workspace_size);
 
   // int dev = a.get_device();
   int dev = 0;  // 选择第一个 GPU（设备 0）
   cudaSetDevice(dev);  // 设置当前 CUDA 设备
-  // TODO: only support half here
-  marlin::marlin_mm<half>(
+  marlin::marlin_mm<T>(
       a, b_q_weight, c,
       c_tmp, b_scales,
       b_zeros, g_idx, perm,
@@ -2275,30 +2131,21 @@ void gptq_marlin_gemm(half* a, int32_t* b_q_weight,
       workspace, b_q_type, has_act_order, is_k_full, has_zp,
       num_groups, group_size, dev, stream,
       thread_k, thread_n, sms, marlin::max_par, use_fp32_reduce);
-  
-  // if (a.scalar_type() == at::ScalarType::Half) {
-  //   marlin::marlin_mm<half>(
-  //       a.data_ptr<at::Half>(), b_q_weight.data_ptr(), c.data_ptr<at::Half>(),
-  //       c_tmp.data_ptr<float>(), b_scales.data_ptr<at::Half>(),
-  //       b_zeros.data_ptr(), g_idx.data_ptr(), perm.data_ptr(),
-  //       a_tmp.data_ptr<at::Half>(), size_m, size_n, size_k,
-  //       workspace.data_ptr(), b_q_type, has_act_order, is_k_full, has_zp,
-  //       num_groups, group_size, dev, at::cuda::getCurrentCUDAStream(dev),
-  //       thread_k, thread_n, sms, marlin::max_par, use_fp32_reduce);
-  // } else if (a.scalar_type() == at::ScalarType::BFloat16) {
-  //   marlin::marlin_mm<nv_bfloat16>(
-  //       a.data_ptr<at::BFloat16>(), b_q_weight.data_ptr(),
-  //       c.data_ptr<at::BFloat16>(), c_tmp.data_ptr<float>(),
-  //       b_scales.data_ptr<at::BFloat16>(), b_zeros.data_ptr(), g_idx.data_ptr(),
-  //       perm.data_ptr(), a_tmp.data_ptr<at::BFloat16>(), size_m, size_n, size_k,
-  //       workspace.data_ptr(), b_q_type, has_act_order, is_k_full, has_zp,
-  //       num_groups, group_size, dev, at::cuda::getCurrentCUDAStream(dev),
-  //       thread_k, thread_n, sms, marlin::max_par, use_fp32_reduce);
-  // } else {
-  //   TORCH_CHECK(false, "gpt_marlin_gemm only supports bfloat16 and float16");
-  // }
 
   return;
 }
 
 
+template void gptq_marlin_gemm<half>(
+    half*, int32_t*, half*, int32_t*, int32_t*, int32_t*, int32_t*,
+    vllm::ScalarType const&, int64_t, int64_t, int64_t,
+    bool, bool, bool, half*, int, int, int, bool,
+    cudaStream_t, half*, float*
+);
+
+template void gptq_marlin_gemm<__nv_bfloat16>(
+    __nv_bfloat16*, int32_t*, __nv_bfloat16*, int32_t*, int32_t*, int32_t*, int32_t*,
+    vllm::ScalarType const&, int64_t, int64_t, int64_t,
+    bool, bool, bool, __nv_bfloat16*, int, int, int, bool,
+    cudaStream_t, __nv_bfloat16*, float*
+);

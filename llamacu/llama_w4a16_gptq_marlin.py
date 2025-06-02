@@ -45,11 +45,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
         
         self.group_size = self.config.quantization_config['group_size']
-        print("group size", self.group_size)
         scale_embed = self.config.scale_emb if hasattr(self.config, "scale_emb") else 1.0
         scale_lmhead = (self.config.dim_model_base / self.config.hidden_size) if hasattr(self.config, "dim_model_base") else 1.0
         scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers) if hasattr(self.config, "scale_depth") else 1.0
-        print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
+        print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}, group_size: {self.group_size}")
         
         if apply_sparse:
             C.init_w4a16_gptq_marlin_minicpm4_model(

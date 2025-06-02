@@ -97,7 +97,7 @@ struct W4A16GPTQMarlinLinear {
         }
     }
 
-    void prefill(const Stream& stream, int32_t num_tokens, half* input, half* a_tmp, float* c_tmp, T* tgt=nullptr, bool inplace=false) {
+    void prefill(const Stream& stream, int32_t num_tokens, T* input, T* a_tmp, float* c_tmp, T* tgt=nullptr, bool inplace=false) {
         T* tgt_temp;
         if (tgt == nullptr) {
             tgt_temp = this->output;
@@ -108,7 +108,7 @@ struct W4A16GPTQMarlinLinear {
         else if (!inplace && tgt) {
             tgt_temp = tgt;
         }
-        gptq_marlin_gemm(
+        gptq_marlin_gemm<T>(
             input,
             weight,
             scales,

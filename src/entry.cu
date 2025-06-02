@@ -46,17 +46,13 @@
       auto* typed_model = static_cast<ModelImpl<T>*>(MODEL_PTR);    \
       return __VA_ARGS__();                   \
     } \
-  }()
-
-#define MODEL_TYPE_SWITCH_ONLY_HALF(MODEL_PTR, ...)  \
-  [&] {                                       \
-    if (dynamic_cast<W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR)) { \
-      using ModelType = W4A16GPTQMarlinModelImpl<__half>; \
-      auto* typed_model = static_cast<W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR); \
+    else if (dynamic_cast<W4A16GPTQMarlinModelImpl<T>*>(MODEL_PTR)) { \
+      using ModelType = W4A16GPTQMarlinModelImpl<T>; \
+      auto* typed_model = static_cast<W4A16GPTQMarlinModelImpl<T>*>(MODEL_PTR); \
       return __VA_ARGS__();                   \
-    } else if (dynamic_cast<MiniCPM4W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR)) { \
-      using ModelType = MiniCPM4W4A16GPTQMarlinModelImpl<__half>; \
-      auto* typed_model = static_cast<MiniCPM4W4A16GPTQMarlinModelImpl<__half>*>(MODEL_PTR); \
+    } else if (dynamic_cast<MiniCPM4W4A16GPTQMarlinModelImpl<T>*>(MODEL_PTR)) { \
+      using ModelType = MiniCPM4W4A16GPTQMarlinModelImpl<T>; \
+      auto* typed_model = static_cast<MiniCPM4W4A16GPTQMarlinModelImpl<T>*>(MODEL_PTR); \
       return __VA_ARGS__();                   \
     } \
   }()
@@ -164,28 +160,27 @@ void init_w4a16_gptq_marlin_base_model(
     float scale_lmhead,
     float scale_residual
 ) {
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for W8A8 model");
-    }
     init_resources();
     perf_init();
 
-    model = new W4A16GPTQMarlinModelImpl<half>(
-        memory_limit,
-        vocab_size,
-        num_hidden_layers,
-        hidden_size,
-        intermediate_size,
-        num_attention_heads,
-        num_key_value_heads,
-        head_dim,
-        rms_norm_eps,
-        group_size,
-        chunk_length,
-        scale_embed,
-        scale_lmhead,
-        scale_residual
-    );
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new W4A16GPTQMarlinModelImpl<elem_type>(
+            memory_limit,
+            vocab_size,
+            num_hidden_layers,
+            hidden_size,
+            intermediate_size,
+            num_attention_heads,
+            num_key_value_heads,
+            head_dim,
+            rms_norm_eps,
+            group_size,
+            chunk_length,
+            scale_embed,
+            scale_lmhead,
+            scale_residual
+        );
+    });
 
 }
 
@@ -210,31 +205,30 @@ void init_w4a16_gptq_marlin_minicpm4_model(
     int sparse_topk_k,
     bool apply_compress_lse
 ) {
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for W8A8 model");
-    }
     init_resources();
 
-    model = new MiniCPM4W4A16GPTQMarlinModelImpl<half>(
-        memory_limit,
-        vocab_size,
-        num_hidden_layers,
-        hidden_size,
-        intermediate_size,
-        num_attention_heads,
-        num_key_value_heads,
-        head_dim,
-        rms_norm_eps,
-        group_size,
-        chunk_length,
-        scale_embed,
-        scale_lmhead,
-        scale_residual,
-        sink_window_size,
-        block_window_size,
-        sparse_topk_k,
-        apply_compress_lse
-    );
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new MiniCPM4W4A16GPTQMarlinModelImpl<elem_type>(
+            memory_limit,
+            vocab_size,
+            num_hidden_layers,
+            hidden_size,
+            intermediate_size,
+            num_attention_heads,
+            num_key_value_heads,
+            head_dim,
+            rms_norm_eps,
+            group_size,
+            chunk_length,
+            scale_embed,
+            scale_lmhead,
+            scale_residual,
+            sink_window_size,
+            block_window_size,
+            sparse_topk_k,
+            apply_compress_lse
+        );
+    });
 
 }
 
@@ -258,17 +252,6 @@ void init_eagle_model(
                 tree_size
             );
         });
-    });
-    // TODO: constexpr is_same_v has bug
-    MODEL_TYPE_SWITCH_ONLY_HALF(model, [&] {
-        dispatch_model = true;
-        model = new EagleImpl<half, ModelType>(
-            typed_model,
-            num_layers,
-            num_iter,
-            topk_per_iter,
-            tree_size
-        );
     });
     if (!dispatch_model) {
         printf("Model type failed to dispatch: %s\n", typeid(*model).name());
@@ -305,21 +288,6 @@ void init_minicpm4_eagle_model(
             );
         });
     });
-    MODEL_TYPE_SWITCH_ONLY_HALF(model, [&] {
-        dispatch_model = true;
-        model = new MiniCPM4EagleImpl<half, ModelType>(
-            typed_model,
-            num_layers,
-            num_iter,
-            topk_per_iter,
-            tree_size,
-            eagle_window_size,
-            frspec_vocab_size,
-            residual_scale,
-            use_input_norm,
-            use_attn_norm
-        );
-    });
     if (!dispatch_model) {
         printf("Model type failed to dispatch: %s\n", typeid(*model).name());
     }
@@ -340,26 +308,22 @@ void init_w4a16_gm_spec_w4a16_gm_model(
     bool draft_cuda_graph,
     int torch_dtype
 ) {
-    // TODO: different type 
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for spec model");
-    }
-    // DTYPE_SWITCH(torch_dtype, [&] {
-    model = new W4A16GMSpecW4A16GMImpl<half>(
-        (W4A16GPTQMarlinModelImpl<half>*)model,
-        draft_vocab_size,
-        draft_num_hidden_layers,
-        draft_hidden_size,
-        draft_intermediate_size,
-        draft_num_attention_heads,
-        draft_num_key_value_heads,
-        draft_head_dim,
-        draft_rms_norm_eps,
-        draft_group_size,
-        num_iter, 
-        draft_cuda_graph
-    );
-    // });
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new W4A16GMSpecW4A16GMImpl<elem_type>(
+            (W4A16GPTQMarlinModelImpl<elem_type>*)model,
+            draft_vocab_size,
+            draft_num_hidden_layers,
+            draft_hidden_size,
+            draft_intermediate_size,
+            draft_num_attention_heads,
+            draft_num_key_value_heads,
+            draft_head_dim,
+            draft_rms_norm_eps,
+            draft_group_size,
+            num_iter, 
+            draft_cuda_graph
+        );
+    });
 }
 
 // hier spec model
@@ -382,28 +346,27 @@ void init_hier_eagle_w4a16_gm_spec_w4a16_gm_model(
     bool draft_model_start,
     int torch_dtype
 ) {
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for W8A8 model");
-    }
-    model = new HierEagleW4A16GMSpecW4A16GMImpl<half>(
-        (W4A16GPTQMarlinModelImpl<half>*)model,
-        draft_vocab_size,
-        draft_num_hidden_layers,
-        draft_hidden_size,
-        draft_intermediate_size,
-        draft_num_attention_heads,
-        draft_num_key_value_heads,
-        draft_head_dim,
-        draft_rms_norm_eps,
-        draft_group_size,
-        min_draft_length,
-        draft_cuda_graph,
-        ea_num_layers,
-        ea_num_iter,
-        ea_topk_per_iter,
-        ea_tree_size,
-        draft_model_start
-    );
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new HierEagleW4A16GMSpecW4A16GMImpl<elem_type>(
+            (W4A16GPTQMarlinModelImpl<elem_type>*)model,
+            draft_vocab_size,
+            draft_num_hidden_layers,
+            draft_hidden_size,
+            draft_intermediate_size,
+            draft_num_attention_heads,
+            draft_num_key_value_heads,
+            draft_head_dim,
+            draft_rms_norm_eps,
+            draft_group_size,
+            min_draft_length,
+            draft_cuda_graph,
+            ea_num_layers,
+            ea_num_iter,
+            ea_topk_per_iter,
+            ea_tree_size,
+            draft_model_start
+        );
+    });
 }
 
 void init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
@@ -425,28 +388,27 @@ void init_hier_eagle_w4a16_gm_rot_spec_w4a16_gm_model(
     bool draft_model_start,
     int torch_dtype
 ) {
-    if (torch_dtype != 0) {
-        throw std::invalid_argument("Only half precision is supported for W8A8 model");
-    }
-    model = new HierEagleW4A16GMRotSpecW4A16GMImpl<half>(
-        (W4A16GPTQMarlinModelImpl<half>*)model,
-        draft_vocab_size,
-        draft_num_hidden_layers,
-        draft_hidden_size,
-        draft_intermediate_size,
-        draft_num_attention_heads,
-        draft_num_key_value_heads,
-        draft_head_dim,
-        draft_rms_norm_eps,
-        draft_group_size,
-        min_draft_length,
-        draft_cuda_graph,
-        ea_num_layers,
-        ea_num_iter,
-        ea_topk_per_iter,
-        ea_tree_size,
-        draft_model_start
-    );
+    DTYPE_SWITCH(torch_dtype, [&] {
+        model = new HierEagleW4A16GMRotSpecW4A16GMImpl<elem_type>(
+            (W4A16GPTQMarlinModelImpl<elem_type>*)model,
+            draft_vocab_size,
+            draft_num_hidden_layers,
+            draft_hidden_size,
+            draft_intermediate_size,
+            draft_num_attention_heads,
+            draft_num_key_value_heads,
+            draft_head_dim,
+            draft_rms_norm_eps,
+            draft_group_size,
+            min_draft_length,
+            draft_cuda_graph,
+            ea_num_layers,
+            ea_num_iter,
+            ea_topk_per_iter,
+            ea_tree_size,
+            draft_model_start
+        );
+    });
 }
 
 
