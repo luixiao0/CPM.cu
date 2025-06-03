@@ -48,87 +48,87 @@ def create_argument_parser():
     parser = argparse.ArgumentParser(description='Generate text using LLM models')
     
     # Basic arguments
-    parser.add_argument('--path-prefix', '-pp', type=str, default='/cache/copys/217/data1/liyx/Models', 
+    parser.add_argument('--path-prefix', '--path_prefix', '-pp', type=str, default='/cache/copys/217/data1/liyx/Models', 
                         help='Path prefix for model directories (default: /cache/copys/217/data1/liyx/Models)')
 
     # Prompt arguments
-    parser.add_argument('--prompt-file', type=str, default=None,
+    parser.add_argument('--prompt-file', '--prompt_file', type=str, default=None,
                         help='Path to prompt file (default: None)')
-    parser.add_argument('--prompt-text', type=str, default=None,
+    parser.add_argument('--prompt-text', '--prompt_text', type=str, default=None,
                         help='Direct prompt text (default: None)')
-    parser.add_argument('--prompt-haystack', type=int, default=15,
+    parser.add_argument('--prompt-haystack', '--prompt_haystack', type=int, default=15,
                         help='Generate haystack prompt with specified length in thousands (e.g., 120 for 120k tokens)')
 
     # Model configuration boolean arguments
-    parser.add_argument('--test-minicpm4', action='store_true',
+    parser.add_argument('--test-minicpm4', '--test_minicpm4', action='store_true',
                         help='Use MiniCPM4 model')
-    parser.add_argument('--no-test-minicpm4', action='store_false', dest='test_minicpm4',
+    parser.add_argument('--no-test-minicpm4', '--no_test_minicpm4', action='store_false', dest='test_minicpm4',
                         help='Do not use MiniCPM4 model')
-    parser.add_argument('--use-stream', action='store_true',
+    parser.add_argument('--use-stream', '--use_stream', action='store_true',
                         help='Use stream generation')
-    parser.add_argument('--no-use-stream', action='store_false', dest='use_stream',
+    parser.add_argument('--no-use-stream', '--no_use_stream', action='store_false', dest='use_stream',
                         help='Do not use stream generation')
-    parser.add_argument('--apply-eagle', action='store_true',
+    parser.add_argument('--apply-eagle', '--apply_eagle', action='store_true',
                         help='Use Eagle speculative decoding')
-    parser.add_argument('--no-apply-eagle', action='store_false', dest='apply_eagle',
+    parser.add_argument('--no-apply-eagle', '--no_apply_eagle', action='store_false', dest='apply_eagle',
                         help='Do not use Eagle speculative decoding')
-    parser.add_argument('--apply-quant', action='store_true',
+    parser.add_argument('--apply-quant', '--apply_quant', action='store_true',
                         help='Use quantized model')
-    parser.add_argument('--no-apply-quant', action='store_false', dest='apply_quant',
+    parser.add_argument('--no-apply-quant', '--no_apply_quant', action='store_false', dest='apply_quant',
                         help='Do not use quantized model')
-    parser.add_argument('--apply-sparse', action='store_true',
+    parser.add_argument('--apply-sparse', '--apply_sparse', action='store_true',
                         help='Use sparse attention')
-    parser.add_argument('--no-apply-sparse', action='store_false', dest='apply_sparse',
+    parser.add_argument('--no-apply-sparse', '--no_apply_sparse', action='store_false', dest='apply_sparse',
                         help='Do not use sparse attention')
-    parser.add_argument('--apply-eagle-quant', action='store_true',
+    parser.add_argument('--apply-eagle-quant', '--apply_eagle_quant', action='store_true',
                         help='Use quantized Eagle model')
-    parser.add_argument('--no-apply-eagle-quant', action='store_false', dest='apply_eagle_quant',
+    parser.add_argument('--no-apply-eagle-quant', '--no_apply_eagle_quant', action='store_false', dest='apply_eagle_quant',
                         help='Do not use quantized Eagle model')
-    parser.add_argument('--apply-compress-lse', action='store_true',
+    parser.add_argument('--apply-compress-lse', '--apply_compress_lse', action='store_true',
                         help='Apply LSE compression')
-    parser.add_argument('--no-apply-compress-lse', action='store_false', dest='apply_compress_lse',
+    parser.add_argument('--no-apply-compress-lse', '--no_apply_compress_lse', action='store_false', dest='apply_compress_lse',
                         help='Do not apply LSE compression')
-    parser.add_argument('--cuda-graph', action='store_true',
+    parser.add_argument('--cuda-graph', '--cuda_graph', action='store_true',
                         help='Use CUDA graph optimization')
-    parser.add_argument('--no-cuda-graph', action='store_false', dest='cuda_graph',
+    parser.add_argument('--no-cuda-graph', '--no_cuda_graph', action='store_false', dest='cuda_graph',
                         help='Do not use CUDA graph optimization')
-    parser.add_argument('--use-teminators', action='store_true',
+    parser.add_argument('--use-teminators', '--use_teminators', action='store_true',
                         help='Use teminators')
-    parser.add_argument('--no-use-teminators', action='store_false', dest='use_teminators',
+    parser.add_argument('--no-use-teminators', '--no_use_teminators', action='store_false', dest='use_teminators',
                         help='Do not use teminators')
 
     # Model configuration numeric arguments
-    parser.add_argument('--frspec-vocab-size', type=int, default=None,
+    parser.add_argument('--frspec-vocab-size', '--frspec_vocab_size', type=int, default=None,
                         help='Frequent speculation vocab size (default: from config)')
-    parser.add_argument('--eagle-window-size', type=int, default=None,
+    parser.add_argument('--eagle-window-size', '--eagle_window_size', type=int, default=None,
                         help='Eagle window size (default: from config)')
-    parser.add_argument('--eagle-num-iter', type=int, default=None,
+    parser.add_argument('--eagle-num-iter', '--eagle_num_iter', type=int, default=None,
                         help='Eagle number of iterations (default: from config)')
-    parser.add_argument('--eagle-topk-per-iter', type=int, default=None,
+    parser.add_argument('--eagle-topk-per-iter', '--eagle_topk_per_iter', type=int, default=None,
                         help='Eagle top-k per iteration (default: from config)')
-    parser.add_argument('--eagle-tree-size', type=int, default=None,
+    parser.add_argument('--eagle-tree-size', '--eagle_tree_size', type=int, default=None,
                         help='Eagle tree size (default: from config)')
-    parser.add_argument('--sink-window-size', type=int, default=None,
+    parser.add_argument('--sink-window-size', '--sink_window_size', type=int, default=None,
                         help='Sink window size (default: from config)')
-    parser.add_argument('--block-window-size', type=int, default=None,
+    parser.add_argument('--block-window-size', '--block_window_size', type=int, default=None,
                         help='Block window size (default: from config)')
-    parser.add_argument('--sparse-topk-k', type=int, default=None,
+    parser.add_argument('--sparse-topk-k', '--sparse_topk_k', type=int, default=None,
                         help='Sparse attention top-k (default: from config)')
-    parser.add_argument('--sparse-switch', type=int, default=None,
+    parser.add_argument('--sparse-switch', '--sparse_switch', type=int, default=None,
                         help='Sparse switch (default: from config)')
-    parser.add_argument('--num-generate', type=int, default=None,
+    parser.add_argument('--num-generate', '--num_generate', type=int, default=None,
                         help='Number of tokens to generate (default: from config)')
-    parser.add_argument('--chunk-length', type=int, default=None,
+    parser.add_argument('--chunk-length', '--chunk_length', type=int, default=None,
                         help='Chunk length for processing (default: from config)')
-    parser.add_argument('--memory-limit', type=float, default=None,
+    parser.add_argument('--memory-limit', '--memory_limit', type=float, default=None,
                         help='Memory limit for processing (default: from config)')
     parser.add_argument('--dtype', type=str, default=None, choices=['float16', 'bfloat16'],
                         help='Model dtype (default: from config)')
     
     # Demo arguments
-    parser.add_argument('--use-enter', action='store_true',
+    parser.add_argument('--use-enter', '--use_enter', action='store_true',
                         help='Use enter to generate')
-    parser.add_argument('--no-use-enter', action='store_false', dest='use_enter',
+    parser.add_argument('--no-use-enter', '--no_use_enter', action='store_false', dest='use_enter',
                         help='Do not use enter to generate')
     
     return parser
@@ -143,7 +143,9 @@ def parse_and_merge_config(default_config):
     for arg in bool_args:
         # Convert underscores to hyphens for command line argument names
         arg_hyphen = arg.replace('_', '-')
-        arg_specified = f'--{arg_hyphen}' in sys.argv or f'--no-{arg_hyphen}' in sys.argv
+        # Check for both formats (hyphen and underscore)
+        arg_specified = (f'--{arg_hyphen}' in sys.argv or f'--no-{arg_hyphen}' in sys.argv or
+                        f'--{arg}' in sys.argv or f'--no-{arg}' in sys.argv)
         if not arg_specified:
             setattr(args, arg, None)
 
