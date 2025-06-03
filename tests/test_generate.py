@@ -23,7 +23,7 @@ default_config = {
     'eagle_topk_per_iter': 16,
     'eagle_tree_size': 32,
     'apply_compress_lse': True,
-    'sink_window_size': 1,
+    'sink_window_size': 1, # TODO: unsupported now
     'block_window_size': 32,
     'sparse_topk_k': 64,
     "sparse_switch": 20480,
@@ -283,7 +283,10 @@ def make_input(tokenizer, args, prompt_content=None):
                 print(f"No valid content found, using default Chinese prompt")
                 prompt_content = "北京有哪些好玩的地方"
     
-    prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt_content}], tokenize=False, add_generation_prompt=True)
+    if args.prompt_haystack: # TODO: haystack need w/o chat template, may be a bug
+        prompt = prompt_content
+    else:
+        prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt_content}], tokenize=False, add_generation_prompt=True)
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda().int()
     
     print(f"Input token count: {input_ids.shape[1]}")
