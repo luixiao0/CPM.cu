@@ -105,7 +105,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         }
 
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) {
+        if ((!apply_compress_lse && kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) || (apply_compress_lse && kv_cache->c2_len * kv_cache->c2_stride >= this->sparse_switch)) {
             int q_round, k_round, out_len;
             cuda_perf_start_on_stream_f(M4Q_PREFILL_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(
@@ -223,7 +223,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         kv_cache->compress(stream);
 
         uint64_t *blockmask = nullptr;
-        if (kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) {
+        if ((!apply_compress_lse && kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) || (apply_compress_lse && kv_cache->c2_len * kv_cache->c2_stride >= this->sparse_switch)) {
             int q_round, k_round, out_len;
             cuda_perf_start_on_stream_f(M4Q_DECODE_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(
