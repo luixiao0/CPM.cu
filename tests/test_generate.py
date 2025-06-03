@@ -12,7 +12,7 @@ import sys
 # Default Configuration
 default_config = {
     'test_minicpm4': True,
-    'use_stream': False,
+    'use_stream': True,
     'apply_eagle': True,
     'apply_quant': True,
     'apply_sparse': True,
@@ -33,6 +33,14 @@ default_config = {
     'dtype': torch.float16,
     'use_teminators': True,
 }
+
+# Demo Configuration: Only for MiniCPM4 demo, will be deleted after release
+demo_config = {
+    'use_enter': False,
+}
+
+# Combined Default Configurations
+default_config = {**default_config, **demo_config}
 
 def create_argument_parser():
     """Create and configure argument parser"""
@@ -114,6 +122,12 @@ def create_argument_parser():
     parser.add_argument('--dtype', type=str, default=None, choices=['float16', 'bfloat16'],
                         help='Model dtype (default: from config)')
     
+    # Demo arguments
+    parser.add_argument('--use-enter', action='store_true',
+                        help='Use enter to generate')
+    parser.add_argument('--no-use-enter', action='store_false', dest='use_enter',
+                        help='Do not use enter to generate')
+    
     return parser
 
 def parse_and_merge_config(default_config):
@@ -179,7 +193,8 @@ def create_model(eagle_path, base_path, config):
         'block_window_size': config['block_window_size'],
         'sparse_topk_k': config['sparse_topk_k'],
         'apply_compress_lse': config['apply_compress_lse'],
-        'memory_limit': config['memory_limit']
+        'memory_limit': config['memory_limit'],
+        'use_enter': config['use_enter']
     }
     
     eagle_kwargs = {
@@ -251,11 +266,11 @@ def make_input(tokenizer, args, prompt_content=None):
                 if file_specified and prompt_content:
                     # Case 3: Both specified, append text to file content
                     prompt_content += "\n" + args.prompt_text
-                    print(f"Appended text to file content")
+                    print(f"Appended prompt text to file content")
                 else:
                     # Case 2: Only text specified
                     prompt_content = args.prompt_text
-                    print(f"Using direct text input")
+                    print(f"Using direct prompt text input")
             
             # Fallback if no content was loaded
             if not prompt_content:
@@ -412,7 +427,7 @@ def main(args, config):
         print(f"test_minicpm4 is False, set apply_sparse to False")
         config['apply_sparse'] = False
     
-    print_config(config, args.use_stream)
+    print_config(config, config['use_stream'])
     
     # Get model paths and create model
     eagle_path, base_path = get_model_paths(args.path_prefix, config)
@@ -432,7 +447,7 @@ def main(args, config):
     llm.load_from_hf()
     
     # Run generation
-    if args.use_stream:
+    if config['use_stream']:
         run_stream_generation(llm, input_ids, config, teminators, tokenizer)
     else:
         run_batch_generation(llm, input_ids, config, teminators, tokenizer)

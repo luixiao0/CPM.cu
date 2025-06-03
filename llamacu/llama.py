@@ -30,6 +30,7 @@ class LLM(torch.nn.Module):
                  block_window_size: int = 32,
                  sparse_topk_k: int = 32,
                  apply_compress_lse: bool = False,
+                 use_enter: bool = False,
     ):
         super().__init__()
 
@@ -39,6 +40,7 @@ class LLM(torch.nn.Module):
         self.dtype = dtype if dtype is not None else self.config.torch_dtype
         self.dtype_int = dtype_to_int(self.dtype)
         self.cuda_graph = cuda_graph
+        self.use_enter = use_enter
 
         self.chunk_length = chunk_length
         # Flag for showing prefill progress (used in stream mode)
@@ -180,7 +182,9 @@ class LLM(torch.nn.Module):
         num_chunks = (total_length + self.chunk_length - 1) // self.chunk_length
         
         prefill_start_time = None
-        if self._show_prefill_progress:
+        
+        # User interaction logic only when use_enter is True
+        if self._show_prefill_progress and self.use_enter:
             # Clear screen and move cursor to top, then show prompt and wait for user input
             print("\033[2J\033[H", end="", flush=True)  # Clear screen and move to top
             print("Please Press Enter to Start Prefilling...", end="", flush=True)
@@ -188,9 +192,14 @@ class LLM(torch.nn.Module):
             
             # Replace the prompt with [Prefilling] - clear entire line first
             print("\r" + " " * 50 + "\r[Prefilling]", flush=True)
-            
+        
+        # Initialize progress display for stream mode (always when _show_prefill_progress is True)
+        if self._show_prefill_progress:
             prefill_start_time = time.time()
-            print("Prefilling: 0.0% (0/{} tokens) @ 0.0 tokens/s".format(total_length), end="", flush=True)
+            if not self.use_enter:
+                print("Prefilling: 0.0% (0/{} tokens) @ 0.0 tokens/s".format(total_length), end="", flush=True)
+            else:
+                print("Prefilling: 0.0% (0/{} tokens) @ 0.0 tokens/s".format(total_length), end="", flush=True)
         
         for chunk_idx, i in enumerate(range(0, input_ids.numel(), self.chunk_length)):
             # torch.cuda.nvtx.range_push(f"chunk from {i}")
@@ -201,7 +210,7 @@ class LLM(torch.nn.Module):
             )
             # torch.cuda.nvtx.range_pop()
             
-            # Show progress for stream mode - update in place
+            # Show progress for stream mode - always when _show_prefill_progress is True
             if self._show_prefill_progress and prefill_start_time is not None:
                 current_tokens = min(i + self.chunk_length, total_length)
                 elapsed_time = time.time() - prefill_start_time
@@ -209,13 +218,16 @@ class LLM(torch.nn.Module):
                 tokens_per_sec = current_tokens / elapsed_time if elapsed_time > 0 else 0.0
                 print(f"\rPrefilling: {progress:.1f}% ({current_tokens}/{total_length} tokens) @ {tokens_per_sec:.1f} tokens/s", end="", flush=True)
         
+        # Final completion status for stream mode
         if self._show_prefill_progress:
-            # Show final completion status
             if prefill_start_time is not None:
                 final_elapsed_time = time.time() - prefill_start_time
                 final_tokens_per_sec = total_length / final_elapsed_time if final_elapsed_time > 0 else 0.0
                 print(f"\rPrefilling: 100.0% ({total_length}/{total_length} tokens) @ {final_tokens_per_sec:.1f} tokens/s - Complete!")
-            print("\n[Decoding]")  # Show decoding status and move to next line
+            if self.use_enter:
+                print("\n[Decoding]")  # Show decoding status and move to next line only with use_enter
+            else:
+                print()  # Just a newline for normal mode
         
         return self.logits[:1].clone()
 
