@@ -20,8 +20,8 @@ default_config = {
     'frspec_vocab_size': 0,
     'eagle_window_size': 32 * 128,
     'eagle_num_iter': 2,
-    'eagle_topk_per_iter': 16,
-    'eagle_tree_size': 32,
+    'eagle_topk_per_iter': 15,
+    'eagle_tree_size': 16,
     'apply_compress_lse': True,
     'sink_window_size': 1, # TODO: unsupported now
     'block_window_size': 32,
