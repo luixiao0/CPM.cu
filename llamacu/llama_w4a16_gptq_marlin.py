@@ -29,6 +29,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                  sink_window_size: int = 1,
                  block_window_size: int = 32,
                  sparse_topk_k: int = 32,
+                 sparse_switch: int = 8192,
                  apply_compress_lse: bool = False,
                  use_enter: bool = False,
     ):
@@ -75,6 +76,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 sink_window_size,
                 block_window_size,
                 sparse_topk_k,
+                sparse_switch,
                 apply_compress_lse,
             )
         else:

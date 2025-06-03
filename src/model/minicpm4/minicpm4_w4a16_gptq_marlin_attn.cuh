@@ -24,9 +24,10 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
 
     int sink_window_size;
     int block_window_size;
+    int sparse_switch;
     bool apply_compress_lse;
 
-    MiniCPM4W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int sink_window_size, int block_window_size, bool apply_compress_lse) {
+    MiniCPM4W4A16GPTQMarlinAttention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, int sink_window_size, int block_window_size, int sparse_switch, bool apply_compress_lse) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
@@ -40,6 +41,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
 
         this->sink_window_size = sink_window_size;
         this->block_window_size = block_window_size;
+        this->sparse_switch = sparse_switch;
         this->apply_compress_lse = apply_compress_lse;
     }
 
@@ -103,7 +105,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         }
 
         uint64_t *blockmask = nullptr;
-        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
+        if (kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) {
             int q_round, k_round, out_len;
             cuda_perf_start_on_stream_f(M4Q_PREFILL_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(
@@ -201,17 +203,10 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         this->attn_norm->prefill(stream, num_tokens, input, prev_output);
         T *q, *k, *v;
 
-        // TODO: Find a correct way to do this
         if (num_tokens > 1) {
             this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
             permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->qkv_proj->output, this->permute_qkv_output); // TODO: Double check
             q = this->permute_qkv_output;
-            // this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp, this->permute_qkv_output);
-            // permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->permute_qkv_output, this->q_proj_output);
-            // q = this->q_proj_output;
-            // this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp, this->v_proj_output);
-            // permute(stream, num_tokens, this->num_attention_heads * this->head_dim, this->num_key_value_heads * this->head_dim, this->v_proj_output, this->q_proj_output);
-            // q = this->q_proj_output;
         } else {
             this->qkv_proj->prefill(stream, num_tokens, this->attn_norm->output, a_tmp, c_tmp);
             q = this->qkv_proj->output;
@@ -228,7 +223,7 @@ struct MiniCPM4W4A16GPTQMarlinAttention {
         kv_cache->compress(stream);
 
         uint64_t *blockmask = nullptr;
-        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
+        if (kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) {
             int q_round, k_round, out_len;
             cuda_perf_start_on_stream_f(M4Q_DECODE_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(

@@ -17,8 +17,8 @@ struct MiniCPM4W4A16GPTQMarlinLayer {
     float residual_scale;
     int hidden_size;
 
-    MiniCPM4W4A16GPTQMarlinLayer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, float residual_scale = 1.0, int sink_window_size = 1, int block_window_size = 32, bool apply_compress_lse = false) {
-        this->attn = new MiniCPM4W4A16GPTQMarlinAttention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, sink_window_size, block_window_size, apply_compress_lse);
+    MiniCPM4W4A16GPTQMarlinLayer(int hidden_size, int intermediate_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int group_size, float residual_scale = 1.0, int sink_window_size = 1, int block_window_size = 32, int sparse_switch = 8192, bool apply_compress_lse = false) {
+        this->attn = new MiniCPM4W4A16GPTQMarlinAttention<T>(hidden_size, num_attention_heads, num_key_value_heads, head_dim, rms_norm_eps, group_size, sink_window_size, block_window_size, sparse_switch, apply_compress_lse);
         this->ffn = new W4A16GPTQMarlinGatedFFN<T>(hidden_size, intermediate_size, rms_norm_eps, group_size);
         this->hidden_size = hidden_size;
         this->intermediate_size = intermediate_size;

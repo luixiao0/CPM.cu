@@ -20,9 +20,10 @@ struct MiniCPM4Attention {
 
     int sink_window_size;
     int block_window_size;
+    int sparse_switch;
     bool apply_compress_lse;
 
-    MiniCPM4Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int sink_window_size, int block_window_size, bool apply_compress_lse) {
+    MiniCPM4Attention(int hidden_size, int num_attention_heads, int num_key_value_heads, int head_dim, float rms_norm_eps, int sink_window_size, int block_window_size, int sparse_switch, bool apply_compress_lse) {
         this->hidden_size = hidden_size;
         this->num_attention_heads = num_attention_heads;
         this->num_key_value_heads = num_key_value_heads;
@@ -37,6 +38,7 @@ struct MiniCPM4Attention {
 
         this->sink_window_size = sink_window_size;
         this->block_window_size = block_window_size;
+        this->sparse_switch = sparse_switch;
         this->apply_compress_lse = apply_compress_lse;
     }
 
@@ -102,7 +104,7 @@ struct MiniCPM4Attention {
         }
 
         uint64_t *blockmask = nullptr;
-        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
+        if (kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) {
             int q_round, k_round, out_len;
             cuda_perf_start_on_stream_f(M4_PREFILL_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(
@@ -226,7 +228,7 @@ struct MiniCPM4Attention {
         kv_cache->compress(stream);
 
         uint64_t *blockmask = nullptr;
-        if ((apply_compress_lse && kv_cache->c2_len > 0) || (!apply_compress_lse && kv_cache->c1_len > 0)) {
+        if (kv_cache->c1_len * kv_cache->c1_stride >= this->sparse_switch) {
             int q_round, k_round, out_len;
             cuda_perf_start_on_stream_f(M4_DECODE_ATTN_STAGE1_CORE, stream.stream);
             mha_fwd_stage1(

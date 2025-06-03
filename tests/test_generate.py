@@ -26,6 +26,7 @@ default_config = {
     'sink_window_size': 1,
     'block_window_size': 32,
     'sparse_topk_k': 64,
+    "sparse_switch": 20480,
     'num_generate': 512,
     'chunk_length': 2048,
     'memory_limit': 0.9,
@@ -113,6 +114,8 @@ def create_argument_parser():
                         help='Block window size (default: from config)')
     parser.add_argument('--sparse-topk-k', type=int, default=None,
                         help='Sparse attention top-k (default: from config)')
+    parser.add_argument('--sparse-switch', type=int, default=None,
+                        help='Sparse switch (default: from config)')
     parser.add_argument('--num-generate', type=int, default=None,
                         help='Number of tokens to generate (default: from config)')
     parser.add_argument('--chunk-length', type=int, default=None,
@@ -192,6 +195,7 @@ def create_model(eagle_path, base_path, config):
         'sink_window_size': config['sink_window_size'],
         'block_window_size': config['block_window_size'],
         'sparse_topk_k': config['sparse_topk_k'],
+        'sparse_switch': config['sparse_switch'],
         'apply_compress_lse': config['apply_compress_lse'],
         'memory_limit': config['memory_limit'],
         'use_enter': config['use_enter']
@@ -416,7 +420,7 @@ def print_config(config, use_stream):
     print(f"Generation: num_generate={config['num_generate']}, chunk_length={config['chunk_length']}, use_teminators={config['use_teminators']}, use_stream={config['use_stream']}")
     print(f"Others: dtype={config['dtype']}, cuda_graph={config['cuda_graph']}, memory_limit={config['memory_limit']}")
     if config['apply_sparse']:
-        print(f"Sparse Attention: sink_window={config['sink_window_size']}, block_window={config['block_window_size']}, sparse_topk_k={config['sparse_topk_k']}, compress_lse={config['apply_compress_lse']}")
+        print(f"Sparse Attention: sink_window={config['sink_window_size']}, block_window={config['block_window_size']}, sparse_topk_k={config['sparse_topk_k']}, sparse_switch={config['sparse_switch']}, compress_lse={config['apply_compress_lse']}")
     if config['apply_eagle']:
         print(f"Eagle: eagle_num_iter={config['eagle_num_iter']}, eagle_topk_per_iter={config['eagle_topk_per_iter']}, eagle_tree_size={config['eagle_tree_size']}, apply_eagle_quant={config['apply_eagle_quant']}, window_size={config['eagle_window_size']}, frspec_vocab_size={config['frspec_vocab_size']}")
     print("=" * 50)
