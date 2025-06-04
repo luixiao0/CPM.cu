@@ -6,6 +6,7 @@ from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from safetensors.torch import load_file
 import time, math
+import torch.nn.functional as F
 
 dtype_map = {
     torch.float16: 0,
@@ -32,6 +33,8 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                  sparse_switch: int = 8192,
                  apply_compress_lse: bool = False,
                  use_enter: bool = False,
+                 temperature: float = 0.0,
+                 random_seed: int = None,
     ):
         super().__init__()
 
@@ -42,10 +45,17 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         self.dtype_int = dtype_to_int(self.dtype)
         self.cuda_graph = cuda_graph
         self.use_enter = use_enter
-
+        self.temperature = temperature
         self.chunk_length = chunk_length
         # Flag for showing prefill progress (used in stream mode)
         self._show_prefill_progress = False
+        
+        # Initialize random generator if random_seed is provided
+        if random_seed is not None:
+            self.generator = torch.Generator(device="cuda")
+            self.generator.manual_seed(random_seed)
+        else:
+            self.generator = None
         
         if not hasattr(self.config, "head_dim"):
             self.config.head_dim = self.config.hidden_size // self.config.num_attention_heads
@@ -289,7 +299,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         torch.cuda.synchronize()
         prefill_time = time.time() - prefill_start
         
-        token = logits[0].argmax(dim=-1).item()
+        if self.temperature > 0:
+            token = torch.multinomial(F.softmax(logits[0]/self.temperature, dim=-1), num_samples=1, generator=self.generator)[0]
+        else:   
+            token = logits[0].argmax(dim=-1).item()
 
         if not hasattr(self, "input_ids"):
             self.input_ids = torch.tensor([0], dtype=torch.int32, device="cuda")
@@ -325,7 +338,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                     self.cache_length[0] = prefix_length + i
 
                     logits = self.decode(self.input_ids, self.position_ids, self.cache_length)
-                    token = logits[0].argmax(dim=-1).item()
+                    if self.temperature > 0:
+                        token = torch.multinomial(F.softmax(logits[0]/self.temperature, dim=-1), num_samples=1, generator=self.generator)[0]
+                    else:   
+                        token = logits[0].argmax(dim=-1).item()
                     
                     # For correct spacing, decode with previous token context
                     if prev_token is not None:
@@ -367,7 +383,10 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 self.cache_length[0] = prefix_length + i
 
                 logits = self.decode(self.input_ids, self.position_ids, self.cache_length)
-                token = logits[0].argmax(dim=-1).item()
+                if self.temperature > 0:
+                    token = torch.multinomial(F.softmax(logits[0]/self.temperature, dim=-1), num_samples=1, generator=self.generator)[0].item()
+                else:
+                    token = logits[0].argmax(dim=-1).item()
                 tokens.append(token)
                 if token in teminators:
                     break

@@ -5,13 +5,14 @@ import torch
 from ..tree_drafter import *
 import time
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
-
+import torch.nn.functional as F
 
 class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
     def __init__(self,
                  drafter_type, drafter_path, base_path,
                  tree_size,
                  use_rope: bool=False,
+                 temperature: float=0.0,
                  **kwargs):
         super().__init__(base_path, **kwargs)
 
@@ -27,6 +28,7 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
         self.tree_attn_mask = torch.empty((tree_size), dtype=torch.uint64, device="cuda")
         self.tree_parent = torch.empty((tree_size), dtype=torch.int32, device="cuda")
         self.tree_position_ids = torch.empty((tree_size), dtype=torch.int32, device="cuda")
+        self.temperature = temperature
 
         self.cache_length = torch.tensor([0], dtype=torch.int32, device="cuda")
 
@@ -74,7 +76,10 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
         torch.cuda.synchronize()
         prefill_time = time.time() - prefill_start
         
-        self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
+        if self.temperature > 0.0:
+            self.tree_draft_ids[:1].copy_(torch.multinomial(F.softmax(logits[0]/self.temperature, dim=-1), num_samples=1, generator=self.generator))
+        else:
+            self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
 
         if use_stream:
             # Stream generation for quantized tree drafter (optimized)
@@ -109,7 +114,10 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
                     C.draft(self.tree_draft_ids.data_ptr(), self.tree_position_ids.data_ptr(), self.cache_length.data_ptr(), self.tree_attn_mask.data_ptr(), self.tree_parent.data_ptr())
 
                     logits = self.decode(self.tree_draft_ids, self.tree_position_ids, self.cache_length, mask_2d=self.tree_attn_mask)
-                    self.tree_gt_ids.copy_(logits.argmax(dim=-1))
+                    if self.temperature > 0.0:
+                        self.tree_gt_ids.copy_(torch.multinomial(F.softmax(logits/self.temperature, dim=-1), num_samples=1, generator=self.generator).squeeze(-1))
+                    else:
+                        self.tree_gt_ids.copy_(logits.argmax(dim=-1))
 
                     # verify step
                     accept_length = C.verify_and_fix(
@@ -186,7 +194,10 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
                 # torch.cuda.nvtx.range_pop()
 
                 logits = self.decode(self.tree_draft_ids, self.tree_position_ids, self.cache_length, mask_2d=self.tree_attn_mask)
-                self.tree_gt_ids.copy_(logits.argmax(dim=-1))
+                if self.temperature > 0.0:
+                    self.tree_gt_ids.copy_(torch.multinomial(F.softmax(logits/self.temperature, dim=-1), num_samples=1, generator=self.generator).squeeze(-1))
+                else:
+                    self.tree_gt_ids.copy_(logits.argmax(dim=-1))
 
                 # torch.cuda.nvtx.range_push(f"verify")
                 accept_length = C.verify_and_fix(

@@ -18,21 +18,23 @@ default_config = {
     'apply_sparse': True,
     'apply_eagle_quant': True,
     'frspec_vocab_size': 0,
-    'eagle_window_size': 32 * 128,
+    'eagle_window_size': 8 * 128,
     'eagle_num_iter': 2,
-    'eagle_topk_per_iter': 15,
-    'eagle_tree_size': 16,
+    'eagle_topk_per_iter': 10,
+    'eagle_tree_size': 12,
     'apply_compress_lse': True,
     'sink_window_size': 1, # TODO: unsupported now
     'block_window_size': 32,
     'sparse_topk_k': 64,
-    "sparse_switch": 20480,
+    "sparse_switch": 1,
     'num_generate': 512,
     'chunk_length': 2048,
     'memory_limit': 0.9,
     'cuda_graph': True,
     'dtype': torch.float16,
     'use_teminators': True,
+    "temperature": 0.0,
+    "random_seed": None,
 }
 
 # Demo Configuration: Only for MiniCPM4 demo, will be deleted after release
@@ -122,9 +124,12 @@ def create_argument_parser():
                         help='Chunk length for processing (default: from config)')
     parser.add_argument('--memory-limit', '--memory_limit', type=float, default=None,
                         help='Memory limit for processing (default: from config)')
+    parser.add_argument('--temperature', '--temperature', type=float, default=None,
+                        help='Temperature for processing (default: from config)')
     parser.add_argument('--dtype', type=str, default=None, choices=['float16', 'bfloat16'],
                         help='Model dtype (default: from config)')
-    
+    parser.add_argument('--random-seed', '--random_seed', type=int, default=None,
+                        help='Random seed for processing (default: from config)')
     # Demo arguments
     parser.add_argument('--use-enter', '--use_enter', action='store_true',
                         help='Use enter to generate')
@@ -179,11 +184,11 @@ def get_model_paths(path_prefix, config):
     
     if not config['apply_quant']:
         if config['test_minicpm4']:
-            base_path = f"{path_prefix}/job_33952_step_17300"
+            base_path = f"{path_prefix}/250527_merge_exp2"
         else:
             base_path = f"{path_prefix}/Meta-Llama-3-8B-Instruct"
     else:
-        base_path = f"{path_prefix}/minicpm4_marlin"
+        base_path = f"{path_prefix}/250527_merge_exp2_marlin"
     
     return eagle_path, base_path
 
@@ -200,7 +205,9 @@ def create_model(eagle_path, base_path, config):
         'sparse_switch': config['sparse_switch'],
         'apply_compress_lse': config['apply_compress_lse'],
         'memory_limit': config['memory_limit'],
-        'use_enter': config['use_enter']
+        'use_enter': config['use_enter'],
+        'temperature': config['temperature'],
+        'random_seed': config['random_seed']
     }
     
     eagle_kwargs = {
@@ -283,7 +290,7 @@ def make_input(tokenizer, args, prompt_content=None):
                 print(f"No valid content found, using default Chinese prompt")
                 prompt_content = "北京有哪些好玩的地方"
     
-    if args.prompt_haystack: # TODO: haystack need w/o chat template, may be a bug
+    if not file_specified and not text_specified: # TODO: haystack need w/o chat template, may be a bug
         prompt = prompt_content
     else:
         prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt_content}], tokenize=False, add_generation_prompt=True)
@@ -314,6 +321,7 @@ def print_generation_summary(mode, prefill_stats, decode_stats, config):
     # Eagle-specific statistics
     if config['apply_eagle'] and 'mean_accept_length' in decode_stats:
         print(f"Mean accept length: {decode_stats['mean_accept_length']:.2f}")
+        print(f"Decode token/s when acc = 1: {decode_stats['tokens_per_sec'] / decode_stats['mean_accept_length']:.2f}")
 
 def run_stream_generation(llm, input_ids, config, teminators, tokenizer):
     """Run streaming generation and display results"""
@@ -423,6 +431,7 @@ def print_config(config, use_stream):
     print("=" * 50)
     print(f"Features: eagle={config['apply_eagle']}, quant={config['apply_quant']}, sparse={config['apply_sparse']}")
     print(f"Generation: num_generate={config['num_generate']}, chunk_length={config['chunk_length']}, use_teminators={config['use_teminators']}, use_stream={config['use_stream']}")
+    print(f"Sampling: temperature={config['temperature']}, random_seed={config['random_seed']}")
     print(f"Others: dtype={config['dtype']}, cuda_graph={config['cuda_graph']}, memory_limit={config['memory_limit']}")
     if config['apply_sparse']:
         print(f"Sparse Attention: sink_window={config['sink_window_size']}, block_window={config['block_window_size']}, sparse_topk_k={config['sparse_topk_k']}, sparse_switch={config['sparse_switch']}, compress_lse={config['apply_compress_lse']}")
