@@ -70,11 +70,16 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
             self._show_prefill_progress = False
         
         # Measure prefill time
-        torch.cuda.synchronize()
-        prefill_start = time.time()
-        logits = self.prefill(input_ids, position_ids)
-        torch.cuda.synchronize()
-        prefill_time = time.time() - prefill_start
+        if self.use_enter and use_stream:
+            # In use_enter mode, timing will be handled inside prefill method
+            logits = self.prefill(input_ids, position_ids)
+            prefill_time = getattr(self, '_last_prefill_time', 0.0)  # Get actual prefill time
+        else:
+            torch.cuda.synchronize()
+            prefill_start = time.time()
+            logits = self.prefill(input_ids, position_ids)
+            torch.cuda.synchronize()
+            prefill_time = time.time() - prefill_start
         
         if self.temperature > 0.0:
             self.tree_draft_ids[:1].copy_(torch.multinomial(F.softmax(logits[0]/self.temperature, dim=-1), num_samples=1, generator=self.generator))

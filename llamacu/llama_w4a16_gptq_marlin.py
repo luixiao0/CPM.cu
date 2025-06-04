@@ -207,6 +207,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         num_chunks = (total_length + self.chunk_length - 1) // self.chunk_length
         
         prefill_start_time = None
+        actual_prefill_start = None
         
         # User interaction logic only when use_enter is True
         if self._show_prefill_progress and self.use_enter:
@@ -217,14 +218,22 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             
             # Replace the prompt with [Prefilling] - clear entire line first
             print("\r" + " " * 50 + "\r[Prefilling]", flush=True)
+            # Start timing after user presses Enter
+            prefill_start_time = time.time()
+            actual_prefill_start = prefill_start_time
         
         # Initialize progress display for stream mode (always when _show_prefill_progress is True)
         if self._show_prefill_progress:
-            prefill_start_time = time.time()
+            if prefill_start_time is None:  # Only set start time if not already set above
+                prefill_start_time = time.time()
             if not self.use_enter:
                 print("Prefilling: 0.0% (0/{} tokens) @ 0.0 tokens/s".format(total_length), end="", flush=True)
             else:
                 print("Prefilling: 0.0% (0/{} tokens) @ 0.0 tokens/s".format(total_length), end="", flush=True)
+        
+        # Record actual computation start time if not set yet
+        if actual_prefill_start is None:
+            actual_prefill_start = time.time()
         
         for chunk_idx, i in enumerate(range(0, input_ids.numel(), self.chunk_length)):
             # torch.cuda.nvtx.range_push(f"chunk from {i}")
@@ -243,6 +252,9 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 tokens_per_sec = current_tokens / elapsed_time if elapsed_time > 0 else 0.0
                 print(f"\rPrefilling: {progress:.1f}% ({current_tokens}/{total_length} tokens) @ {tokens_per_sec:.1f} tokens/s", end="", flush=True)
         
+        # Calculate actual prefill time
+        actual_prefill_time = time.time() - actual_prefill_start
+        
         # Final completion status for stream mode
         if self._show_prefill_progress:
             if prefill_start_time is not None:
@@ -253,6 +265,9 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                 print("\n[Decoding]")  # Show decoding status and move to next line only with use_enter
             else:
                 print()  # Just a newline for normal mode
+        
+        # Store the actual prefill time for use in generate method
+        self._last_prefill_time = actual_prefill_time
         
         return self.logits[:1].clone()
 
@@ -293,11 +308,16 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             self._show_prefill_progress = True
         
         # Measure prefill time
-        torch.cuda.synchronize()
-        prefill_start = time.time()
-        logits = self.prefill(input_ids, position_ids)
-        torch.cuda.synchronize()
-        prefill_time = time.time() - prefill_start
+        if self.use_enter and use_stream:
+            # In use_enter mode, timing will be handled inside prefill method
+            logits = self.prefill(input_ids, position_ids)
+            prefill_time = getattr(self, '_last_prefill_time', 0.0)  # Get actual prefill time
+        else:
+            torch.cuda.synchronize()
+            prefill_start = time.time()
+            logits = self.prefill(input_ids, position_ids)
+            torch.cuda.synchronize()
+            prefill_time = time.time() - prefill_start
         
         if self.temperature > 0:
             token = torch.multinomial(F.softmax(logits[0]/self.temperature, dim=-1), num_samples=1, generator=self.generator)[0]
