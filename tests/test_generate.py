@@ -40,6 +40,7 @@ default_config = {
 # Demo Configuration: Only for MiniCPM4 demo, will be deleted after release
 demo_config = {
     'use_enter': False,
+    'use_decode_enter': False,
 }
 
 # Combined Default Configurations
@@ -135,6 +136,10 @@ def create_argument_parser():
                         help='Use enter to generate')
     parser.add_argument('--no-use-enter', '--no_use_enter', action='store_false', dest='use_enter',
                         help='Do not use enter to generate')
+    parser.add_argument('--use-decode-enter', '--use_decode_enter', action='store_true',
+                        help='Use enter before decode phase')
+    parser.add_argument('--no-use-decode-enter', '--no_use_decode_enter', action='store_false', dest='use_decode_enter',
+                        help='Do not use enter before decode phase')
     
     return parser
 
@@ -206,6 +211,7 @@ def create_model(eagle_path, base_path, config):
         'apply_compress_lse': config['apply_compress_lse'],
         'memory_limit': config['memory_limit'],
         'use_enter': config['use_enter'],
+        'use_decode_enter': config['use_decode_enter'],
         'temperature': config['temperature'],
         'random_seed': config['random_seed']
     }
@@ -432,6 +438,7 @@ def print_config(config, use_stream):
     print(f"Features: eagle={config['apply_eagle']}, quant={config['apply_quant']}, sparse={config['apply_sparse']}")
     print(f"Generation: num_generate={config['num_generate']}, chunk_length={config['chunk_length']}, use_teminators={config['use_teminators']}, use_stream={config['use_stream']}")
     print(f"Sampling: temperature={config['temperature']}, random_seed={config['random_seed']}")
+    print(f"Demo: use_enter={config['use_enter']}, use_decode_enter={config['use_decode_enter']}")
     print(f"Others: dtype={config['dtype']}, cuda_graph={config['cuda_graph']}, memory_limit={config['memory_limit']}")
     if config['apply_sparse']:
         print(f"Sparse Attention: sink_window={config['sink_window_size']}, block_window={config['block_window_size']}, sparse_topk_k={config['sparse_topk_k']}, sparse_switch={config['sparse_switch']}, compress_lse={config['apply_compress_lse']}")

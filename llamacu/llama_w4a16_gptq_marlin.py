@@ -33,6 +33,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
                  sparse_switch: int = 8192,
                  apply_compress_lse: bool = False,
                  use_enter: bool = False,
+                 use_decode_enter: bool = False,
                  temperature: float = 0.0,
                  random_seed: int = None,
     ):
@@ -45,6 +46,7 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
         self.dtype_int = dtype_to_int(self.dtype)
         self.cuda_graph = cuda_graph
         self.use_enter = use_enter
+        self.use_decode_enter = use_decode_enter
         self.temperature = temperature
         self.chunk_length = chunk_length
         # Flag for showing prefill progress (used in stream mode)
@@ -323,6 +325,19 @@ class W4A16GPTQMarlinLLM(torch.nn.Module):
             token = torch.multinomial(F.softmax(logits[0]/self.temperature, dim=-1), num_samples=1, generator=self.generator)[0]
         else:   
             token = logits[0].argmax(dim=-1).item()
+
+        # Wait for user input before decode phase if use_decode_enter is enabled
+        if self.use_decode_enter:
+            if use_stream and self.use_enter:
+                # In stream mode with use_enter, we already showed [Decoding], just wait for input
+                print("Please Press Enter to Start Decoding...", end="", flush=True)
+                input()  # Wait for Enter key
+                print("\r" + " " * 50 + "\r", end="", flush=True)  # Clear the prompt without showing [Decoding] again
+            else:
+                # In other modes, show prompt and wait
+                print("Please Press Enter to Start Decoding...", end="", flush=True)
+                input()  # Wait for Enter key
+                print("\r" + " " * 50 + "\r[Decoding]", flush=True)  # Show [Decoding] only when use_enter is not enabled
 
         if not hasattr(self, "input_ids"):
             self.input_ids = torch.tensor([0], dtype=torch.int32, device="cuda")

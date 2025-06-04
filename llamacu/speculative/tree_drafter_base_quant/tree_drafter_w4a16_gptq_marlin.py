@@ -86,6 +86,19 @@ class W4A16GPTQMarlinLLM_with_tree_drafter(W4A16GPTQMarlinLLM):
         else:
             self.tree_draft_ids[:1].copy_(logits[0].argmax(dim=-1))
 
+        # Wait for user input before decode phase if use_decode_enter is enabled
+        if self.use_decode_enter:
+            if use_stream and self.use_enter:
+                # In stream mode with use_enter, we already showed [Decoding], just wait for input
+                print("Please Press Enter to Start Decoding...", end="", flush=True)
+                input()  # Wait for Enter key
+                print("\r" + " " * 50 + "\r", end="", flush=True)  # Clear the prompt without showing [Decoding] again
+            else:
+                # In other modes, show prompt and wait
+                print("Please Press Enter to Start Decoding...", end="", flush=True)
+                input()  # Wait for Enter key
+                print("\r" + " " * 50 + "\r[Decoding]", flush=True)  # Show [Decoding] only when use_enter is not enabled
+
         if use_stream:
             # Stream generation for quantized tree drafter (optimized)
             def _stream_generator():
