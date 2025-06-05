@@ -19,13 +19,13 @@ CPM.cu 是一个针对端侧大模型推理设计的高效 CUDA 推理框架，�
     - 支持 MTP 层的量化
 - [2025.05.29] 支持 [SpecMQuant](https://github.com/AI9Stars/SpecMQuant) 的量化。
     - 支持 LLM 的 Marlin GPTQ 内核
-    - 支持量化 LLM 的推测采样
+    - 支持量化 LLM 的投机采样
 - [2025.03.01] 在 [FR-Spec](https://github.com/thunlp/FR-Spec) 发布首个版本。
-    - 最先进的推测采样实现
-    - 支持 FR-Spec：基于频率排序的推测采样
-    - 支持 Flash-Attention 中的树形验证
-    - 支持静态内存管理和内存重用
-    - 支持融合内核
+    - 速度最快的投机采样实现
+    - 支持 FR-Spec, 基于词频优化的投机采样
+    - 支持 Flash-Attention 中的树状投机采样验证
+    - 支持静态内存管理和内存复用
+    - 支持计算融合内核
     - 支持分块预填充
     - 支持 CUDA Graph
 
@@ -39,13 +39,13 @@ CPM.cu 是一个针对端侧大模型推理设计的高效 CUDA 推理框架，�
 
 ## 快速开始
 
-- [安装](#install)
+- [框架安装](#install)
 - [模型权重](#modelweights)
 - [运行示例](#example)
 
 <div id="install"></div>
 
-## 安装
+## 框架安装
 
 ### 从源码安装
 
@@ -59,7 +59,7 @@ python3 setup.py install
 
 ## 准备模型
 
-请按照 [MiniCPM4](https://github.com/openbmb/minicpm) 的说明下载模型权重。
+请按照 [MiniCPM4 的 README](https://github.com/openbmb/minicpm) 的说明下载模型权重。
 
 <div id="example"></div>
 
@@ -97,6 +97,22 @@ Decode token/s when acc = 1: 69.49
 - `Prefill` (输入) 和 `Decode` (输出) 速度通过（长度、时间和 token/s）输出。
 - `Mean accept length` (平均接受长度) 是使用投机采样时接受 token 的平均长度。
 - `Decode token/s when acc = 1` 是将输出速度除以平均接受长度的结果。
+
+## 代码结构
+
+```bash
+cpm.cu/
+├── src/
+│   ├── flash_attn/ # attention: 稀疏, 投机树状验证等
+│   ├── model/
+│   │   ├── minicpm4/ # minicpm4 模型
+│   │   ├── w4a16_gptq_marlin/ # Marlin GPTQ 计算内核
+│   │   └── ... # 通用层
+│   ├── entry.cu # pybind: 绑定 CUDA 和 Python
+│   └── ...
+├── cpmcu/ # Python 接口
+└── ...
+```
 
 ## 致谢
 

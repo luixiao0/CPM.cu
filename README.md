@@ -23,7 +23,7 @@ CPM.cu is a high-performance CUDA implementation for LLMs, optimized for end-dev
 - [2025.03.01] Release the first version at [FR-Spec](https://github.com/thunlp/FR-Spec).
     - SOTA Speculative Sampling Implementation
     - Support FR-Spec: Frequency-Ranked Speculative Sampling
-    - Support Tree-based verification in Flash-Attention
+    - Support Tree-based verification of Speculative Sampling in Flash-Attention
     - Support Static memory management and memory reuse
     - Support Fused kernels
     - Support Chunked prefill
@@ -59,7 +59,7 @@ python3 setup.py install
 
 ## Prepare Model
 
-Please follow [MiniCPM4](https://github.com/openbmb/minicpm) to download the model weights.
+Please follow [MiniCPM4's README](https://github.com/openbmb/minicpm) to download the model weights.
 
 <div id="example"></div>
 
@@ -97,6 +97,22 @@ Where:
 - the `Prefill` and `Decode` speed are output by (length, time and token/s).
 - the `Mean accept length` is the average length of the accepted tokens when using Speculative Sampling.
 - the `Decode token/s when acc = 1` is the result of dividing the Decode speed by the Mean accept length.
+
+## Code Structure
+
+```bash
+cpm.cu/
+├── src/
+│   ├── flash_attn/ # attention kernels: sparse, tree-verification, etc.
+│   ├── model/
+│   │   ├── minicpm4/ # minicpm4 model
+│   │   ├── w4a16_gptq_marlin/ # marlin kernel
+│   │   └── ... # common layers
+│   ├── entry.cu # pybind: bind cuda and python
+│   └── ...
+├── cpmcu/ # python interface
+└── ...
+```
 
 ## Acknowledgments
 
