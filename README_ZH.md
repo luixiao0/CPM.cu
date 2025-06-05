@@ -100,12 +100,14 @@ Decode token/s when acc = 1: 69.49
 
 ## 致谢
 
-我们从以下仓库中获取了部分代码和实现灵感：
+我们的 `src/flash_attn` 文件夹基于 [FlashAttention](https://github.com/Dao-AILab/flash-attention/tree/v2.6.3/csrc/flash_attn) 并进行了修改。
+
+我们从以下仓库中获取了实现灵感：
 
 - [EAGLE](https://github.com/SafeAILab/EAGLE)
-- [FlashAttention](https://github.com/Dao-AILab/flash-attention)
-- [SGLang](https://github.com/sgl-project/sglang)
+- [Block-Sparse-Attention](https://github.com/mit-han-lab/Block-Sparse-Attention)
 - [vLLM](https://github.com/vllm-project/vllm)
+- [SGLang](https://github.com/sgl-project/sglang)
 
 ## 引用
 

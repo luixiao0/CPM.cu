@@ -100,12 +100,14 @@ Where:
 
 ## Acknowledgments
 
-We have drawn inspiration from the following repositories for some code and implementation ideas:
+Our `src/flash_attn` folder modified based on [FlashAttention](https://github.com/Dao-AILab/flash-attention/tree/v2.6.3/csrc/flash_attn).
+
+We have drawn inspiration from the following repositories:
 
 - [EAGLE](https://github.com/SafeAILab/EAGLE)
-- [FlashAttention](https://github.com/Dao-AILab/flash-attention)
-- [SGLang](https://github.com/sgl-project/sglang)
+- [Block-Sparse-Attention](https://github.com/mit-han-lab/Block-Sparse-Attention)
 - [vLLM](https://github.com/vllm-project/vllm)
+- [SGLang](https://github.com/sgl-project/sglang)
 
 ## Citation
 
