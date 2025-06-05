@@ -1,9 +1,8 @@
 # CPM.cu
 
-<strong>[中文](./README_ZH.md) |
-English</strong>
+<strong>[中文版本](./README_ZH.md) | English</strong>
 
-CPM.cu is a high-performance CUDA implementation for LLMs, optimized for MiniCPM4 and featuring cutting-edge techniques in sparse architecture, speculative sampling and quantization.
+CPM.cu is a high-performance CUDA implementation for LLMs, optimized for end-device inference and featuring cutting-edge techniques in **sparse architecture**, **speculative sampling** and **quantization**.
 
 <a href="https://github.com/OpenBMB/minicpm"><img src="https://img.shields.io/static/v1?label=MiniCPM4 Project&message=Web&color=green"></a> &ensp;
 <a href="https://github.com/OpenBMB/cpm.cu/blob/main/LICENSE">
@@ -93,8 +92,11 @@ Mean accept length: 2.17
 Decode token/s when acc = 1: 69.49
 ```
 
-Where the Prefill and Decode speed are output, and the Mean accept length is the average length of the accepted tokens when using Speculative Sampling.
-The Decode token/s when acc = 1 is the result of dividing the Decode speed by the Mean accept length.
+Where:
+
+- the `Prefill` and `Decode` speed are output by (length, time and token/s).
+- the `Mean accept length` is the average length of the accepted tokens when using Speculative Sampling.
+- the `Decode token/s when acc = 1` is the result of dividing the Decode speed by the Mean accept length.
 
 ## Acknowledgments
 
