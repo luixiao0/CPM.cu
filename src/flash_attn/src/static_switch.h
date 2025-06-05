@@ -93,7 +93,7 @@
 #define FP16_SWITCH(COND, ...) \
   [&] { \
     if (!(COND)) { \
-      throw std::runtime_error("BF16 support not compiled. Please recompile with LLAMACU_DTYPE=bf16 or LLAMACU_DTYPE=fp16,bf16"); \
+      throw std::runtime_error("BF16 support not compiled. Please recompile with CPMCU_DTYPE=bf16 or CPMCU_DTYPE=fp16,bf16"); \
     } \
     using elem_type = cutlass::half_t; \
     return __VA_ARGS__(); \
@@ -102,7 +102,7 @@
 #define FP16_SWITCH(COND, ...) \
   [&] { \
     if (COND) { \
-      throw std::runtime_error("FP16 support not compiled. Please recompile with LLAMACU_DTYPE=fp16 or LLAMACU_DTYPE=fp16,bf16"); \
+      throw std::runtime_error("FP16 support not compiled. Please recompile with CPMCU_DTYPE=fp16 or CPMCU_DTYPE=fp16,bf16"); \
     } \
     using elem_type = cutlass::bfloat16_t; \
     return __VA_ARGS__(); \

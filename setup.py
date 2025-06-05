@@ -6,7 +6,7 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 def detect_cuda_arch():
     """Automatically detect current CUDA architecture"""
     # 1. First check if environment variable specifies architecture
-    env_arch = os.getenv("LLAMACU_CUDA_ARCH")
+    env_arch = os.getenv("CPMCU_CUDA_ARCH")
     if env_arch:
         # Only support simple comma-separated format, e.g., "80,86"
         arch_list = []
@@ -21,7 +21,7 @@ def detect_cuda_arch():
             if not token.isdigit():
                 raise ValueError(
                     f"Invalid CUDA architecture format: '{token}'. "
-                    f"LLAMACU_CUDA_ARCH should only contain comma-separated numbers like '80,86'"
+                    f"CPMCU_CUDA_ARCH should only contain comma-separated numbers like '80,86'"
                 )
             
             arch_list.append(token)
@@ -37,7 +37,7 @@ def detect_cuda_arch():
         # 3. If no environment variable and no torch, throw error
         raise RuntimeError(
             "CUDA architecture detection failed. Please either:\n"
-            "1. Set environment variable LLAMACU_CUDA_ARCH (e.g., export LLAMACU_CUDA_ARCH=90), or\n"
+            "1. Set environment variable CPMCU_CUDA_ARCH (e.g., export CPMCU_CUDA_ARCH=90), or\n"
             "2. Install PyTorch (pip install torch) for automatic detection.\n"
             "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
         )
@@ -58,14 +58,14 @@ def detect_cuda_arch():
         else:
             raise RuntimeError(
                 "No CUDA devices detected. Please either:\n"
-                "1. Set environment variable LLAMACU_CUDA_ARCH (e.g., export LLAMACU_CUDA_ARCH=90), or\n"
+                "1. Set environment variable CPMCU_CUDA_ARCH (e.g., export CPMCU_CUDA_ARCH=90), or\n"
                 "2. Ensure CUDA devices are available and properly configured.\n"
                 "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
             )
     except Exception as e:
         raise RuntimeError(
             f"CUDA architecture detection failed: {e}\n"
-            "Please set environment variable LLAMACU_CUDA_ARCH (e.g., export LLAMACU_CUDA_ARCH=90).\n"
+            "Please set environment variable CPMCU_CUDA_ARCH (e.g., export CPMCU_CUDA_ARCH=90).\n"
             "Common CUDA architectures: 70 (V100), 75 (T4), 80 (A100), 86 (RTX 30xx), 89 (RTX 40xx), 90 (H100)"
         )
 
@@ -75,11 +75,11 @@ def append_nvcc_threads(nvcc_extra_args):
 
 def get_compile_args():
     """Return different compilation arguments based on debug mode"""
-    debug_mode = os.getenv("LLAMACU_DEBUG", "0").lower() in ("1", "true", "yes")
-    perf_mode = os.getenv("LLAMACU_PERF", "0").lower() in ("1", "true", "yes")
+    debug_mode = os.getenv("CPMCU_DEBUG", "0").lower() in ("1", "true", "yes")
+    perf_mode = os.getenv("CPMCU_PERF", "0").lower() in ("1", "true", "yes")
     
     # Check precision type environment variable
-    dtype_env = os.getenv("LLAMACU_DTYPE", "fp16").lower()
+    dtype_env = os.getenv("CPMCU_DTYPE", "fp16").lower()
     
     # Parse precision type list
     dtype_list = [dtype.strip() for dtype in dtype_env.split(',')]
@@ -89,7 +89,7 @@ def get_compile_args():
     invalid_dtypes = [dtype for dtype in dtype_list if dtype not in valid_dtypes]
     if invalid_dtypes:
         raise ValueError(
-            f"Invalid LLAMACU_DTYPE values: {invalid_dtypes}. "
+            f"Invalid CPMCU_DTYPE values: {invalid_dtypes}. "
             f"Supported values: 'fp16', 'bf16', 'fp16,bf16'"
         )
     
@@ -122,7 +122,7 @@ def get_compile_args():
     ] + dtype_defines
     
     if debug_mode:
-        print("Debug mode enabled (LLAMACU_DEBUG=1)")
+        print("Debug mode enabled (CPMCU_DEBUG=1)")
         cxx_args = common_cxx_args + [
             "-g3",           # Most detailed debug information
             "-O0",           # Disable optimization
@@ -156,11 +156,11 @@ def get_compile_args():
     
     # Add performance testing control
     if perf_mode:
-        print("Performance monitoring enabled (LLAMACU_PERF=1)")
+        print("Performance monitoring enabled (CPMCU_PERF=1)")
         cxx_args.append("-DENABLE_PERF")
         nvcc_base_args.append("-DENABLE_PERF")
     else:
-        print("Performance monitoring disabled (LLAMACU_PERF=0)")
+        print("Performance monitoring disabled (CPMCU_PERF=0)")
     
     return cxx_args, nvcc_base_args, link_args, dtype_set
 
@@ -250,7 +250,7 @@ try:
     # Configure extension module
     ext_modules = [
         CUDAExtension(
-            name='llamacu.C',
+            name='cpmcu.C',
             sources = [
                 "src/entry.cu",
                 "src/utils.cu",
@@ -289,10 +289,10 @@ except Exception as e:
     print("Skipping extension module build, installing Python package only...")
 
 setup(
-    name='llamacu',
-    version='0.0.0',
+    name='cpmcu',
+    version='1.0.0',
     author_email="acha131441373@gmail.com",
-    description="llama cuda implementation",
+    description="cpm cuda implementation",
     packages=find_packages(),
     setup_requires=[
         "pybind11",

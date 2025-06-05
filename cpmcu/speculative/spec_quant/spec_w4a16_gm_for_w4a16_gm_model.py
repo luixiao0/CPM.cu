@@ -3,7 +3,7 @@ from transformers import AutoTokenizer, AutoConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from safetensors.torch import load_file
 
-from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ...llm_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
 
 import torch
 import time

@@ -1,70 +1,32 @@
-# Speculative Decoding Meets Quantization: Compatibility Evaluation and Hierarchical Framework Design
+# CPM.cu
 
-## Installation from source
+<div align="center">
 
-```bash
-conda create -n specmquant python==3.11 && conda activate specmquant
-# install pytorch 
-pip install -e .
-```
+**A CUDA-based inference framework for CPM models**
 
-## Evaluation
+  <strong>[中文](./README_ZH.md) |
+  English</strong>
 
-### Prepare
+</div>
 
-You can use an external quantization toolkit to quantize the model.
-- [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ): W4A16
-- [QQQ](https://github.com/HandH1998/QQQ): W4A8-QQQ, W4A8-QQQ-g128
-- [DeepCompressor](https://github.com/mit-han-lab/deepcompressor): W8A8, W4A8-QoQ, W4A8-QoQ-g128
+## News
 
-For `W4A16`, `W4A8-QQQ`, `W4A8-QQQ-g128` and `W4A8-QoQ-g128`, after quantizing with the above toolkits you need to convert the model checkpoints using the scripts in `scripts/model_convert`.
+- [2025.06.06] Support MiniCPM4.
+- [2025.05.29] Support Quantization at https://github.com/AI9Stars/SpecMQuant.
+- [2025.03.01] First version of the CUDA inference framework at https://github.com/thunlp/FR-Spec.
 
-For the models applied with rotation method, you need to convert the eagle checkpoint using the scripts `scripts/model_convert/convert_eagle_rotation.sh`.
+## Install
 
-### Run Evaluation
-
-#### MT bench
-
-All scripts for evaluation are located in the `scripts/eval/mt_bench` folder. Here we use Llama-3-8B-Instruct as an example:
+### Installation from source
 
 ```bash
-# 1. Run evaluations
-bash scripts/eval/mt_bench/llama3-8b-instruct/<precision>/run_baseline.sh
-bash scripts/eval/mt_bench/llama3-8b-instruct/<precision>/run_eagle.sh
-
-# 2. Evaluate speed
-bash scripts/mt_bench/llama3-8b-instruct/speed_up.sh
-
+git clone https://github.com/OpenBMB/cpm.cu.git --recursive
+cd cpm.cu
+python3 setup.py install
 ```
 
-Replace `<precision>` with one of: `fp16`, `w4a16`, `w4a8-qqq`, `w4a8-qqq-g128`, `w4a8-qoq`, or `w4a8-qoq-g128`.
-
-#### Spec bench
-
-Spec bench evaluation for W4A16 Llama-3-70B-Instruct
+## Example
 
 ```bash
-# 1. Run evaluations
-bash scripts/eval/spec_bench/llama3-70b-instruct-w4a16/run_baseline.sh
-bash scripts/eval/spec_bench/llama3-70b-instruct-w4a16/run_spec.sh
-bash scripts/eval/spec_bench/llama3-70b-instruct-w4a16/run_eagle.sh
-bash scripts/eval/spec_bench/llama3-70b-instruct-w4a16/run_hierspec.sh
-
-
-# 2. Evaluate speed
-bash scripts/eval/spec_bench/llama3-70b-instruct-w4a16/speedup.sh
-
+python3 tests/test_generate.py
 ```
-
-#### Performance evaluation
-
-We provide the performance evaluation for `gsm8k` and `human_eval`.
-
-```bash
-# 1. Run evaluations
-bash scripts/eval/<benchmark>/llama3-8b-instruct/<precision>/run_baseline.sh
-
-# 2. Evaluate preformance
-bash scripts/eval/<benchmark>/llama3-8b-instruct/check_correctness.sh
-```
-

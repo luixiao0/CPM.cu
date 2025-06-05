@@ -1,5 +1,5 @@
 from ... import C
-from ...llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from ...llm_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
 
 import numpy as np
 import torch

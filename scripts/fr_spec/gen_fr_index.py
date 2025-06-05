@@ -53,7 +53,7 @@ if __name__ == '__main__':
 	parser.add_argument(
 		'--model_path', 
 		type=str, 
-		default='meta-llama/Llama-3-8B-Instruct',
+		default='openbmb/MiniCPM4-8B',
 		help='The path to the model.'
 	)
 	parser.add_argument(

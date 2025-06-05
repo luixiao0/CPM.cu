@@ -1,5 +1,5 @@
 from .. import C
-from ..llama import LLM
+from ..llm import LLM
 
 import torch
 import torch.nn.functional as F

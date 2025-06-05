@@ -40,7 +40,7 @@
 #define DTYPE_SWITCH(COND, ...) \
   [&] { \
     if (COND != 0) { \
-      throw std::runtime_error("BF16 support not compiled. Please recompile with LLAMACU_DTYPE=bf16 or LLAMACU_DTYPE=fp16,bf16"); \
+      throw std::runtime_error("BF16 support not compiled. Please recompile with CPMCU_DTYPE=bf16 or CPMCU_DTYPE=fp16,bf16"); \
     } \
     using elem_type = __half; \
     return __VA_ARGS__(); \
@@ -49,7 +49,7 @@
 #define DTYPE_SWITCH(COND, ...) \
   [&] { \
     if (COND == 0) { \
-      throw std::runtime_error("FP16 support not compiled. Please recompile with LLAMACU_DTYPE=fp16 or LLAMACU_DTYPE=fp16,bf16"); \
+      throw std::runtime_error("FP16 support not compiled. Please recompile with CPMCU_DTYPE=fp16 or CPMCU_DTYPE=fp16,bf16"); \
     } \
     using elem_type = __nv_bfloat16; \
     return __VA_ARGS__(); \

@@ -1,8 +1,8 @@
 import torch
-from llamacu.llama import LLM
-from llamacu.llama_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
-from llamacu.speculative import LLM_with_eagle
-from llamacu.speculative.eagle_base_quant.eagle_base_w4a16_marlin_gptq import W4A16GPTQMarlinLLM_with_eagle
+from cpmcu.llm import LLM
+from cpmcu.llm_w4a16_gptq_marlin import W4A16GPTQMarlinLLM
+from cpmcu.speculative import LLM_with_eagle
+from cpmcu.speculative.eagle_base_quant.eagle_base_w4a16_marlin_gptq import W4A16GPTQMarlinLLM_with_eagle
 from transformers import AutoTokenizer
 import time
 import numpy as np
