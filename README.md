@@ -35,12 +35,13 @@
     - Static memory management and memory reuse
     - Fused kernels
     - Chunked prefill
+    - CUDA Graph support
 
 <div id="demo"></div>
 
 ## Demo
 
-https://github.com/thunlp/Ouroboros/blob/main/figure/ouroboros.gif
+![TODO placeholder](https://github.com/thunlp/Ouroboros/blob/main/figure/ouroboros.gif)
 
 <div id="getstart"></div>
 
@@ -101,6 +102,12 @@ We have drawn inspiration from the following repositories for some code and impl
   title={Speculative Decoding Meets Quantization: Compatibility Evaluation and Hierarchical Framework Design},
   author={Zhang, Yudi and Zhao, Weilin and Han, Xu and Zhao, Tiejun and Xu, Wang and Cao, Hailong and Zhu, Conghui},
   journal={arXiv preprint arXiv:2505.22179},
+  year={2025}
+}
+
+@article{minicpm4,
+  title={MiniCPM4: Ultra-Efficient LLMs on End Devices},
+  author={MiniCPM},
   year={2025}
 }
 ```
