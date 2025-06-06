@@ -5,8 +5,9 @@
 #include "minicpm4_model.cuh"
 #include "minicpm4_w4a16_gptq_marlin_model.cuh"
 #include "../w4a16_gptq_marlin/w4a16_gptq_marlin_layer.cuh"
+#include "../w4a16_gptq_marlin/w4a16_gptq_marlin_linear.cuh"
 
-template<typename T, class ModelType, class LayerType>
+template<typename T, class ModelType, class LayerType, class Fc1Type, class Fc2Type>
 struct MiniCPM4EagleImpl : Model {
     int num_layers;
     int num_iter;
@@ -20,8 +21,8 @@ struct MiniCPM4EagleImpl : Model {
     ModelType* model = nullptr;
     KVCacheManager<T>* kv_caches = nullptr;
     std::vector<LayerType*> layers;
-    Linear<T, true, true> *fc1 = nullptr;
-    Linear<T> *fc2 = nullptr;
+    Fc1Type *fc1 = nullptr;
+    Fc2Type *fc2 = nullptr;
     Linear<T>* lm_head = nullptr;
     int32_t* token_id_remap = nullptr;
     RMSNorm<T> *input_norm1 = nullptr;
@@ -43,6 +44,9 @@ struct MiniCPM4EagleImpl : Model {
     int32_t *h_best, *d_best;    
 
     T* tmp_kvcache;
+
+    T* a_tmp = nullptr;
+    float* c_tmp = nullptr;
 
     MiniCPM4EagleImpl(
         ModelType* model,
@@ -70,8 +74,13 @@ struct MiniCPM4EagleImpl : Model {
         this->use_attn_norm = use_attn_norm;
 
         kv_caches = new KVCacheManager<T>(num_layers, this->model->num_key_value_heads, this->model->head_dim);
-        fc1 = new Linear<T, true, true>(this->model->hidden_size, this->model->hidden_size);
-        fc2 = new Linear<T>(this->model->hidden_size, this->model->hidden_size);
+        if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+            fc1 = new W4A16GPTQMarlinLinear<T, true, true>(this->model->hidden_size, this->model->hidden_size, group_size);
+            fc2 = new W4A16GPTQMarlinLinear<T>(this->model->hidden_size, this->model->hidden_size, group_size);
+        } else {
+            fc1 = new Linear<T, true, true>(this->model->hidden_size, this->model->hidden_size);
+            fc2 = new Linear<T>(this->model->hidden_size, this->model->hidden_size);
+        }
         if (use_input_norm) {
             input_norm1 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
             input_norm2 = new RMSNorm<T>(this->model->hidden_size, this->model->rms_norm_eps);
@@ -116,6 +125,12 @@ struct MiniCPM4EagleImpl : Model {
     }
 
     int64_t init_output_ptr(Memory* memory, int32_t num_tokens, int64_t offset) {
+        if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+            offset = memory->allocate((void**)&this->a_tmp, offset, 2 * num_tokens * this->model->hidden_size * sizeof(T));
+            int reduce_max_m = marlin::determine_reduce_max_m(num_tokens, marlin::max_par);
+            int reduce_n = 2 * this->model->hidden_size;
+            offset = memory->allocate((void**)&this->c_tmp, offset, reduce_max_m * reduce_n * sizeof(float));
+        }
         offset = fc1->init_output_ptr(memory, num_tokens, offset);
         offset = fc2->init_output_ptr(memory, num_tokens, offset);
         if (use_input_norm) {
@@ -210,11 +225,21 @@ struct MiniCPM4EagleImpl : Model {
         if (use_input_norm) {
             this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
             this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
-            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
-            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+            if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+                this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output, this->a_tmp, this->c_tmp);
+                this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output, this->a_tmp, this->c_tmp);
+            } else {
+                this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+                this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+            }
         } else {
-            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+            if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+                this->fc1->prefill(calc_stream, num_prev, this->prev_embed, this->a_tmp, this->c_tmp);
+                this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state, this->a_tmp, this->c_tmp);
+            } else {
+                this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+                this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+            }
         }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
@@ -230,11 +255,21 @@ struct MiniCPM4EagleImpl : Model {
         if (use_input_norm) {
             this->input_norm1->prefill(calc_stream, num_prev, this->prev_embed, nullptr);
             this->input_norm2->prefill(calc_stream, num_prev, this->prev_hidden_state, nullptr);
-            this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
-            this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+            if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+                this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output, this->a_tmp, this->c_tmp);
+                this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output, this->a_tmp, this->c_tmp);
+            } else {
+                this->fc1->prefill(calc_stream, num_prev, this->input_norm1->output);
+                this->fc2->prefill(calc_stream, num_prev, this->input_norm2->output);
+            }
         } else {
-            this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
-            this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+            if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+                this->fc1->prefill(calc_stream, num_prev, this->prev_embed, this->a_tmp, this->c_tmp);
+                this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state, this->a_tmp, this->c_tmp);
+            } else {
+                this->fc1->prefill(calc_stream, num_prev, this->prev_embed);
+                this->fc2->prefill(calc_stream, num_prev, this->prev_hidden_state);
+            }
         }
         elementwise_add(calc_stream, num_prev, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
         T* layer_output = nullptr;
@@ -302,11 +337,21 @@ struct MiniCPM4EagleImpl : Model {
             if (use_input_norm) {
                 this->input_norm1->prefill(calc_stream, topk_per_iter, this->model->embedding->output, nullptr);
                 this->input_norm2->prefill(calc_stream, topk_per_iter, this->fc1->output, nullptr);
-                this->fc1->prefill(calc_stream, topk_per_iter, this->input_norm1->output);
-                this->fc2->prefill(calc_stream, topk_per_iter, this->input_norm2->output);
+                if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+                    this->fc1->prefill(calc_stream, topk_per_iter, this->input_norm1->output, this->a_tmp, this->c_tmp);
+                    this->fc2->prefill(calc_stream, topk_per_iter, this->input_norm2->output, this->a_tmp, this->c_tmp);
+                } else {
+                    this->fc1->prefill(calc_stream, topk_per_iter, this->input_norm1->output);
+                    this->fc2->prefill(calc_stream, topk_per_iter, this->input_norm2->output);
+                }
             } else {
-                this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
-                this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+                if constexpr (std::is_same_v<Fc1Type, W4A16GPTQMarlinLinear<T, true, true>>) {
+                    this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output, this->a_tmp, this->c_tmp);
+                    this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output, this->a_tmp, this->c_tmp);
+                } else {
+                    this->fc2->prefill(calc_stream, topk_per_iter, this->fc1->output);
+                    this->fc1->prefill(calc_stream, topk_per_iter, this->model->embedding->output);
+                }
             }
             elementwise_add(calc_stream, topk_per_iter, this->model->hidden_size, this->fc1->output, this->fc2->output, this->fc2->output);
             T* layer_output = nullptr;

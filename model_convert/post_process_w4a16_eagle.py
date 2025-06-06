@@ -17,8 +17,12 @@ def post_process_eagle_w4a16_ckpt(fp_model_path, quant_model_path, output_path):
     assert (fp_model["embed_tokens.weight"].to(torch.float16) == quant_model["model.embed_tokens.weight"].cuda().to(torch.float16)).all(), "embed_tokens.weight mismatch"
     new_state_dict["embed_tokens.weight"] = fp_model["embed_tokens.weight"].to(torch.float16)
     
-    assert (fp_model["fc.weight"].to(torch.float16) == quant_model["fc.weight"].cuda().to(torch.float16)).all(), "fc.weight mismatch"
-    new_state_dict["fc.weight"] = fp_model["fc.weight"].to(torch.float16)
+    if "fc.weight" in quant_model.keys():
+        assert (fp_model["fc.weight"].to(torch.float16) == quant_model["fc.weight"].cuda().to(torch.float16)).all(), "fc.weight mismatch"
+        new_state_dict["fc.weight"] = fp_model["fc.weight"].to(torch.float16)
+    elif "fc.qweight" in quant_model.keys():
+        new_state_dict["fc.qweight"] = quant_model["fc.qweight"]
+        new_state_dict["fc.scales"] = quant_model["fc.scales"]
 
     new_state_dict["input_norm1.weight"] = fp_model["input_norm1.weight"].to(torch.float16)
     new_state_dict["input_norm2.weight"] = fp_model["input_norm2.weight"].to(torch.float16)

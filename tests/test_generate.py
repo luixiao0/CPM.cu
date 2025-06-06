@@ -181,7 +181,7 @@ def get_model_paths(path_prefix, config):
     """Get model paths based on configuration"""
     if config['test_minicpm4']:
         if config['apply_eagle_quant']:
-            eagle_path = f"{path_prefix}/minicpm4_eagle_marlin_3"
+            eagle_path = f"{path_prefix}/minicpm4_eagle_marlin_fc_quant_post_process_0604"
         else:
             eagle_path = f"{path_prefix}/job_35949"
     else:

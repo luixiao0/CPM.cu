@@ -90,7 +90,7 @@ class W4A16GPTQMarlinLLM_with_eagle(W4A16GPTQMarlinLLM_with_tree_drafter):
             if (not self.use_rotation) and 'embed_tokens' in name:
                 return
             if 'fc' in name:
-                if 'weight' in name:
+                if 'weight' in name or "scales" in name:
                     param1 = param[..., :param.shape[-1] // 2].contiguous()
                     param2 = param[..., param.shape[-1] // 2:].contiguous()
                     C.load_model(f"{cls}.{name.replace('fc', 'fc1')}", param1.data_ptr())
