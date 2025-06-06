@@ -68,7 +68,20 @@ python3 setup.py install
 我们提供了一个简单的示例来展示如何使用 CPM.cu。
 
 ```bash
-python3 tests/test_generate.py
+python3 tests/test_generate.py --prompt-file <输入文件路径> -p <模型路径>
+```
+
+如果您不指定模型路径，脚本将从 OpenBMB 的 Hugging Face 仓库加载模型。
+
+如果您不指定输入文件，将提供一个默认的 Haystack 任务，上下文长度为 15K。
+您可以使用 --help 了解更多关于脚本的功能。
+
+我们还有一个脚本，`tests/long_prompt_gen.py`，用于生成长代码总结。
+这个脚本会自动从本仓库中收集代码，并提示模型“总结代码”。
+
+```bash
+python3 tests/long_prompt_gen.py # 生成 prompt.txt (更多细节请见 --help)
+python3 tests/test_generate.py --prompt-file prompt.txt -p <模型路径>
 ```
 
 输出应为如下格式：
