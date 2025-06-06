@@ -127,6 +127,12 @@ cpm.cu/
 ├── cpmcu/ # Python 接口
 └── ...
 ```
+## 更多
+我们提供了FR-Spec的词频生成脚本，位于"scripts/fr_spec/gen_fr_index.py"，运行方式如下：
+```
+python scripts/fr_spec/gen_fr_index.py --model_path <your modelpath>
+```
+你可以修改代码使用自己的数据集。如果你的任务是特定垂直领域，根据领域构造词频对速度提升有显著收益。
 
 ## 致谢
 

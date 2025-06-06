@@ -128,6 +128,14 @@ CPM.cu/
 └── ...
 ```
 
+## More
+We provide a word frequency generation script for FR-Spec, located at "scripts/fr_spec/gen_fr_index.py". You can run it as follows:
+```
+python scripts/fr_spec/gen_fr_index.py --model_path <your_model_path>
+```
+You can modify the code to use your own dataset. If your task is in a specific vertical domain, constructing word frequencies tailored to that domain can significantly improve processing speed.
+
+
 ## Acknowledgments
 
 Our `src/flash_attn` folder modified based on [FlashAttention](https://github.com/Dao-AILab/flash-attention/tree/v2.6.3/csrc/flash_attn).
