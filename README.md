@@ -93,14 +93,14 @@ Prefilling: 100.0% (14774/14774 tokens) @ 6675.6 tokens/s - Complete!
 ==================================================
 Stream Generation Summary:
 ==================================================
-Prefill length: 14774
-Prefill time: 2.35 s
-Prefill tokens/s: 6291.27
-Decode length: 11
-Decode time: 0.07 s
-Decode tokens/s: 150.57
-Mean accept length: 2.17
-Decode token/s when acc = 1: 69.49
+Prefill length: 110290
+Prefill time: 16.86 s
+Prefill tokens/s: 6541.31
+Decode length: 216
+Decode time: 1.47 s
+Decode tokens/s: 146.95
+Mean accept length: 2.38
+Decode token/s when acc = 1: 61.63
 ```
 
 Where:
