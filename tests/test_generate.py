@@ -188,9 +188,7 @@ def check_or_download_model(path):
     if os.path.exists(path):
         return path
     else:
-        cache_dir = snapshot_download(
-            os.path.dirname(path),
-        )
+        cache_dir = snapshot_download(path)
         return cache_dir
 
 def get_model_paths(path_prefix, config):
