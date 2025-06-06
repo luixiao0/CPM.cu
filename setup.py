@@ -301,8 +301,8 @@ setup(
         "torch",
     ],
     install_requires=[
-        "transformers==4.46.2",
-        "accelerate==0.26.0",
+        "transformers>=4.46.2",
+        "accelerate>=0.26.0",
         "datasets",
         "fschat",
         "openai",
@@ -310,8 +310,18 @@ setup(
         "human_eval",
         "zstandard",
         "tree_sitter",
-        "tree-sitter-python"
+        "tree-sitter-python",
+        "fastapi>=0.68.0",
+        "uvicorn>=0.15.0",
+        "pydantic>=1.8.0",
+        "torch>=2.0.0",
+        "transformers>=4.36.0",
+        "sentencepiece>=0.1.99",
+        "huggingface_hub>=0.19.4",
     ],
     ext_modules=ext_modules,
     cmdclass=cmdclass,
+    dependency_links=[
+        "git+https://github.com/OpenBMB/infllmv2_cuda_impl.git@feature_infer#egg=infllmv2_cuda_impl"
+    ]
 ) 
