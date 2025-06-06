@@ -79,7 +79,8 @@ This script ​​automatically collects code from this repository​​ and pro
 ```bash
 python3 tests/long_prompt_gen.py
 ```
-You can use --help to learn more features about these scripts.
+You can use this file to generate prompt to reproduce our results.
+You can also use --help to learn more features of this script.
 
 The output should be of the following format:
 
