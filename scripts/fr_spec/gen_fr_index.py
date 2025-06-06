@@ -7,12 +7,22 @@ import argparse
 import os
 
 def main(args):
-	ds = load_dataset('cerebras/SlimPajama-627B', streaming=True, split='train')
+	print(f"Generating FR index for {args.model_name} with vocab size {args.vocab_size}")
+	print(f"This may take about 5-10 minutes with 1M lines on good network connection")
+	print("Loading dataset...")
+	ds = load_dataset('Salesforce/wikitext', 'wikitext-103-raw-v1', streaming=True)['train']
+	# Only take the number of samples we need to process
+	ds = ds.take(args.num_lines + 1)  # +1 to account for 0-indexing
+	print(f"Dataset limited to {args.num_lines + 1} samples")
+	
+	print("Loading tokenizer...")
 	tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+	print("Tokenizer loaded successfully")
 
 	token_counter = Counter()
 	num_lines = args.num_lines
 	num_tokens = 0
+	print("Starting to process data...")
 	for i, d in tqdm(enumerate(ds)):
 		tokens = tokenizer.encode(d['text'])
 		token_counter.update(tokens)
@@ -26,6 +36,7 @@ def main(args):
 
 	print(f"processed {num_lines} items")
 	print(f"processed {num_tokens} tokens")
+	print(f"unique tokens: {len(ids)}")
 	
 	os.makedirs(f'fr_index/{args.model_name}', exist_ok=True)
 			
@@ -36,10 +47,13 @@ def main(args):
 			freq_ids = ids[:r - not_in_ids] + eos_id
 		else:
 			freq_ids = ids[:r]
-		
-		print(f'save freq_{r}.pt, size:', len(freq_ids))
-		with open(f'fr_index/{args.model_name}/freq_{r}.pt', 'wb') as f:
-			torch.save(freq_ids, f)
+		if (r != len(freq_ids)):
+			print(f"Warning: requested vocab_size {r} but actual size: {len(freq_ids)}, file not saved")
+		else:
+			pt_path = f'fr_index/{args.model_name}/freq_{r}.pt'
+			print(f'save {pt_path}, actual size: {len(freq_ids)}')
+			with open(pt_path, 'wb') as f:
+				torch.save(freq_ids, f)
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -60,13 +74,13 @@ if __name__ == '__main__':
 		'--num_lines', 
 		type=int, 
 		default=1000000, 
-		help='The number of SlimPajama lines to process.'
+		help='The number of lines to process.'
 	)
 	parser.add_argument(
 		'--vocab_size',
 		nargs='+',
 		type=int,
-		default=[8192, 16384, 32768, 65536],
+		default=[8192, 16384, 32768],
 		help='The vocab sizes to process.'
 	)
 	
