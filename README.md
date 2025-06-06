@@ -69,11 +69,13 @@ We provide a simple example to show how to use CPM.cu to generate text.
 ```bash
 python3 tests/test_generate.py --prompt-file <your prompt file> -p <your modelpath>
 ```
-If you don't specific the model path, the scripts will load model from OpenBMB huggingface.
-If you don't specific the prompt file, a default haystack task with 15k context will be provided.
-You can use --help to learn more features about these scripts.
+If you don't ​​specify​​ the model path, the scripts will load the model from ​​OpenBMB's Hugging Face repository​​.
 
-We also provide a scripts test/long_prompt_gen.py to generate long code summarization prompt.
+If you don't ​​specify​​ the prompt file, a default ​​Haystack task​​ with ​​15K context length​​ will be provided.
+You can use --help to learn more ​​about the script's features​​.
+
+We also provide a script, test/long_prompt_gen.py, to generate ​​long code summarization prompts​​.
+This script ​​automatically collects code from this repository​​ and prompts ​​the model to "Summarize the code."​
 ```bash
 python3 tests/long_prompt_gen.py
 ```
