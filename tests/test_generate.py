@@ -18,7 +18,7 @@ default_config = {
     'apply_sparse': True,
     'apply_eagle_quant': True,
     "minicpm4_yarn": True, # TODO default is True for long context test, better implementation
-    'frspec_vocab_size': 0,
+    'frspec_vocab_size': 32768,
     'eagle_window_size': 8 * 128,
     'eagle_num_iter': 2,
     'eagle_topk_per_iter': 10,
@@ -472,7 +472,7 @@ def main(args, config):
     # Initialize model
     llm.init_storage()
     if config['apply_eagle'] and config['frspec_vocab_size'] > 0:
-        with open(f'fr_index/MiniCPM4-8B/freq_{config["frspec_vocab_size"]}.pt', 'rb') as f:
+        with open(f'{eagle_path}/freq_{config["frspec_vocab_size"]}.pt', 'rb') as f:
             token_id_remap = torch.tensor(torch.load(f, weights_only=True), dtype=torch.int32, device="cpu")
         llm._load("token_id_remap", token_id_remap, cls="eagle")
     llm.load_from_hf()
