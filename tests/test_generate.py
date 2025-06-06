@@ -336,16 +336,16 @@ def print_generation_summary(mode, prefill_stats, decode_stats, config):
     print(f"Prefill length: {prefill_stats['length']}")
     print(f"Prefill time: {prefill_stats['time']:.2f} s")
     print(f"Prefill tokens/s: {prefill_stats['tokens_per_sec']:.2f}")
+
+    # Eagle-specific statistics
+    if config['apply_eagle'] and 'mean_accept_length' in decode_stats:
+        print(f"Mean accept length: {decode_stats['mean_accept_length']:.2f}")
+        # print(f"Decode token/s when acc = 1: {decode_stats['tokens_per_sec'] / decode_stats['mean_accept_length']:.2f}")
     
     # Decode statistics
     print(f"Decode length: {decode_stats['length']}")
     print(f"Decode time: {decode_stats['time']:.2f} s")
     print(f"Decode tokens/s: {decode_stats['tokens_per_sec']:.2f}")
-    
-    # Eagle-specific statistics
-    if config['apply_eagle'] and 'mean_accept_length' in decode_stats:
-        print(f"Mean accept length: {decode_stats['mean_accept_length']:.2f}")
-        print(f"Decode token/s when acc = 1: {decode_stats['tokens_per_sec'] / decode_stats['mean_accept_length']:.2f}")
 
 def run_stream_generation(llm, input_ids, config, teminators, tokenizer):
     """Run streaming generation and display results"""

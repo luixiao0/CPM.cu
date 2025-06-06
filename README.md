@@ -94,18 +94,16 @@ Stream Generation Summary:
 Prefill length: 110290
 Prefill time: 16.86 s
 Prefill tokens/s: 6541.31
+Mean accept length: 2.38
 Decode length: 216
 Decode time: 1.47 s
 Decode tokens/s: 146.95
-Mean accept length: 2.38
-Decode token/s when acc = 1: 61.63
 ```
 
 Where:
 
 - the `Prefill` and `Decode` speed are output by (length, time and token/s).
 - the `Mean accept length` is the average length of the accepted tokens when using Speculative Sampling.
-- the `Decode token/s when acc = 1` is the result of dividing the Decode speed by the Mean accept length.
 
 ## Code Structure
 

@@ -94,18 +94,16 @@ Stream Generation Summary:
 Prefill length: 110290
 Prefill time: 16.86 s
 Prefill tokens/s: 6541.31
+Mean accept length: 2.38
 Decode length: 216
 Decode time: 1.47 s
 Decode tokens/s: 146.95
-Mean accept length: 2.38
-Decode token/s when acc = 1: 61.63
 ```
 
 其中：
 
 - `Prefill` (输入) 和 `Decode` (输出) 速度通过（长度、时间和 token/s）输出。
 - `Mean accept length` (平均接受长度) 是使用投机采样时接受 token 的平均长度。
-- `Decode token/s when acc = 1` 是将输出速度除以平均接受长度的结果。
 
 ## 代码结构
 
