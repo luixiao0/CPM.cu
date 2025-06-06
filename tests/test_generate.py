@@ -54,8 +54,8 @@ def create_argument_parser():
     parser = argparse.ArgumentParser(description='Generate text using LLM models')
     
     # Basic arguments
-    parser.add_argument('--path-prefix', '--path_prefix', '-p', type=str, default='OpenBMB', 
-                        help='Path prefix for model directories, you can use OpenBMB to download models, or your own path (default: OpenBMB)')
+    parser.add_argument('--path-prefix', '--path_prefix', '-p', type=str, default='openbmb', 
+                        help='Path prefix for model directories, you can use openbmb to download models, or your own path (default: openbmb)')
 
     # Prompt arguments
     parser.add_argument('--prompt-file', '--prompt_file', type=str, default=None,
@@ -188,7 +188,7 @@ def get_model_paths(path_prefix, config):
     """Get model paths based on configuration"""
     if config['test_minicpm4']:
         if config['apply_eagle_quant']:
-            eagle_path = f"{path_prefix}/MiniCPM4-8B-Eagle-FRSpec-QAT"
+            eagle_path = f"{path_prefix}/MiniCPM4-8B-Eagle-FRSpec-QAT-cpmcu"
         else:
             eagle_path = f"{path_prefix}/MiniCPM4-8B-Eagle-FRSpec"
     else:
