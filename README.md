@@ -72,6 +72,7 @@ python3 tests/test_generate.py --prompt-file <your prompt file> -p <your modelpa
 ```
 
 If you don't ​​specify​​ the model path, the scripts will load the model from ​​OpenBMB's Hugging Face repository​​.
+If you want to use local paths, we recommend keeping all model filenames unchanged and placing them in the same directory. This way, you can run the model by specifying the directory with the -p parameter. Otherwise, we suggest modifying the paths in the code accordingly.
 
 If you don't ​​specify​​ the prompt file, a default ​​Haystack task​​ with ​​15K context length​​ will be provided.
 You can use --help to learn more ​​about the script's features​​.
