@@ -65,7 +65,6 @@ class LLM(torch.nn.Module):
         scale_embed = self.config.scale_emb if hasattr(self.config, "scale_emb") else 1.0
         scale_lmhead = (self.config.dim_model_base / self.config.hidden_size) if hasattr(self.config, "dim_model_base") else 1.0
         scale_residual = self.config.scale_depth / math.sqrt(self.config.num_hidden_layers) if hasattr(self.config, "scale_depth") else 1.0
-        print(f"scale_embed: {scale_embed}, scale_lmhead: {scale_lmhead}, scale_residual: {scale_residual}")
 
         if apply_sparse:
             C.init_minicpm4_model(

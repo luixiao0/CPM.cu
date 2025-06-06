@@ -17,6 +17,7 @@ default_config = {
     'apply_quant': True,
     'apply_sparse': True,
     'apply_eagle_quant': True,
+    "minicpm4_yarn": True, # TODO default is True for long context test, better implementation
     'frspec_vocab_size': 0,
     'eagle_window_size': 8 * 128,
     'eagle_num_iter': 2,
@@ -24,10 +25,10 @@ default_config = {
     'eagle_tree_size': 12,
     'apply_compress_lse': True,
     'sink_window_size': 1, # TODO: unsupported now
-    'block_window_size': 32,
+    'block_window_size': 8,
     'sparse_topk_k': 64,
     "sparse_switch": 1,
-    'num_generate': 512,
+    'num_generate': 256,
     'chunk_length': 2048,
     'memory_limit': 0.9,
     'cuda_graph': True,
@@ -99,6 +100,10 @@ def create_argument_parser():
                         help='Use teminators')
     parser.add_argument('--no-use-teminators', '--no_use_teminators', action='store_false', dest='use_teminators',
                         help='Do not use teminators')
+    parser.add_argument('--minicpm4-yarn', '--minicpm4_yarn', action='store_true',
+                        help='Use MiniCPM4 YARN')
+    parser.add_argument('--no-minicpm4-yarn', '--no_minicpm4_yarn', action='store_false', dest='minicpm4_yarn',
+                        help='Do not use MiniCPM4 YARN')
 
     # Model configuration numeric arguments
     parser.add_argument('--frspec-vocab-size', '--frspec_vocab_size', type=int, default=None,
@@ -213,7 +218,8 @@ def create_model(eagle_path, base_path, config):
         'use_enter': config['use_enter'],
         'use_decode_enter': config['use_decode_enter'],
         'temperature': config['temperature'],
-        'random_seed': config['random_seed']
+        'random_seed': config['random_seed'],
+        'minicpm4_yarn': config['minicpm4_yarn']
     }
     
     eagle_kwargs = {
@@ -428,7 +434,7 @@ def run_batch_generation(llm, input_ids, config, teminators, tokenizer):
     if mean_accept_length is not None:
         decode_stats['mean_accept_length'] = mean_accept_length
     
-    print_generation_summary("Batch", prefill_stats, decode_stats, config)
+    print_generation_summary("Non-Stream", prefill_stats, decode_stats, config)
 
 def print_config(config, use_stream):
     """Print all configuration parameters"""
@@ -439,7 +445,7 @@ def print_config(config, use_stream):
     print(f"Generation: num_generate={config['num_generate']}, chunk_length={config['chunk_length']}, use_teminators={config['use_teminators']}, use_stream={config['use_stream']}")
     print(f"Sampling: temperature={config['temperature']}, random_seed={config['random_seed']}")
     print(f"Demo: use_enter={config['use_enter']}, use_decode_enter={config['use_decode_enter']}")
-    print(f"Others: dtype={config['dtype']}, cuda_graph={config['cuda_graph']}, memory_limit={config['memory_limit']}")
+    print(f"Others: dtype={config['dtype']}, minicpm4_yarn={config['minicpm4_yarn']}, cuda_graph={config['cuda_graph']}, memory_limit={config['memory_limit']}")
     if config['apply_sparse']:
         print(f"Sparse Attention: sink_window={config['sink_window_size']}, block_window={config['block_window_size']}, sparse_topk_k={config['sparse_topk_k']}, sparse_switch={config['sparse_switch']}, compress_lse={config['apply_compress_lse']}")
     if config['apply_eagle']:
