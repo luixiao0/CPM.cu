@@ -52,8 +52,8 @@ def create_argument_parser():
     parser = argparse.ArgumentParser(description='Generate text using LLM models')
     
     # Basic arguments
-    parser.add_argument('--path-prefix', '--path_prefix', '-pp', type=str, default='/cache/copys/217/data1/liyx/Models', 
-                        help='Path prefix for model directories (default: /cache/copys/217/data1/liyx/Models)')
+    parser.add_argument('--path-prefix', '--path_prefix', '-p', type=str, default='OpenBMB', 
+                        help='Path prefix for model directories, you can use OpenBMB to download models, or your own path (default: OpenBMB)')
 
     # Prompt arguments
     parser.add_argument('--prompt-file', '--prompt_file', type=str, default=None,
@@ -186,19 +186,19 @@ def get_model_paths(path_prefix, config):
     """Get model paths based on configuration"""
     if config['test_minicpm4']:
         if config['apply_eagle_quant']:
-            eagle_path = f"{path_prefix}/minicpm4_eagle_marlin_3"
+            eagle_path = f"{path_prefix}/MiniCPM4-8B-Eagle-FRSpec-QAT"
         else:
-            eagle_path = f"{path_prefix}/job_35949"
+            eagle_path = f"{path_prefix}/MiniCPM4-8B-Eagle-FRSpec"
     else:
         eagle_path = f"{path_prefix}/EAGLE-LLaMA3-Instruct-8B"
     
     if not config['apply_quant']:
         if config['test_minicpm4']:
-            base_path = f"{path_prefix}/250527_merge_exp2"
+            base_path = f"{path_prefix}/MiniCPM4-8B"
         else:
             base_path = f"{path_prefix}/Meta-Llama-3-8B-Instruct"
     else:
-        base_path = f"{path_prefix}/250527_merge_exp2_marlin"
+        base_path = f"{path_prefix}/MiniCPM4-8B-Marlin"
     
     return eagle_path, base_path
 
