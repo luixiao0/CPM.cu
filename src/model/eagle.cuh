@@ -280,8 +280,8 @@ struct EagleImpl : Model {
     int *eagle_original_length, eagle_padded_length;
     uint64_t *eagle_mask_2d, *tmp_mask_2d;
     T* eagle_logits;
-    T* tired_history_val; int32_t* tired_history_pos;
-    int32_t* tired_history_parent;
+    T* tried_history_val; int32_t* tried_history_pos;
+    int32_t* tried_history_parent;
     bool is_first_draft;
 
     int32_t *h_best, *d_best;    
@@ -337,9 +337,9 @@ struct EagleImpl : Model {
         offset = memory->allocate((void**)&eagle_logits, offset, this->topk_per_iter * this->model->vocab_size * sizeof(T));
         offset = memory->allocate((void**)&eagle_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&tmp_mask_2d, offset, this->topk_per_iter * sizeof(uint64_t));
-        offset = memory->allocate((void**)&tired_history_val, offset, this->total_tried * sizeof(T));
-        offset = memory->allocate((void**)&tired_history_pos, offset, this->total_tried * sizeof(int32_t));
-        offset = memory->allocate((void**)&tired_history_parent, offset, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t));
+        offset = memory->allocate((void**)&tried_history_val, offset, this->total_tried * sizeof(T));
+        offset = memory->allocate((void**)&tried_history_pos, offset, this->total_tried * sizeof(int32_t));
+        offset = memory->allocate((void**)&tried_history_parent, offset, this->topk_per_iter * (this->num_iter - 1) * sizeof(int32_t));
         cudaMallocHost(&eagle_original_length, sizeof(int32_t));
 
         offset = topk_func->init_output_ptr(memory, this->topk_per_iter, offset);
@@ -454,8 +454,8 @@ struct EagleImpl : Model {
             this->topk_func->prefill(calc_stream, 1, this->eagle_logits);
             cudaMemcpy(this->topk_func_2->topk_pos, this->topk_func->topk_pos, topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->topk_func_2->topk_val, this->topk_func->topk_val, topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->tired_history_val, this->topk_func->topk_val, topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->tired_history_pos, this->topk_func->topk_pos, topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->tried_history_val, this->topk_func->topk_val, topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->tried_history_pos, this->topk_func->topk_pos, topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
             repeat(calc_stream, topk_per_iter, this->model->hidden_size, num_prev-1, this->fc2->output, this->fc1->output);
             init_tree(calc_stream, topk_per_iter, this->eagle_mask_2d);
         }
@@ -477,22 +477,22 @@ struct EagleImpl : Model {
             log_softmax(calc_stream, topk_per_iter, this->model->vocab_size, this->eagle_logits);
             this->topk_func->prefill(calc_stream, topk_per_iter, this->eagle_logits);
             cumsum(calc_stream, topk_per_iter, topk_per_iter, this->topk_func->topk_val, this->topk_func_2->topk_val);
-            cudaMemcpy(this->tired_history_val + topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter, this->topk_func->topk_val, topk_per_iter * topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->tired_history_pos + topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter, this->topk_func->topk_pos, topk_per_iter * topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->tried_history_val + topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter, this->topk_func->topk_val, topk_per_iter * topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->tried_history_pos + topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter, this->topk_func->topk_pos, topk_per_iter * topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
             this->topk_func_2->prefill(calc_stream, 1, this->topk_func->topk_val, topk_per_iter * topk_per_iter, topk_per_iter);
 
             cudaMemcpy(this->tmp_mask_2d, this->eagle_mask_2d, topk_per_iter * sizeof(uint64_t), cudaMemcpyDeviceToDevice);
-            set_parent(calc_stream, topk_per_iter, this->tired_history_parent + (d - 1) * topk_per_iter, this->topk_func_2->topk_pos, topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter);
+            set_parent(calc_stream, topk_per_iter, this->tried_history_parent + (d - 1) * topk_per_iter, this->topk_func_2->topk_pos, topk_per_iter + (d - 1) * topk_per_iter * topk_per_iter);
             update_tree(calc_stream, topk_per_iter, topk_per_iter * d, this->eagle_mask_2d, this->tmp_mask_2d, this->topk_func_2->topk_pos);
             remap_hidden(calc_stream, topk_per_iter, this->model->hidden_size, this->topk_func_2->topk_pos, this->fc2->output, this->fc1->output, topk_per_iter);
             remap_id(calc_stream, topk_per_iter, this->topk_func_2->topk_pos, this->topk_func->topk_pos);
         }
 
-        this->topk_func_2->prefill(calc_stream, 1, this->tired_history_val);
+        this->topk_func_2->prefill(calc_stream, 1, this->tried_history_val);
 
         // build tree
-        build_dynamic_tree(calc_stream, this->tree_size, this->eagle_original_length[0], this->topk_per_iter, this->tired_history_parent, this->topk_func_2->topk_pos, tree_position_ids, tree_attn_mask, tree_parent);
-        remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tired_history_pos, tree_draft_ids + 1);
+        build_dynamic_tree(calc_stream, this->tree_size, this->eagle_original_length[0], this->topk_per_iter, this->tried_history_parent, this->topk_func_2->topk_pos, tree_position_ids, tree_attn_mask, tree_parent);
+        remap_id(calc_stream, this->tree_size-1, this->topk_func_2->topk_pos, this->tried_history_pos, tree_draft_ids + 1);
 
         this->is_first_draft = false;
     }

@@ -33,7 +33,7 @@ default_config = {
     'memory_limit': 0.9,
     'cuda_graph': True,
     'dtype': torch.float16,
-    'use_teminators': True,
+    'use_terminators': True,
     "temperature": 0.0,
     "random_seed": None,
 }
@@ -96,9 +96,9 @@ def create_argument_parser():
                         help='Use CUDA graph optimization')
     parser.add_argument('--no-cuda-graph', '--no_cuda_graph', action='store_false', dest='cuda_graph',
                         help='Do not use CUDA graph optimization')
-    parser.add_argument('--use-teminators', '--use_teminators', action='store_true',
+    parser.add_argument('--use-teminators', '--use_terminators', action='store_true',
                         help='Use teminators, if not specified, the generation will not be interrupted')
-    parser.add_argument('--no-use-teminators', '--no_use_teminators', action='store_false', dest='use_teminators',
+    parser.add_argument('--no-use-teminators', '--no_use_terminators', action='store_false', dest='use_terminators',
                         help='Do not use teminators')
     parser.add_argument('--minicpm4-yarn', '--minicpm4_yarn', action='store_true',
                         help='Use MiniCPM4 YARN, this is for very long context, such as > 32/64k tokens')
@@ -442,7 +442,7 @@ def print_config(config, use_stream):
     print("Configuration Parameters:")
     print("=" * 50)
     print(f"Features: eagle={config['apply_eagle']}, quant={config['apply_quant']}, sparse={config['apply_sparse']}")
-    print(f"Generation: num_generate={config['num_generate']}, chunk_length={config['chunk_length']}, use_teminators={config['use_teminators']}, use_stream={config['use_stream']}")
+    print(f"Generation: num_generate={config['num_generate']}, chunk_length={config['chunk_length']}, use_terminators={config['use_terminators']}, use_stream={config['use_stream']}")
     print(f"Sampling: temperature={config['temperature']}, random_seed={config['random_seed']}")
     print(f"Demo: use_enter={config['use_enter']}, use_decode_enter={config['use_decode_enter']}")
     print(f"Others: dtype={config['dtype']}, minicpm4_yarn={config['minicpm4_yarn']}, cuda_graph={config['cuda_graph']}, memory_limit={config['memory_limit']}")
@@ -467,7 +467,7 @@ def main(args, config):
     
     # Prepare input
     input_ids = make_input(tokenizer, args)
-    teminators = [] if not config['use_teminators'] else [tokenizer.eos_token_id]
+    teminators = [] if not config['use_terminators'] else [tokenizer.eos_token_id]
     
     # Initialize model
     llm.init_storage()

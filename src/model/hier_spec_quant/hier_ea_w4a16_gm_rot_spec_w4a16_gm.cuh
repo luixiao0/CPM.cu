@@ -32,8 +32,8 @@ struct HierEagleW4A16GMRotSpecW4A16GMImpl: Model {
     int *eagle_original_length, eagle_padded_length;
     uint64_t *eagle_mask_2d, *ea_tmp_mask_2d;
     T* eagle_logits;
-    T* ea_tired_history_val; int32_t* ea_tired_history_pos;
-    int32_t* ea_tired_history_parent;
+    T* ea_tried_history_val; int32_t* ea_tried_history_pos;
+    int32_t* ea_tried_history_parent;
     bool ea_is_first_draft;
     
 
@@ -185,9 +185,9 @@ struct HierEagleW4A16GMRotSpecW4A16GMImpl: Model {
         offset = memory->allocate((void**)&eagle_logits, offset, this->ea_topk_per_iter * this->draft_model->vocab_size * sizeof(T));
         offset = memory->allocate((void**)&eagle_mask_2d, offset, this->ea_topk_per_iter * sizeof(uint64_t));
         offset = memory->allocate((void**)&ea_tmp_mask_2d, offset, this->ea_topk_per_iter * sizeof(uint64_t));
-        offset = memory->allocate((void**)&ea_tired_history_val, offset, this->ea_total_tried * sizeof(T));
-        offset = memory->allocate((void**)&ea_tired_history_pos, offset, this->ea_total_tried * sizeof(int32_t));
-        offset = memory->allocate((void**)&ea_tired_history_parent, offset, this->ea_topk_per_iter * (this->ea_num_iter - 1) * sizeof(int32_t));
+        offset = memory->allocate((void**)&ea_tried_history_val, offset, this->ea_total_tried * sizeof(T));
+        offset = memory->allocate((void**)&ea_tried_history_pos, offset, this->ea_total_tried * sizeof(int32_t));
+        offset = memory->allocate((void**)&ea_tried_history_parent, offset, this->ea_topk_per_iter * (this->ea_num_iter - 1) * sizeof(int32_t));
         cudaMallocHost(&eagle_original_length, sizeof(int32_t));
 
         offset = ea_topk_func->init_output_ptr(memory, this->ea_topk_per_iter, offset);
@@ -408,8 +408,8 @@ struct HierEagleW4A16GMRotSpecW4A16GMImpl: Model {
             this->ea_topk_func->prefill(calc_stream, 1, this->eagle_logits);
             cudaMemcpy(this->ea_topk_func_2->topk_pos, this->ea_topk_func->topk_pos, ea_topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
             cudaMemcpy(this->ea_topk_func_2->topk_val, this->ea_topk_func->topk_val, ea_topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->ea_tired_history_val, this->ea_topk_func->topk_val, ea_topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->ea_tired_history_pos, this->ea_topk_func->topk_pos, ea_topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->ea_tried_history_val, this->ea_topk_func->topk_val, ea_topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->ea_tried_history_pos, this->ea_topk_func->topk_pos, ea_topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
             repeat(calc_stream, ea_topk_per_iter, this->draft_model->hidden_size, ea_num_prev-1, this->ea_fc2->output, this->ea_fc1->output);
             init_tree(calc_stream, ea_topk_per_iter, this->eagle_mask_2d);
         }
@@ -432,22 +432,22 @@ struct HierEagleW4A16GMRotSpecW4A16GMImpl: Model {
             log_softmax(calc_stream, ea_topk_per_iter, this->draft_model->vocab_size, this->eagle_logits);
             this->ea_topk_func->prefill(calc_stream, ea_topk_per_iter, this->eagle_logits);
             cumsum(calc_stream, ea_topk_per_iter, ea_topk_per_iter, this->ea_topk_func->topk_val, this->ea_topk_func_2->topk_val);
-            cudaMemcpy(this->ea_tired_history_val + ea_topk_per_iter + (d - 1) * ea_topk_per_iter * ea_topk_per_iter, this->ea_topk_func->topk_val, ea_topk_per_iter * ea_topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(this->ea_tired_history_pos + ea_topk_per_iter + (d - 1) * ea_topk_per_iter * ea_topk_per_iter, this->ea_topk_func->topk_pos, ea_topk_per_iter * ea_topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->ea_tried_history_val + ea_topk_per_iter + (d - 1) * ea_topk_per_iter * ea_topk_per_iter, this->ea_topk_func->topk_val, ea_topk_per_iter * ea_topk_per_iter * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(this->ea_tried_history_pos + ea_topk_per_iter + (d - 1) * ea_topk_per_iter * ea_topk_per_iter, this->ea_topk_func->topk_pos, ea_topk_per_iter * ea_topk_per_iter * sizeof(int32_t), cudaMemcpyDeviceToDevice);
             this->ea_topk_func_2->prefill(calc_stream, 1, this->ea_topk_func->topk_val, ea_topk_per_iter * ea_topk_per_iter, ea_topk_per_iter);
 
             cudaMemcpy(this->ea_tmp_mask_2d, this->eagle_mask_2d, ea_topk_per_iter * sizeof(uint64_t), cudaMemcpyDeviceToDevice);
-            set_parent(calc_stream, ea_topk_per_iter, this->ea_tired_history_parent + (d - 1) * ea_topk_per_iter, this->ea_topk_func_2->topk_pos, 10 + (d - 1) * ea_topk_per_iter * ea_topk_per_iter);
+            set_parent(calc_stream, ea_topk_per_iter, this->ea_tried_history_parent + (d - 1) * ea_topk_per_iter, this->ea_topk_func_2->topk_pos, 10 + (d - 1) * ea_topk_per_iter * ea_topk_per_iter);
             update_tree(calc_stream, ea_topk_per_iter, ea_topk_per_iter * d, this->eagle_mask_2d, this->ea_tmp_mask_2d, this->ea_topk_func_2->topk_pos);
             remap_hidden(calc_stream, ea_topk_per_iter, this->draft_model->hidden_size, this->ea_topk_func_2->topk_pos, this->ea_fc2->output, this->ea_fc1->output, ea_topk_per_iter);
             remap_id(calc_stream, ea_topk_per_iter, this->ea_topk_func_2->topk_pos, this->ea_topk_func->topk_pos);
         }
 
-        this->ea_topk_func_2->prefill(calc_stream, 1, this->ea_tired_history_val);
+        this->ea_topk_func_2->prefill(calc_stream, 1, this->ea_tried_history_val);
 
         // build tree
-        build_dynamic_tree(calc_stream, this->ea_tree_size, this->eagle_original_length[0], this->ea_topk_per_iter, this->ea_tired_history_parent, this->ea_topk_func_2->topk_pos, ea_tree_position_ids, ea_tree_attn_mask, ea_tree_parent);
-        remap_id(calc_stream, this->ea_tree_size-1, this->ea_topk_func_2->topk_pos, this->ea_tired_history_pos, ea_tree_draft_ids + 1);
+        build_dynamic_tree(calc_stream, this->ea_tree_size, this->eagle_original_length[0], this->ea_topk_per_iter, this->ea_tried_history_parent, this->ea_topk_func_2->topk_pos, ea_tree_position_ids, ea_tree_attn_mask, ea_tree_parent);
+        remap_id(calc_stream, this->ea_tree_size-1, this->ea_topk_func_2->topk_pos, this->ea_tried_history_pos, ea_tree_draft_ids + 1);
 
         this->ea_is_first_draft = false;
     }
