@@ -8,6 +8,8 @@ import time
 import numpy as np
 import argparse
 import sys
+import os
+from huggingface_hub import snapshot_download   
 
 # Default Configuration
 default_config = {
@@ -472,8 +474,19 @@ def main(args, config):
     # Initialize model
     llm.init_storage()
     if config['apply_eagle'] and config['frspec_vocab_size'] > 0:
-        with open(f'{eagle_path}/freq_{config["frspec_vocab_size"]}.pt', 'rb') as f:
-            token_id_remap = torch.tensor(torch.load(f, weights_only=True), dtype=torch.int32, device="cpu")
+        fr_path = f'{eagle_path}/freq_{config["frspec_vocab_size"]}.pt'
+        if os.path.exists(fr_path):
+            with open(fr_path, 'rb') as f:
+                token_id_remap = torch.tensor(torch.load(f, weights_only=True), dtype=torch.int32, device="cpu")
+        else:
+            cache_dir = snapshot_download(
+                os.path.dirname(fr_path),
+                ignore_patterns=["*.bin", "*.safetensors"],
+            )
+            file_path = os.path.join(
+                cache_dir, os.path.basename(fr_path)
+            )
+            token_id_remap = torch.tensor(torch.load(file_path, weights_only=True), dtype=torch.int32, device="cpu")
         llm._load("token_id_remap", token_id_remap, cls="eagle")
     llm.load_from_hf()
     
