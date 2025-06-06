@@ -50,8 +50,8 @@ CPM.cu is a lightweight, high-performance CUDA implementation for LLMs, optimize
 ### Install from source
 
 ```bash
-git clone https://github.com/OpenBMB/cpm.cu.git --recursive
-cd cpm.cu
+git clone https://github.com/OpenBMB/CPM.cu.git --recursive
+cd CPM.cu
 python3 setup.py install
 ```
 
@@ -114,7 +114,7 @@ Where:
 ## Code Structure
 
 ```bash
-cpm.cu/
+CPM.cu/
 ├── src/
 │   ├── flash_attn/ # attention kernels: sparse, tree-verification, etc.
 │   ├── model/
