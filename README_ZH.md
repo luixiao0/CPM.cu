@@ -4,11 +4,6 @@
 
 CPM.cu 是一个针对端侧大模型推理设计的轻量、高效的 CUDA 推理框架，核心支持 **稀疏架构**、**投机采样** 和 **低位宽量化** 等前沿技术创新。
 
-<a href="https://github.com/OpenBMB/minicpm"><img src="https://img.shields.io/static/v1?label=MiniCPM4 项目&message=Web&color=green"></a> &ensp;
-<a href="https://github.com/OpenBMB/cpm.cu/blob/main/LICENSE">
-  <img alt="GitHub" src="https://img.shields.io/github/license/OpenBMB/cpm.cu">
-</a>
-
 <div id="news"></div>
 
 ## 🔥 项目进展
@@ -33,7 +28,7 @@ CPM.cu 是一个针对端侧大模型推理设计的轻量、高效的 CUDA 推�
 
 ## 效果演示
 
-![TODO 占位符](https://github.com/thunlp/Ouroboros/blob/main/figure/ouroboros.gif)
+![TODO 占位符]()
 
 <div id="getstart"></div>
 

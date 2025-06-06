@@ -4,11 +4,6 @@
 
 CPM.cu is a lightweight, high-performance CUDA implementation for LLMs, optimized for end-device inference and featuring cutting-edge techniques in **sparse architecture**, **speculative sampling** and **quantization**.
 
-<a href="https://github.com/OpenBMB/minicpm"><img src="https://img.shields.io/static/v1?label=MiniCPM4 Project&message=Web&color=green"></a> &ensp;
-<a href="https://github.com/OpenBMB/cpm.cu/blob/main/LICENSE">
-  <img alt="GitHub" src="https://img.shields.io/github/license/OpenBMB/cpm.cu">
-</a>
-
 <div id="news"></div>
 
 ## 🔥 Project Updates
@@ -33,7 +28,7 @@ CPM.cu is a lightweight, high-performance CUDA implementation for LLMs, optimize
 
 ## Demo
 
-![TODO placeholder](https://github.com/thunlp/Ouroboros/blob/main/figure/ouroboros.gif)
+![TODO placeholder]()
 
 <div id="getstart"></div>
 
