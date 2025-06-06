@@ -89,7 +89,7 @@ def create_argument_parser():
     parser.add_argument('--no-apply-eagle-quant', '--no_apply_eagle_quant', action='store_false', dest='apply_eagle_quant',
                         help='Do not use quantized Eagle model')
     parser.add_argument('--apply-compress-lse', '--apply_compress_lse', action='store_true',
-                        help='Apply LSE compression')
+                        help='Apply LSE compression, only support on sparse attention, this will compress the stage 1 kv twice for LSE pre-computing')
     parser.add_argument('--no-apply-compress-lse', '--no_apply_compress_lse', action='store_false', dest='apply_compress_lse',
                         help='Do not apply LSE compression')
     parser.add_argument('--cuda-graph', '--cuda_graph', action='store_true',
@@ -97,45 +97,45 @@ def create_argument_parser():
     parser.add_argument('--no-cuda-graph', '--no_cuda_graph', action='store_false', dest='cuda_graph',
                         help='Do not use CUDA graph optimization')
     parser.add_argument('--use-teminators', '--use_teminators', action='store_true',
-                        help='Use teminators')
+                        help='Use teminators, if not specified, the generation will not be interrupted')
     parser.add_argument('--no-use-teminators', '--no_use_teminators', action='store_false', dest='use_teminators',
                         help='Do not use teminators')
     parser.add_argument('--minicpm4-yarn', '--minicpm4_yarn', action='store_true',
-                        help='Use MiniCPM4 YARN')
+                        help='Use MiniCPM4 YARN, this is for very long context, such as > 32/64k tokens')
     parser.add_argument('--no-minicpm4-yarn', '--no_minicpm4_yarn', action='store_false', dest='minicpm4_yarn',
                         help='Do not use MiniCPM4 YARN')
 
     # Model configuration numeric arguments
     parser.add_argument('--frspec-vocab-size', '--frspec_vocab_size', type=int, default=None,
-                        help='Frequent speculation vocab size (default: from config)')
+                        help='Frequent speculation vocab size (default: from default_config)')
     parser.add_argument('--eagle-window-size', '--eagle_window_size', type=int, default=None,
-                        help='Eagle window size (default: from config)')
+                        help='Eagle window size (default: from default_config)')
     parser.add_argument('--eagle-num-iter', '--eagle_num_iter', type=int, default=None,
-                        help='Eagle number of iterations (default: from config)')
+                        help='Eagle number of iterations (default: from default_config)')
     parser.add_argument('--eagle-topk-per-iter', '--eagle_topk_per_iter', type=int, default=None,
-                        help='Eagle top-k per iteration (default: from config)')
+                        help='Eagle top-k per iteration (default: from default_config)')
     parser.add_argument('--eagle-tree-size', '--eagle_tree_size', type=int, default=None,
-                        help='Eagle tree size (default: from config)')
+                        help='Eagle tree size (default: from default_config)')
     parser.add_argument('--sink-window-size', '--sink_window_size', type=int, default=None,
-                        help='Sink window size (default: from config)')
+                        help='Sink window size of sparse attention (default: from default_config)')
     parser.add_argument('--block-window-size', '--block_window_size', type=int, default=None,
-                        help='Block window size (default: from config)')
+                        help='Block window size of sparse attention (default: from default_config)')
     parser.add_argument('--sparse-topk-k', '--sparse_topk_k', type=int, default=None,
-                        help='Sparse attention top-k (default: from config)')
+                        help='Sparse attention top-k (default: from default_config)')
     parser.add_argument('--sparse-switch', '--sparse_switch', type=int, default=None,
-                        help='Sparse switch (default: from config)')
+                        help='Context length of dense and sparse attention switch (default: from default_config)')
     parser.add_argument('--num-generate', '--num_generate', type=int, default=None,
-                        help='Number of tokens to generate (default: from config)')
+                        help='Number of tokens to generate (default: from default_config)')
     parser.add_argument('--chunk-length', '--chunk_length', type=int, default=None,
-                        help='Chunk length for processing (default: from config)')
+                        help='Chunk length for prefilling (default: from default_config)')
     parser.add_argument('--memory-limit', '--memory_limit', type=float, default=None,
-                        help='Memory limit for processing (default: from config)')
+                        help='Memory limit for use (default: from default_config)')
     parser.add_argument('--temperature', '--temperature', type=float, default=None,
-                        help='Temperature for processing (default: from config)')
+                        help='Temperature for processing (default: from default_config)')
     parser.add_argument('--dtype', type=str, default=None, choices=['float16', 'bfloat16'],
-                        help='Model dtype (default: from config)')
+                        help='Model dtype (default: from default_config)')
     parser.add_argument('--random-seed', '--random_seed', type=int, default=None,
-                        help='Random seed for processing (default: from config)')
+                        help='Random seed for processing (default: from default_config)')
     # Demo arguments
     parser.add_argument('--use-enter', '--use_enter', action='store_true',
                         help='Use enter to generate')
