@@ -28,7 +28,7 @@ CPM.cu is a lightweight, high-performance CUDA implementation for LLMs, optimize
 
 ## Demo
 
-https://github.com/user-attachments/assets/89f6de52-d071-40e8-b2e9-abd165284d52
+https://github.com/user-attachments/assets/876e1c75-a92f-442c-ab60-d28bfba9e5f0
 
 <div id="getstart"></div>
 

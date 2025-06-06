@@ -28,7 +28,7 @@ CPM.cu 是一个针对端侧大模型推理设计的轻量、高效的 CUDA 推�
 
 ## 效果演示
 
-https://github.com/user-attachments/assets/89f6de52-d071-40e8-b2e9-abd165284d52
+https://github.com/user-attachments/assets/876e1c75-a92f-442c-ab60-d28bfba9e5f0
 
 <div id="getstart"></div>
 
