@@ -26,7 +26,7 @@ default_config = {
     'eagle_topk_per_iter': 10,
     'eagle_tree_size': 12,
     'apply_compress_lse': True,
-    'sink_window_size': 1, # TODO: unsupported now
+    'sink_window_size': 1,
     'block_window_size': 8,
     'sparse_topk_k': 64,
     "sparse_switch": 1,
@@ -184,6 +184,15 @@ def parse_and_merge_config(default_config):
     
     return args, config
 
+def check_or_download_model(path):
+    if os.path.exists(path):
+        return path
+    else:
+        cache_dir = snapshot_download(
+            os.path.dirname(path),
+        )
+        return cache_dir
+
 def get_model_paths(path_prefix, config):
     """Get model paths based on configuration"""
     if config['test_minicpm4']:
@@ -201,6 +210,9 @@ def get_model_paths(path_prefix, config):
             base_path = f"{path_prefix}/Meta-Llama-3-8B-Instruct"
     else:
         base_path = f"{path_prefix}/MiniCPM4-8B-marlin-cpmcu"
+
+    eagle_path = check_or_download_model(eagle_path)
+    base_path = check_or_download_model(base_path)
     
     return eagle_path, base_path
 
