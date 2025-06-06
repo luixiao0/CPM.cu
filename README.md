@@ -66,10 +66,13 @@ Please follow [MiniCPM4's README](https://github.com/openbmb/minicpm) to downloa
 ## Quick Start
 
 We provide a simple example to show how to use CPM.cu to generate text.
-
 ```bash
 python3 tests/test_generate.py --prompt-file <your prompt file> -p <your modelpath>
 ```
+If you don't specific the model path, the scripts will load model from OpenBMB huggingface.
+If you don't specific the prompt file, a default haystack task with 15k context will be provided.
+You can use --help to learn more features about these scripts.
+
 We also provide a scripts test/long_prompt_gen.py to generate long code summarization prompt.
 ```bash
 python3 tests/long_prompt_gen.py
