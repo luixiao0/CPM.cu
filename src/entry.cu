@@ -84,9 +84,13 @@
   [&] {                                      \
     if (COND == true) {                              \
       using LayerType = W4A16GPTQMarlinLayer<T>; \
+      using Fc1Type = W4A16GPTQMarlinLinear<T, true, true>; \
+      using Fc2Type = W4A16GPTQMarlinLinear<T>; \
       return __VA_ARGS__();                  \
     } else { \
       using LayerType = Layer<T>; \
+      using Fc1Type = Linear<T, true, true>; \
+      using Fc2Type = Linear<T>; \
       return __VA_ARGS__();                  \
     }                                        \
   }()
@@ -315,7 +319,7 @@ void init_minicpm4_eagle_model(
         MODEL_TYPE_SWITCH(model, elem_type, [&] {
             dispatch_model = true;
             EAGLE_QUANT_SWITCH(apply_eagle_quant, elem_type, [&] {
-                model = new MiniCPM4EagleImpl<elem_type, ModelType, LayerType>(
+                model = new MiniCPM4EagleImpl<elem_type, ModelType, LayerType, Fc1Type, Fc2Type>(
                     typed_model,
                     num_layers,
                     num_iter,

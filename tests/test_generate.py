@@ -198,7 +198,7 @@ def get_model_paths(path_prefix, config):
         else:
             base_path = f"{path_prefix}/Meta-Llama-3-8B-Instruct"
     else:
-        base_path = f"{path_prefix}/MiniCPM4-8B-Marlin-cpmcu"
+        base_path = f"{path_prefix}/MiniCPM4-8B-marlin-cpmcu"
     
     return eagle_path, base_path
 
