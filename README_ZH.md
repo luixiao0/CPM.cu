@@ -63,7 +63,7 @@ python3 setup.py install
 我们提供了一个简单的示例来展示如何使用 CPM.cu。
 
 ```bash
-python3 tests/test_generate.py --prompt-file <输入文件路径> -p <模型路径>
+python3 tests/test_generate.py --prompt-file <输入文件路径>
 ```
 
 如果您不指定模型路径，脚本将从 OpenBMB 的 Hugging Face 仓库加载模型。
@@ -77,7 +77,7 @@ python3 tests/test_generate.py --prompt-file <输入文件路径> -p <模型路�
 
 ```bash
 python3 tests/long_prompt_gen.py # 生成 prompt.txt (更多细节请见 --help)
-python3 tests/test_generate.py --prompt-file prompt.txt -p <模型路径>
+python3 tests/test_generate.py --prompt-file prompt.txt
 ```
 
 输出应为如下格式：

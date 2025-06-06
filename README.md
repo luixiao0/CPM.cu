@@ -63,7 +63,7 @@ Please follow [MiniCPM4's README](https://github.com/openbmb/minicpm) to downloa
 We provide a simple example to show how to use CPM.cu to generate text.
 
 ```bash
-python3 tests/test_generate.py --prompt-file <your prompt file> -p <your modelpath>
+python3 tests/test_generate.py --prompt-file <your prompt file>
 ```
 
 If you don't ​​specify​​ the model path, the scripts will load the model from ​​OpenBMB's Hugging Face repository​​.
@@ -77,7 +77,7 @@ This script ​​automatically collects code from this repository​​ and pro
 
 ```bash
 python3 tests/long_prompt_gen.py # generate prompt.txt (for more details, use --help)
-python3 tests/test_generate.py --prompt-file prompt.txt -p <your modelpath>
+python3 tests/test_generate.py --prompt-file prompt.txt
 ```
 
 The output should be of the following format:
